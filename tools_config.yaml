@@ -1,0 +1,110 @@
+tools:
+  - name: system_get_weather
+    description: 获取指定城市的当前天气
+    parameters:
+      type: object
+      properties:
+        location:
+          type: string
+          description: 城市名称，例如：北京
+        days:
+          type: integer
+          description: 查询天数，0：当前时刻的天气，1：今天一整天的天气，2：两天的天气
+      required: ["location", "days"]
+    module: backend.system_tools.weather
+    function_name: get_weather
+
+  - name: system_read_file
+    description: 读取指定文件内容
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 文件路径
+        sheet_name:
+          type: string
+          description: Excel 文件指定 sheet 名或索引(仅对 Excel 有效), 如果不是Excel文件就不用传 sheet_name
+      required: ["path"]
+    module: backend.system_tools.reader
+    function_name: file_read
+
+  - name: system_write_file
+    description: 将文本内容写入指定路径的文件（全量覆盖或追加）
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 文件路径
+        content:
+          type: string
+          description: 文件内容
+        overwrite:
+          type: boolean
+          description: 是否覆盖原文件内容，默认为 true（追加）
+      required: ["path", "content"]
+    module: backend.system_tools.writer
+    function_name: file_write
+
+  - name: system_patch_file
+    description: 基于 Search-and-Replace 块对指定文件进行局部精准修改（补丁模式）
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 目标文件路径（相对或绝对路径）
+        search:
+          type: string
+          description: 需要被替换的旧代码块（必须在文件中唯一存在）
+        replace:
+          type: string
+          description: 准备替换进去的新代码块
+        replace_all:
+          type: boolean
+          description: 是否允许批量替换多处匹配项。默认为 False。
+        encoding:
+          type: string
+          description: 文件编码，默认为 UTF-8
+      required: ["path", "search", "replace", "replace_all"]
+    module: backend.system_tools.writer
+    function_name: file_patch
+
+  - name: system_create_project_tree
+    description: 根据目录树文本创建项目目录和文件，支持 tree 命令输出、Markdown 代码块中的树形结构以及简单缩进格式
+    parameters:
+      type: object
+      properties:
+        tree:
+          type: string
+          description: 目录结构文本，可包含 tree 符号（├── └── │）或简单缩进
+        path:
+          type: string
+          description: 项目创建的根路径（相对或绝对路径）
+      required: ["tree", "path"]
+    module: backend.system_tools.project_creator
+    function_name: create_project_tree
+
+  - name: system_read_file_list
+    description: 递归列出目录下的所有文件，自动应用 .gitignore 规则，支持隐藏文件显示和自定义排除模式
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 要列出的目录路径
+        show_hidden:
+          type: boolean
+          description: 是否显示以点开头的隐藏文件，默认 false
+        exclude_patterns:
+          type: array
+          items:
+            type: string
+          description: 额外的排除模式列表（通配符），例如 ["*.log", "temp/"]，可选
+        follow_symlinks:
+          type: boolean
+          description: 是否跟随目录类型的符号链接，默认 false
+      required: ["path"]
+    module: backend.system_tools.file_lister
+    function_name: read_file_list

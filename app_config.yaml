@@ -1,0 +1,24 @@
+# app_config.yaml
+# 应用配置
+
+# 数据存储根目录（可写，支持绝对路径或相对路径）
+# 绝对路径示例：C:\ProgramData\.LumNeo
+# 相对路径示例：./data（相对于可执行文件所在目录）
+data_dir: "C:\\ProgramData\\.LumNeo"
+
+# 子目录（相对于 data_dir）
+uploads_dir: "data/uploads"
+generate_dir: "data/generate"
+logs_dir: "logs"
+temp_dir: "temp"
+
+# 配置文件（mcp_config.json）存放路径
+# 支持绝对路径或相对于 data_dir
+mcp_config_path: "mcp_config.json"
+
+# 静态文件目录（只读，打包时位于 _MEIPASS 内）
+# 此路径相对于项目根目录（开发时）或 _MEIPASS（打包后）
+static_dir: "html"
+
+# 其他配置
+max_upload_size_mb: 100

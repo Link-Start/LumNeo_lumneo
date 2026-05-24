@@ -1,0 +1,604 @@
+p{margin:0;padding:4px;}
+/* Hermes 风格暗色主题 */
+:root {
+  --bg-primary: #0b0e14;
+  --bg-secondary: #131720;
+  --bg-panel: rgba(19, 23, 32, 0.85);
+  --border-color: #1e2430;
+  --border-glow: #6366f1;
+  --text-primary: #e4e7ed;
+  --text-secondary: #8b92a0;
+  --accent: #6366f1;
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --glass-bg: rgba(19, 23, 32, 0.6);
+  --glass-border: 1px solid rgba(99, 102, 241, 0.18);
+  --shadow-glow: 0 0 12px rgba(99, 102, 241, 0.12);
+}
+
+[theme-mode="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f7fa;
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --border-color: #e2e5e9;
+  --border-glow: #6366f1;
+  --text-primary: #1a1f36;
+  --text-secondary: #5b6170;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: 1px solid rgba(99, 102, 241, 0.2);
+  --shadow-glow: 0 0 10px rgba(99, 102, 241, 0.08);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.message-content img {
+  width: 100%;
+  cursor: pointer;
+}
+.message-content a {
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-radius: 4px;
+  position: relative;
+}
+.message-content a:hover {
+  background: rgba(100, 104, 230, 0.3);
+}
+.message-content .file-pdf::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/pdf.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-word::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/word.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-excel::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/excel.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-powerpoint::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/ppt.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-text::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/text.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-archive::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/zip.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.message-content .file-image::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  background: url('/image.svg') no-repeat center;
+  background-size: contain;
+  margin-right: 0.3em;
+  vertical-align: middle;
+}
+.n-image-preview {
+  width: auto;
+  max-width: 80%;
+}
+
+/* 全局按钮过渡 */
+.n-button {
+  transition: all 0.2s ease;
+}
+
+/* 代码块包裹容器（相对定位） */
+.code-block-wrapper {
+  position: relative;
+  margin: 6px 0;
+}
+
+/* 复制按钮 */
+.copy-code-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+}
+.copy-code-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #fff;
+}
+.code-block-wrapper:hover .copy-code-btn {
+  opacity: 1;
+}
+
+/* ========== Markdown 代码块样式 ========== */
+pre {
+  background: #0d1117;               /* 极暗背景，接近 IDE */
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e6edf3;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 12px 0;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+}
+
+/* 行内代码 */
+code {
+  background: rgba(99, 102, 241, 0.15);
+  color: #8b92a0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: Consolas, '微软雅黑', monospace;
+}
+
+/* 代码块内的 code 不要重复背景 */
+pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+pre code.hljs {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  display: block;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: Consolas, '微软雅黑', monospace;
+}
+
+/* 浅色模式覆盖 */
+[theme-mode="light"] pre {
+  background: #f6f8fa;
+  border-color: var(--border-color);
+  color: #1f2328;
+  box-shadow: none;
+}
+[theme-mode="light"] code {
+  background: rgba(99, 102, 241, 0.1);
+  color: #5b6170;
+}
+
+.hljs-comment{font-style:normal;}
+
+
+.mermaid {
+  background: #0d1117;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+/* Mermaid 渲染后的容器 */
+.mermaid-rendered {
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.mermaid-rendered svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ========== 现代表格 ========== */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 16px 0;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(135deg, #161a24 0%, #1a1e2a 100%);
+  border: 1px solid var(--border-color);
+}
+
+thead {
+  background: linear-gradient(135deg, #2d3150bb 0%, #3b3060af 100%);
+  backdrop-filter: blur(10px);
+}
+
+th {
+  padding: 14px 18px;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  border-bottom: 1px solid var(--accent);
+}
+
+td {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+/* 行悬停效果 */
+tbody tr {
+  transition: background 0.2s ease;
+}
+tbody tr:hover {
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
+
+/* 斑马纹（柔和版） */
+tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+tbody tr:nth-child(even):hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+/* 第一个单元格轻微圆角（视觉融合） */
+th:first-child {
+  border-top-left-radius: 10px;
+}
+th:last-child {
+  border-top-right-radius: 10px;
+}
+tr:last-child td:first-child {
+  border-bottom-left-radius: 10px;
+}
+tr:last-child td:last-child {
+  border-bottom-right-radius: 10px;
+}
+
+/* 父元素必须设置相对定位与溢出隐藏 */
+.border-marquee-center {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 底部光流（从左向右） */
+.border-marquee-center::after {
+  content: '';
+  position: absolute;
+  bottom: 0px;
+  left: 0%;
+  width: 200%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #6366f1 15%,
+    #8b5cf6 25%,
+    #6366f1 35%,
+    transparent 50%,
+    transparent 50%,
+    #6366f1 65%,
+    #8b5cf6 75%,
+    #6366f1 85%,
+    transparent 100%
+  );
+  background-size: 100% 100%;
+  animation: flow-right 2s linear infinite;
+}
+
+@keyframes flow-left {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }  /* 向左移动自身宽度的一半 = 一个父元素宽度 */
+}
+
+@keyframes flow-right {
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(0%); }  /* 同样的平移，但在右半区视觉上成了向右流动 */
+}
+
+/* ================================================================ */
+/* 右侧跑马灯 - 无缝循环（右侧方向） */
+.border-marquee-right::after {
+  content: '';
+  position: absolute;
+  right: 0;        /* 覆盖在右边框上 */
+  top: 0;
+  bottom: 0;
+  width: 1px;         /* 光带厚度 */
+  height: 200%;       /* 两倍高度，用于无缝衔接 */
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    #6366f1 15%,
+    #8b5cf6 25%,
+    #6366f1 35%,
+    transparent 50%,   /* 第一段结束 */
+    transparent 50%,
+    #6366f1 65%,
+    #8b5cf6 75%,
+    #6366f1 85%,
+    transparent 100%   /* 第二段，与第一段完全相同 */
+  );
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  animation: flow-seamless 2s linear infinite;
+  border-radius: 2px;
+}
+
+@keyframes flow-seamless {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%); /* 向上移动一半高度，让第二段顶上来 */
+  }
+}
+
+/* 思考块 */
+.reasoning-block {
+  margin: 12px 0;
+  background: rgba(139, 92, 246, 0.05);
+  padding: 12px;
+  border-radius: 6px;
+}
+.reasoning-block summary {
+  font-weight: 600;
+  color: #8b71c7;
+  cursor: pointer;
+}
+.reasoning-content {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* 工具调用卡片 */
+.tool-calls-container {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tool-call-card {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+}
+.tool-name {
+  font-weight: 600;
+  color: #3b82f6;
+}
+.tool-args, .result-content {
+  background: var(--bg-secondary);
+  padding: 8px;
+  min-height: 30px;
+  max-height: 320px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: Consolas, '微软雅黑', monospace;
+  margin: 6px 0 0;
+}
+.tool-result {
+  margin-top: 8px;
+}
+.result-label, .tool-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.token-usage {
+  font-size: 12px;
+  color: #6b7280;
+  display: none;
+}
+
+.message-row.assistant:last-child .message-content .token-usage {
+  display:block !important; /* 显示token使用情况 */
+}
+
+.tool-calls-block {
+  margin: 12px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+.tool-calls-block summary {
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--accent);
+  user-select: none;
+}
+.tool-calls-block summary:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+.tool-calls-block .tool-calls-container {
+  padding: 0 14px 14px;
+}
+
+
+/* ========== 移动端适配（屏幕宽度 ≤ 768px） ========== */
+@media screen and (max-width: 768px) {
+  /* 隐藏桌面端侧边栏 */
+  .sidebar-panel {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    height: 100vh;
+    width: 60% !important;
+    max-width: 300px !important;
+    z-index: 1001;
+    transition: left 1s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+  }
+  .light .sidebar-panel {
+    background: #fff!important;
+  }
+  /* 侧边栏打开状态（通过 JS 添加 .sidebar-open 类） */
+  .sidebar-panel.sidebar-open {
+    left: 0;
+  }
+
+  /* 遮罩层（在侧边栏打开时显示） */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 998;
+  }
+  .sidebar-panel.sidebar-open ~ .sidebar-overlay {
+    display: block;
+  }
+
+  /* 主聊天区域全宽 */
+  .main-stage {
+    width: 100%;
+  }
+
+  /* 消息容器缩小内边距 */
+  .message-container {
+    padding: 12px;
+  }
+  .message-main {
+    width: 96% !important;
+  }
+
+  /* 消息气泡最大宽度加大，让文字更容易阅读 */
+  .bubble {
+    max-width: 98%;
+  }
+
+  /* 输入区域固定在底部，并优化工具栏排列 */
+  .compose-area {
+    position: fixed !important;
+    bottom: 0;left: calc(50% - 48%);
+    background: var(--bg-secondary);
+    gap: 8px;
+    width: 96% !important;
+    flex-wrap: wrap;
+  }
+
+  .message-row.assistant:last-child {
+    margin-bottom: 160px !important; /* 最后一条消息底部留白 */
+  }
+  /* 文件预览列表横排滚动 */
+  .file-preview-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  /* 输入框容器和发送按钮区域 */
+  .compose-input-container {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .compose-tools-tar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  /* 工具栏按钮缩小 */
+  .compose-tools-tar .n-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  /* 顶部标题栏 */
+  .top-bar {
+    padding: 8px 12px;
+    position: fixed;
+    width:100%;
+    z-index: 1000;
+  }
+
+  /* 模型选择下拉框宽度调整 */
+  .top-bar .n-select {
+    width: 160px !important;
+  }
+
+  /* 代码块在移动端横向滚动 */
+  pre {
+    max-width: calc(100vw - 40px);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* 消息内操作按钮调整间距 */
+  .message-actions .n-button {
+    padding: 2px 4px;
+  }
+
+  /* 工具提示弹窗在小屏全宽 */
+  .tools-popover-content {
+    max-width: 80vw;
+  }
+  /* 思考块、工具调用容器等适当减少边距 */
+  .reasoning-block,
+  .tool-calls-container {
+    margin: 8px 0;
+  }
+}
