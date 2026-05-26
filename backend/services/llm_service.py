@@ -114,7 +114,7 @@ class LLMService:
                 if tool_calls_data:
                     if not tool_call_started:
                         tool_status_id = f"tool-{uuid.uuid4().hex[:6]}"
-                        yield f"\n<!--status:show:{tool_status_id}-->🔧 正在分析需求，准备执行操作..."
+                        yield f"\n<!--status:show:{tool_status_id}-->🔧 准备执行操作..."
                         tool_call_started = True
                     for tc_delta in tool_calls_data:
                         if not tc_delta.id and tool_calls:

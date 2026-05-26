@@ -79,10 +79,10 @@
         <main
           class="main-stage"
           :class="{ 'main-stage--full': sidebarCollapsed }"
-          @dragenter="onDragEnter"
+          @dragenter="onDragEnter($event, isLoading)"
           @dragover="onDragOver"
           @dragleave="onDragLeave"
-          @drop="onDrop($event, chatStore.activeChatId)"
+          @drop="onDrop($event, chatStore.activeChatId, isLoading)"
         >
           <!-- 拖拽提示浮层 -->
           <div v-if="isDragging && chatStore.activeChatId" class="drag-overlay">
@@ -266,6 +266,7 @@
               </n-button>
               <!-- 文件上传按钮 -->
               <n-upload
+                :disabled="isLoading || !chatStore.activeChatId || !activeModelId"
                 v-model:file-list="uploadFileList"
                 multiple
                 :max="fileConfig.max"
@@ -491,7 +492,7 @@ const onContainerClick = (e: any) => {
 watch( () => chatStore.currentChatMessages.length, () => {
     renderMermaidDiagrams()
     addCopyButtons()
-    scrollToBottom()    
+    scrollToBottom()
   }
 )
 
