@@ -88,6 +88,7 @@
           </div>
         </n-tab-pane>
       </n-tabs>
+      <div style="font-size:.6rem;color:#666;width:100%;text-align:center;position: absolute;left:0;right:10px;bottom: 6px">版本：{{ version }}</div>
     </n-drawer-content>
   </n-drawer>
 
@@ -199,7 +200,7 @@ const message = useMessage()
 const chatStore = useChatStore()
 const configStore = useConfigStore()
 const profileStore = useProfileStore()
-
+const version = ref(import.meta.env.VITE_APP_VERSION)
 
 // 对话框状态
 const showModelDialog = ref(false)
@@ -427,3 +428,7 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.n-tab-pane {margin-bottom:20px;}
+</style>
