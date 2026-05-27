@@ -30,6 +30,13 @@ p{margin:0;padding:4px;}
   --shadow-glow: 0 0 10px rgba(99, 102, 241, 0.08);
 }
 
+.no-select {
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none;    /* Firefox */
+  -ms-user-select: none;     /* IE 10+ */
+  user-select: none;         /* 标准语法 */
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }

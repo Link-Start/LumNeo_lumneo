@@ -112,7 +112,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     (_, content, time) => {
       const key = `<!--BLOCK_0${blockMap.size}-->` // 使用 HTML 注释占位符
       const timeStr = time ? ` (${time}秒)` : ''
-      const html = `<details class="reasoning-block" close><summary>💭 已思考 ${timeStr}</summary><div class="reasoning-content">${marked.parse(content)}</div></details>`
+      const html = `<details class="reasoning-block"><summary class="no-select">💭 已思考 ${timeStr}</summary><div class="reasoning-content">${marked.parse(content)}</div></details>`
       blockMap.set(key, html)
       return key
     }
@@ -124,7 +124,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
       const afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       const key = `<!--BLOCK_${blockMap.size}-->`
-      const html = `<details class="reasoning-block" open><summary>💭 思考中...</summary><div class="reasoning-content">${marked.parse(afterStart)}</div></details>`
+      const html = `<details class="reasoning-block" open><summary class="no-select">💭 思考中...</summary><div class="reasoning-content">${marked.parse(afterStart)}</div></details>`
       // 移除原始标记，只保留占位符
       processedText = processedText.substring(0, startIdx) + key
       blockMap.set(key, html)
@@ -209,7 +209,7 @@ export function processMessageContent(text: string, isStreaming = false): string
         const title = toolCount > 0 ? `🔧 工具调用 (${toolCount}个)` : '🔧 工具调用'
 
         // 包装在 details 中
-        const html = `<details class="tool-calls-block" close><summary>${title}</summary><div class="tool-calls-container">${cardsHtml}</div></details>`
+        const html = `<details class="tool-calls-block"><summary class="no-select">${title}</summary><div class="tool-calls-container">${cardsHtml}</div></details>`
 
         const key = `<!--BLOCK_${blockMap.size}-->`
         blockMap.set(key, html)

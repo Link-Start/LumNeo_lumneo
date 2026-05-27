@@ -195,7 +195,16 @@
                           <div v-if="streamingContent" class="bubble streaming" v-html="streamDisplayHtml"></div>
                           <svgLoading v-else />
                         </div>
-                        <div v-else class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div>
+                        <div v-else>
+                          <template v-if="msg.role === 'user'">
+                            <div class="message-content user-content" v-text="msg.content.trim()"></div>
+                          </template>
+                          <!-- 助手消息：保持 Markdown 渲染 -->
+                          <template v-else>
+                            <div class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div>
+                          </template>
+                        </div>
+                        <!-- <div v-else class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div> -->
 
                         <!-- 操作按钮（只在非加载状态悬停显示） -->
                         <div :class="`message-actions ${msg.role === 'assistant' ? 'assistant-actions' : 'user-actions'}`" v-if="!isLoading || msg !== regeneratingMsg">
