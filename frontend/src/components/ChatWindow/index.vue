@@ -155,64 +155,96 @@
               <div v-if="showWelcome && currentMessages.length === 0">
                 <!-- <svgWelcome /> -->
               </div>
-              <div v-for="(msg, idx) in currentMessages" :key="msg.id ?? idx" :class="['message-row', msg.role]" @click="">
-                <div class="bubble" :class="{ 'has-file': msg.file_ref }">
-                  <!-- 文件附件 -->
-                   <div v-if="normalizeFileRef(msg.file_ref).length" class="message-files">
-                    <div v-for="f in normalizeFileRef(msg.file_ref)" :key="f.filename" class="msg-file-item">
-                      <n-image v-if="f.type.startsWith('image/')" width="200" :src="f.url" class="msg-file-img" />
-                      <div v-else class="msg-file-other">
-                        <n-icon><DocumentOutline /></n-icon>
-                        <a :href="f.url" target="_blank">{{ f.filename }}</a>
+              <DynamicScroller
+                :items="currentMessages"
+                :min-item-size="80"
+                key-field="id"
+                class="virtual-scroller"
+                ref="scrollerRef"
+                @scroll="handleScroll"
+              >
+                <!-- slot 写法，item 就是单条 msg，index 是索引，active 表示当前是否在可视区 -->
+                <template #default="{ item: msg, index: idx, active }">
+                  <!-- ✅ 包裹 DynamicScrollerItem，并传入 size-dependencies 监听内容变化以重新计算高度 -->
+                  <DynamicScrollerItem
+                    :item="msg"
+                    :active="active"
+                    :data-index="idx"
+                  >
+                    <div :class="['message-row', msg.role]" @click="">
+                      <div class="bubble" :class="{ 'has-file': msg.file_ref }">
+                        <!-- 文件附件 -->
+                        <div v-if="normalizeFileRef(msg.file_ref).length" class="message-files">
+                          <div v-for="f in normalizeFileRef(msg.file_ref)" :key="f.filename" class="msg-file-item">
+                            <n-image v-if="f.type.startsWith('image/')" width="200" :src="f.url" class="msg-file-img" />
+                            <div v-else class="msg-file-other">
+                              <n-icon><DocumentOutline /></n-icon>
+                              <a :href="f.url" target="_blank">{{ f.filename }}</a>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- 流式输出中的临时气泡 -->
+                        <div v-if="msg.id === 'streaming-temp' && isLoading" class="message-row assistant">
+                          <div v-if="streamingContent" class="bubble streaming" v-html="renderMessageHtml(streamingContent, true)"></div>
+                          <svgLoading v-else />
+                        </div>
+
+                        <!-- 如果是正在重新生成的消息，显示流式内容；否则显示原内容 -->
+                        <div v-else-if="msg === regeneratingMsg" class="message-row assistant">
+                          <div v-if="streamingContent" class="bubble streaming" v-html="streamDisplayHtml"></div>
+                          <svgLoading v-else />
+                        </div>
+                        <div v-else class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div>
+
+                        <!-- 操作按钮（只在非加载状态悬停显示） -->
+                        <div :class="`message-actions ${msg.role === 'assistant' ? 'assistant-actions' : 'user-actions'}`" v-if="!isLoading || msg !== regeneratingMsg">
+                          <n-button text class="icon-btn" size="small" @click="copyContent(msg)" title="复制">
+                            <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
+                          </n-button>
+                          <n-button v-if="msg.role === 'assistant' && idx == currentMessages.length - 1" text class="icon-btn" size="small" @click="regenerateResponse(msg)" title="重新生成">
+                            <template #icon><n-icon ><m-svg name="refresh"/></n-icon></template>
+                          </n-button>
+                          <n-button text class="icon-btn" size="small" @click="startEditMessage(msg)" title="编辑">
+                            <template #icon><n-icon :size="20"><m-svg name="edit"/></n-icon></template>
+                          </n-button>
+                          <n-popconfirm 
+                          @positive-click="() => chatStore.deleteMessage(<number>msg.id!)" 
+                          negative-text="取消" 
+                          positive-text="好的"
+                          :negative-button-props="{size: 'tiny'}"
+                          :positive-button-props="{size: 'tiny'}"
+                          >
+                            <template #trigger>
+                              <n-button text class="icon-btn" size="small" title="删除">
+                                <template #icon><n-icon :size="22"><m-svg name="del"/></n-icon></template>
+                              </n-button>
+                            </template>
+                            确定要删除这条消息吗？
+                          </n-popconfirm>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <!-- 如果是正在重新生成的消息，显示流式内容；否则显示原内容 -->
-                  <div v-if="msg === regeneratingMsg" class="message-row assistant">
-                    <div v-if="streamingContent" class="bubble streaming" v-html="renderMessageHtml(streamingContent, true)"></div>
-                    <svgLoading v-else />
-                  </div>
-                  <div v-else class="message-content" v-html="renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div>
-
-                  <!-- 操作按钮（只在非加载状态悬停显示） -->
-                  <div :class="`message-actions ${msg.role === 'assistant' ? 'assistant-actions' : 'user-actions'}`" v-if="!isLoading || msg !== regeneratingMsg">
-                    <n-button text class="icon-btn" size="small" @click="copyContent(msg)" title="复制">
-                      <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
-                    </n-button>
-                    <n-button v-if="msg.role === 'assistant' && idx == currentMessages.length - 1" text class="icon-btn" size="small" @click="regenerateResponse(msg)" title="重新生成">
-                      <template #icon><n-icon ><m-svg name="refresh"/></n-icon></template>
-                    </n-button>
-                    <n-button text class="icon-btn" size="small" @click="startEditMessage(msg)" title="编辑">
-                      <template #icon><n-icon :size="20"><m-svg name="edit"/></n-icon></template>
-                    </n-button>
-                    <n-popconfirm 
-                    @positive-click="() => chatStore.deleteMessage(msg.id!)" 
-                    negative-text="取消" 
-                    positive-text="好的"
-                    :negative-button-props="{size: 'tiny'}"
-                    :positive-button-props="{size: 'tiny'}"
-                    >
-                      <template #trigger>
-                        <n-button text class="icon-btn" size="small" title="删除">
-                          <template #icon><n-icon :size="22"><m-svg name="del"/></n-icon></template>
-                        </n-button>
-                      </template>
-                      确定要删除这条消息吗？
-                    </n-popconfirm>
-                  </div>
-                </div>
-              </div>
-              <!-- 流式输出中的临时气泡 -->
-              <div v-if="isLoading && !regeneratingMsg" class="message-row assistant">
-                <div v-if="streamingContent" class="bubble streaming" v-html="renderMessageHtml(streamingContent, true)"></div>
-                <svgLoading v-else />
-              </div>
+                  </DynamicScrollerItem>
+                </template>
+              </DynamicScroller>
             </div>
           </div>
 
           <!-- 底部输入区 -->
           <div class="compose-area" v-if="chatStore.activeChatId">
+            <!-- ✅ 回到底部按钮 -->
+            <transition name="fade">
+              <n-button 
+                v-if="!isAutoScrollEnabled" 
+                circle 
+                class="scroll-to-bottom-btn" 
+                @click="forceScrollToBottom"
+              >
+                <n-icon size="22"><ArrowDownOutline /></n-icon>
+                <div v-show="isLoading" class="rotate-circle"></div>
+              </n-button>
+            </transition>
             <div>
               <!-- 文件预览条 -->
               <div v-if="uploadedFiles.length" class="file-preview-list">
@@ -331,7 +363,10 @@ import { NConfigProvider, NMessageProvider, NButton, NInput,
   NUpload, NList, NListItem, NIcon, NScrollbar, NImage, NFlex,
   NSelect, NModal, NPopconfirm, NPopover, NQrCode
 } from 'naive-ui'
-import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline, BarcodeOutline } from '@vicons/ionicons5'
+import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline, BarcodeOutline, ArrowDownOutline } from '@vicons/ionicons5'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
@@ -360,6 +395,11 @@ const sidebarOpen = ref(false)
 const qrCodeUrl = ref('')
 const local_ip = ref('')
 const showQRCode = ref(true)
+const streamDisplayHtml = ref('')
+let renderRafId: number | null = null
+const isAutoScrollEnabled = ref(true)            // 自动滚动开关
+const SCROLL_THRESHOLD = 200                     // 距离底部的容差阈值（像素）
+const scrollerRef = ref<any>(null)
 
 function checkMobile() {
   isMobile.value = window.innerWidth <= 768
@@ -378,7 +418,7 @@ const { uploadFileList, uploadedFiles, isDragging, onDragEnter, onDragOver,
 } = useFileUpload()
 
 const { currentInput, isLoading, streamingContent, regeneratingMsg, 
-    sendMessage, regenerateResponse, regenerateFromCurrentHistory, stopGeneration 
+    sendMessage, onStreamEnd, regenerateResponse, regenerateFromCurrentHistory, stopGeneration 
 } = useChat()
 
 const { showEditModal, editContent, copySvgName, copyContent,
@@ -387,6 +427,32 @@ const { showEditModal, editContent, copySvgName, copyContent,
 
 const { messageListRef, addCopyButtons, renderMermaidDiagrams, startObserving, stopObserving } = useCodeEnhancer()
 
+// 绑定缓存逻辑：当流结束时，计算 HTML 并写入当前最新的历史消息中
+onStreamEnd.value = (fullText: string) => {
+  // 获取当前对话的最新一条助手消息（也就是刚刚生成的这条）
+  const messages = chatStore.getActiveMessages()
+  const lastMsg = messages[messages.length - 1]
+  
+  if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === fullText) {
+    // 如果还没有缓存，就进行一次性完整渲染并存入
+    if (!lastMsg.renderedHtml) {
+      lastMsg.renderedHtml = renderMessageHtml(fullText, true)
+    }
+  }
+}
+
+watch(streamingContent, (newVal) => {
+  if (!newVal) {
+    streamDisplayHtml.value = ''
+    if (renderRafId !== null) cancelAnimationFrame(renderRafId)
+    return
+  }
+  if (renderRafId !== null) cancelAnimationFrame(renderRafId)
+  renderRafId = requestAnimationFrame(() => {
+    streamDisplayHtml.value = renderMessageHtml(newVal, true)
+    renderRafId = null
+  })
+})
 
 watch(() => selected.value, (newVal) => {
   localStorage.setItem('thinking', newVal ? 'true' : 'false')
@@ -409,9 +475,28 @@ const currentMessages = computed(() => chatStore.currentChatMessages)
 
 // ---------- 滚动到底部 ----------
 function scrollToBottom() {
-  if (messageListRef.value) {
-    messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+  if (scrollerRef.value) {
+    // 稍微加个延时，确保 DOM 已经更新完毕
+    setTimeout(() => {
+      scrollerRef.value.scrollToBottom()
+    }, 50)
   }
+}
+
+function handleScroll(event: Event) {
+  const target = event.target as HTMLElement
+  if (!target) return
+
+  const scrollTop = target.scrollTop
+  const scrollHeight = target.scrollHeight
+  const clientHeight = target.clientHeight
+
+  // 判断是否接近底部
+  // 当 "总高度 - 滚动出去的高度 - 可视高度" 小于 阈值 时，认为在底部
+  const isAtBottom = (scrollHeight - scrollTop - clientHeight) <= SCROLL_THRESHOLD
+  
+  // 更新状态
+  isAutoScrollEnabled.value = isAtBottom
 }
 
 async function createChat() {
@@ -488,11 +573,28 @@ const onContainerClick = (e: any) => {
   }
 }
 
+// 强制滚动到底部并开启自动滚动
+function forceScrollToBottom() {
+  isAutoScrollEnabled.value = true
+  // 使用 DynamicScroller 的 scrollToBottom 方法
+  if (scrollerRef.value) {
+    scrollerRef.value.scrollToBottom()
+  }
+}
+
 // ---------- 监视消息变化以重新渲染增强内容 ----------
-watch( () => chatStore.currentChatMessages.length, () => {
-    renderMermaidDiagrams()
-    addCopyButtons()
-    scrollToBottom()
+watch(
+  () => chatStore.currentChatMessages.length,
+  () => {
+    // 确保 DOM 更新后再渲染图表和按钮
+    nextTick(() => {
+      renderMermaidDiagrams()
+      addCopyButtons()
+      // 如果处于自动滚动模式，则滚动到底部
+      if (isAutoScrollEnabled.value) {
+        scrollToBottom()
+      }
+    })
   }
 )
 
@@ -500,6 +602,9 @@ watch( () => chatStore.currentChatMessages.length, () => {
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  if (messageListRef.value) {
+    messageListRef.value.addEventListener('scroll', handleScroll, { passive: true })
+  }
   await profileStore.loadProfiles()
   renderMermaidDiagrams()
   startObserving()
@@ -516,6 +621,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  if (messageListRef.value) {
+    messageListRef.value.removeEventListener('scroll', handleScroll)
+  }
   stopObserving()
 })
 

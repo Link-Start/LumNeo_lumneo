@@ -2,10 +2,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export interface Message {
-  id?: number
+  id?: number | string
   role: 'user' | 'assistant' | 'system'
   content: any
   file_ref?: any
+  renderedHtml?: string // 用于缓存渲染后的 HTML
 }
 
 export interface Chat {
@@ -85,6 +86,7 @@ export const useChatStore = defineStore('chat', () => {
   // 当前对话的消息（过滤 system）
   const currentChatMessages = computed(() => {
     const chat = chats.value.find(c => c.id === activeChatId.value)
+    
     return chat ? chat.messages.filter(m => m.role !== 'system') : []
   })
 
@@ -98,6 +100,9 @@ export const useChatStore = defineStore('chat', () => {
   async function addMessageToLocal(msg: Message) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     if (!chat) return
+    if (msg.id == null) {
+      msg.id = Date.now()
+    }
     chat.messages.push(msg)
     // 自动更新标题
     if (msg.role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {

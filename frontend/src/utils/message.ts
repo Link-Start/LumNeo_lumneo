@@ -124,7 +124,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
       const afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       const key = `<!--BLOCK_${blockMap.size}-->`
-      const html = `<details class="reasoning-block" close><summary>💭 思考中...</summary><div class="reasoning-content">${marked.parse(afterStart)}</div></details>`
+      const html = `<details class="reasoning-block" open><summary>💭 思考中...</summary><div class="reasoning-content">${marked.parse(afterStart)}</div></details>`
       // 移除原始标记，只保留占位符
       processedText = processedText.substring(0, startIdx) + key
       blockMap.set(key, html)

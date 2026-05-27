@@ -1,4 +1,4 @@
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
@@ -18,12 +18,9 @@ export function useChat() {
   const abortController = ref<AbortController | null>(null)
   const regeneratingMsg = ref<Message | null>(null)
 
-
   watch(() => streamingContent.value, (newVal: string) => {
     if (!newVal) {
-      setTimeout(() => {
-        addFileTypeClassToLinks(document.body)
-      }, 150)
+      setTimeout(() => addFileTypeClassToLinks(document.body), 150)
     }
   })
 
@@ -35,6 +32,35 @@ export function useChat() {
     isLoading.value = false
     streamingContent.value = ''
     regeneratingMsg.value = null
+  }
+
+  const onStreamEnd = ref<((fullText: string) => void) | null>(null)
+
+  async function readStream(
+    response: Response, 
+    scrollToBottom?: () => void
+  ): Promise<string> {
+    if (!response.ok || !response.body) throw new Error('网络响应失败')
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullText = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      fullText += decoder.decode(value, { stream: true })
+      // ✅ 只更新原始文本，绝不等待 DOM 更新
+      streamingContent.value = fullText
+      
+      // ✅ 滚动也做 RAF 节流，避免频繁触发布局重排阻塞 JS
+      if (scrollToBottom) {
+        scrollToBottom()
+      }
+    }
+    
+    return fullText
   }
 
   /**
@@ -57,6 +83,7 @@ export function useChat() {
     // 1. 构建用户消息
     const displayContent = currentInput.value.trim()
     const userMsg: Message = {
+      id: Date.now(),
       role: 'user',
       content: displayContent,
       file_ref:
@@ -73,6 +100,13 @@ export function useChat() {
     chatStore.addMessageToLocal(userMsg)
     chatStore.saveMessageToBackend(userMsg).catch((e) => console.warn('保存用户消息失败', e))
 
+    const tempAssistantMsg: Message = {
+      id: 'streaming-temp', // 👈 使用一个固定的特殊字符串作为 id
+      role: 'assistant',
+      content: '' // 初始为空
+    }
+    chatStore.addMessageToLocal(tempAssistantMsg)
+
     // 3. 准备 API 调用
     isLoading.value = true
     streamingContent.value = ''
@@ -83,6 +117,7 @@ export function useChat() {
     }
     const controller = new AbortController()
     abortController.value = controller
+    let fullText = ''
 
     try {
       const allMessages = chatStore.getActiveMessages()
@@ -110,20 +145,8 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      if (!response.ok || !response.body) throw new Error('网络响应失败')
+      fullText = await readStream(response, scrollToBottom)
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        fullText += decoder.decode(value, { stream: true })
-        streamingContent.value = fullText
-        await nextTick()
-        scrollToBottom()
-      }
       const assistantMsg: Message = { role: 'assistant', content: fullText }
       chatStore.addMessageToLocal(assistantMsg)
       chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn('保存助手消息失败', e))
@@ -131,16 +154,17 @@ export function useChat() {
     } catch (error: any) {
       if (error.name === 'AbortError') return
       console.error('发送失败:', error)
-      const errorMsg: Message = {
-        role: 'assistant',
-        content: `**错误：** ${error.message}`,
-      }
+      const errorMsg: Message = { role: 'assistant', content: `**错误：** ${error.message}` }
       chatStore.addMessageToLocal(errorMsg)
       chatStore.saveMessageToBackend(errorMsg).catch((e) => console.warn('保存错误消息失败', e))
     } finally {
       abortController.value = null
       isLoading.value = false
       streamingContent.value = ''
+      // 流结束后，触发外部传入的缓存回调
+      if (onStreamEnd.value && fullText) {
+        onStreamEnd.value(fullText) 
+      }
     }
   }
 
@@ -186,20 +210,8 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      if (!response.ok || !response.body) throw new Error('网络响应失败')
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        fullText += decoder.decode(value, { stream: true })
-        streamingContent.value = fullText
-        await nextTick()
-        scrollToBottom()
-      }
+      const fullText = await readStream(response, scrollToBottom)
+      
       const assistantMsg: Message = { role: 'assistant', content: fullText }
       chatStore.addMessageToLocal(assistantMsg)
       chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn(e))
@@ -264,19 +276,7 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      if (!response.ok || !response.body) throw new Error('网络响应失败')
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullText = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        fullText += decoder.decode(value, { stream: true })
-        streamingContent.value = fullText
-        await nextTick()
-      }
+      const fullText = await readStream(response)
 
       // 直接更新原消息对象
       assistantMsg.content = fullText
@@ -303,6 +303,7 @@ export function useChat() {
     isLoading,
     streamingContent,
     regeneratingMsg,
+    onStreamEnd,
     sendMessage,
     regenerateResponse,
     regenerateFromCurrentHistory,
