@@ -112,7 +112,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     (_, content, time) => {
       const key = `<!--BLOCK_0${blockMap.size}-->` // 使用 HTML 注释占位符
       const timeStr = time ? ` (${time}秒)` : ''
-      const html = `<details class="reasoning-block"><summary class="no-select">💭 已思考 ${timeStr}</summary><div class="reasoning-content">${marked.parse(content)}</div></details>`
+      const html = `<div class="reasoning-block"><div class="reasoning-summary no-select">💭 已思考 ${timeStr}</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(content)}</div></div></div>`
       blockMap.set(key, html)
       return key
     }
@@ -124,7 +124,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
       const afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       const key = `<!--BLOCK_${blockMap.size}-->`
-      const html = `<details class="reasoning-block" open><summary class="no-select">💭 思考中...</summary><div class="reasoning-content">${marked.parse(afterStart)}</div></details>`
+      const html = `<div class="reasoning-block" data-reasoning="open"><div class="reasoning-summary no-select">💭 思考中...</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(afterStart)}</div></div></div>`
       // 移除原始标记，只保留占位符
       processedText = processedText.substring(0, startIdx) + key
       blockMap.set(key, html)
@@ -165,10 +165,10 @@ export function processMessageContent(text: string, isStreaming = false): string
                     formatted = String(formatted)
                 }
 
-                cardsHtml += `<div class="tool-call-card"><span class="tool-name">🔧 ${tool.name || '未知工具'}</span><pre class="tool-args"><code>${escapeHtml(formatted)}</code></pre></div>`
+                cardsHtml += `<div class="tool-call-card"><span class="tool-name">🛠 ${tool.name || '未知工具'}</span><pre class="tool-args"><code>${escapeHtml(formatted)}</code></pre></div>`
             } catch (err) {
                 // 【终极兜底方案】：如果连 new Function 都崩了，绝不留白，直接把原始 JSON 字符串塞进去
-                cardsHtml += `<div class="tool-call-card"><span class="tool-name">🔧 工具参数解析失败</span><pre class="tool-args"><code>${escapeHtml(b64Str)}</code></pre></div>`
+                cardsHtml += `<div class="tool-call-card"><span class="tool-name">🛠 工具参数解析失败</span><pre class="tool-args"><code>${escapeHtml(b64Str)}</code></pre></div>`
             }
             return ''
         })
@@ -209,7 +209,7 @@ export function processMessageContent(text: string, isStreaming = false): string
         const title = toolCount > 0 ? `🔧 工具调用 (${toolCount}个)` : '🔧 工具调用'
 
         // 包装在 details 中
-        const html = `<details class="tool-calls-block"><summary class="no-select">${title}</summary><div class="tool-calls-container">${cardsHtml}</div></details>`
+        const html = `<div class="tool-calls-block"><div class="tool-summary no-select">${title}</div><div class="tool-calls-container"><div class="tool-inner">${cardsHtml}</div></div></div>`
 
         const key = `<!--BLOCK_${blockMap.size}-->`
         blockMap.set(key, html)

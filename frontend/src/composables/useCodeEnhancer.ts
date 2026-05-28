@@ -93,7 +93,7 @@ export function useCodeEnhancer() {
     addCopyButtons()
     // 监听新节点
     observer = new MutationObserver(() => {
-      addCopyButtons()
+      renderMermaidDiagrams()
     })
     observer.observe(messageListRef.value, {
       childList: true,

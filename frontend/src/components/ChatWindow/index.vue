@@ -149,7 +149,7 @@
           <!-- 消息列表 -->
           <div class="message-container" ref="messageListRef">
             <div class="introduction" v-if="!chatStore.activeChatId">
-              <Introduction @click="sidebarOpen=true;sidebarCollapsed=false" />
+              <Introduction v-if="isRender" @click="sidebarOpen=true;sidebarCollapsed=false" />
             </div>
             <div class="message-main" v-else>
               <div v-if="showWelcome && currentMessages.length === 0">
@@ -170,6 +170,7 @@
                     :item="msg"
                     :active="active"
                     :data-index="idx"
+                   
                   >
                     <div :class="['message-row', msg.role]" @click="">
                       <div class="bubble" :class="{ 'has-file': msg.file_ref }">
@@ -184,27 +185,19 @@
                           </div>
                         </div>
 
-                        <!-- 流式输出中的临时气泡 -->
-                        <div v-if="msg.id === 'streaming-temp' && isLoading" class="message-row assistant">
-                          <div v-if="streamingContent" class="bubble streaming" v-html="renderMessageHtml(streamingContent, true)"></div>
-                          <svgLoading v-else />
-                        </div>
-
-                        <!-- 如果是正在重新生成的消息，显示流式内容；否则显示原内容 -->
-                        <div v-else-if="msg === regeneratingMsg" class="message-row assistant">
-                          <div v-if="streamingContent" class="bubble streaming" v-html="streamDisplayHtml"></div>
-                          <svgLoading v-else />
-                        </div>
-                        <div v-else>
+                        <!-- 如果是正在重新生成的消息，只渲染占位，不显示旧内容或流式内容 -->
+                        <template v-if="msg === regeneratingMsg">
+                          <!-- 可留空，或加一个不可见的占位元素防止高度塌陷 -->
+                          <div style="height: 1px;"></div>
+                        </template>
+                        <template v-else>
                           <template v-if="msg.role === 'user'">
                             <div class="message-content user-content" v-text="msg.content.trim()"></div>
                           </template>
-                          <!-- 助手消息：保持 Markdown 渲染 -->
                           <template v-else>
                             <div class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div>
                           </template>
-                        </div>
-                        <!-- <div v-else class="message-content" v-html="msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)" @click="onContainerClick"></div> -->
+                        </template>
 
                         <!-- 操作按钮（只在非加载状态悬停显示） -->
                         <div :class="`message-actions ${msg.role === 'assistant' ? 'assistant-actions' : 'user-actions'}`" v-if="!isLoading || msg !== regeneratingMsg">
@@ -235,6 +228,13 @@
                       </div>
                     </div>
                   </DynamicScrollerItem>
+                </template>
+                <template #after>
+                  <!-- 流式输出中的临时气泡 -->
+                  <div v-if="isLoading" class="streaming-after-item message-row assistant">
+                    <div v-if="streamDisplayHtml" class="bubble streaming" v-html="streamDisplayHtml"></div>
+                    <svgLoading v-else />
+                  </div>
                 </template>
               </DynamicScroller>
             </div>
@@ -440,13 +440,30 @@ const { messageListRef, addCopyButtons, renderMermaidDiagrams, startObserving, s
 onStreamEnd.value = (fullText: string) => {
   // 获取当前对话的最新一条助手消息（也就是刚刚生成的这条）
   const messages = chatStore.getActiveMessages()
+
+  // 如果是重新生成，更新正在重新生成的那条消息
+  if (regeneratingMsg.value) {
+    const msg = regeneratingMsg.value
+    msg.content = fullText
+    msg.renderedHtml = renderMessageHtml(fullText, true)  // 缓存渲染结果
+    regeneratingMsg.value = null   // 清空标记，恢复成普通消息显示
+     nextTick(() => {
+        addCopyButtons()
+        renderMermaidDiagrams()
+      })
+    return
+  }
+
   const lastMsg = messages[messages.length - 1]
-  
   if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === fullText) {
     // 如果还没有缓存，就进行一次性完整渲染并存入
     if (!lastMsg.renderedHtml) {
       lastMsg.renderedHtml = renderMessageHtml(fullText, true)
     }
+    nextTick(() => {
+      addCopyButtons()
+      renderMermaidDiagrams()
+    })
   }
 }
 
@@ -481,18 +498,27 @@ const profileOptions = computed(() =>
 // ---------- 当前消息（过滤 system） ----------
 const currentMessages = computed(() => chatStore.currentChatMessages)
 
+const isProgrammaticScroll = ref(false)
 
 // ---------- 滚动到底部 ----------
 function scrollToBottom() {
   if (scrollerRef.value) {
+    isProgrammaticScroll.value = true
     // 稍微加个延时，确保 DOM 已经更新完毕
     setTimeout(() => {
       scrollerRef.value.scrollToBottom()
     }, 50)
+    nextTick(() => {
+      setTimeout(() => {
+        isProgrammaticScroll.value = false
+      }, 200)
+    })
   }
 }
 
 function handleScroll(event: Event) {
+  if (isProgrammaticScroll.value) return
+
   const target = event.target as HTMLElement
   if (!target) return
 
@@ -528,13 +554,21 @@ function openChat(chatId: string) {
 
 // ---------- 发送消息包装 ----------
 function onSendMessage() {
-  sendMessage(uploadedFiles.value, scrollToBottom)
+  sendMessage(uploadedFiles.value, () => {
+    if (isAutoScrollEnabled.value) {
+      scrollToBottom()
+    }
+  })
   clearFiles()
 }
 
 // ---------- 编辑后重新生成包装 ----------
 async function onRegenerateFromCurrentHistory() {
-  await regenerateFromCurrentHistory(scrollToBottom)
+  await regenerateFromCurrentHistory(() => {
+    if (isAutoScrollEnabled.value) {
+      scrollToBottom()
+    }
+  })
 }
 
 async function onSaveEdit() {
@@ -591,6 +625,99 @@ function forceScrollToBottom() {
   }
 }
 
+function handleReasoningClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const summary = target.closest('.reasoning-summary')
+  if (!summary) return
+  
+  const block = summary.closest('.reasoning-block') as HTMLElement | null
+  
+  if (!block) return
+  
+  // 切换状态
+  const isOpen = block.dataset.reasoning === 'open'
+  const container = block.closest('.message-content')
+  let blockIndex = -1
+  if (container) {
+    const blocks = Array.from(container.querySelectorAll('.reasoning-block'))
+    blockIndex = blocks.indexOf(block)
+  }
+  if (isOpen) {
+    block.removeAttribute('data-reasoning')
+  } else {
+    block.setAttribute('data-reasoning', 'open')
+  }
+
+  if (blockIndex !== -1) {
+    const scrollerItem = target.closest('[data-index]')
+    if (scrollerItem) {
+      const idx = parseInt(scrollerItem.getAttribute('data-index') || '0', 10)
+      const msg = chatStore.currentChatMessages[idx]
+      if (msg) {
+        let html = msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)
+        // 通过特征字符串切分，精准修改目标块的属性
+        const parts = html.split('<div class="reasoning-block"')
+        if (blockIndex >= 0 && blockIndex + 1 < parts.length) {
+          let part = parts[blockIndex + 1]
+          if (isOpen) {
+            part = part.replace(/^ data-reasoning="open">/, '>')
+          } else {
+            part = part.replace(/^>/, ' data-reasoning="open">')
+          }
+          parts[blockIndex + 1] = part
+          msg.renderedHtml = parts.join('<div class="reasoning-block"')
+        }
+      }
+    }
+  }
+}
+
+function handleToolClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const summary = target.closest('.tool-summary')
+  if (!summary) return
+  
+  const block = summary.closest('.tool-calls-block') as HTMLElement | null
+  if (!block) return
+  
+  const isOpen = block.dataset.tool === 'open'
+
+  const container = block.closest('.message-content')
+  let blockIndex = -1
+  if (container) {
+    const blocks = Array.from(container.querySelectorAll('.tool-calls-block'))
+    blockIndex = blocks.indexOf(block)
+  }
+
+  if (isOpen) {
+    block.removeAttribute('data-tool')
+  } else {
+    block.setAttribute('data-tool', 'open')
+  }
+  
+  if (blockIndex !== -1) {
+    const scrollerItem = target.closest('[data-index]')
+    if (scrollerItem) {
+      const idx = parseInt(scrollerItem.getAttribute('data-index') || '0', 10)
+      const msg = chatStore.currentChatMessages[idx]
+      if (msg) {
+        let html = msg.renderedHtml || renderMessageHtml(msg.content.trim(), false)
+        const parts = html.split('<div class="tool-calls-block"')
+        if (blockIndex >= 0 && blockIndex + 1 < parts.length) {
+          let part = parts[blockIndex + 1]
+          if (isOpen) {
+            part = part.replace(/^ data-tool="open">/, '>')
+          } else {
+            part = part.replace(/^>/, ' data-tool="open">')
+          }
+          parts[blockIndex + 1] = part
+          msg.renderedHtml = parts.join('<div class="tool-calls-block"')
+        }
+      }
+    }
+  }
+}
+
 // ---------- 监视消息变化以重新渲染增强内容 ----------
 watch(
   () => chatStore.currentChatMessages.length,
@@ -598,7 +725,6 @@ watch(
     // 确保 DOM 更新后再渲染图表和按钮
     nextTick(() => {
       renderMermaidDiagrams()
-      addCopyButtons()
       // 如果处于自动滚动模式，则滚动到底部
       if (isAutoScrollEnabled.value) {
         scrollToBottom()
@@ -607,12 +733,16 @@ watch(
   }
 )
 
+const isRender = ref(false)
+
 // ---------- 生命周期 ----------
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   if (messageListRef.value) {
     messageListRef.value.addEventListener('scroll', handleScroll, { passive: true })
+    messageListRef.value.addEventListener('click', handleReasoningClick)
+    messageListRef.value.addEventListener('click', handleToolClick)
   }
   await profileStore.loadProfiles()
   renderMermaidDiagrams()
@@ -625,6 +755,7 @@ onMounted(async () => {
   
   setTimeout(() => {
     addFileTypeClassToLinks(document.body)
+    isRender.value = true
   }, 150)
 })
 
@@ -632,6 +763,8 @@ onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   if (messageListRef.value) {
     messageListRef.value.removeEventListener('scroll', handleScroll)
+    messageListRef.value.removeEventListener('click', handleReasoningClick)
+    messageListRef.value.removeEventListener('click', handleToolClick)
   }
   stopObserving()
 })

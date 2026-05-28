@@ -4,10 +4,10 @@ p{margin:0;padding:4px;}
   --bg-primary: #0b0e14;
   --bg-secondary: #131720;
   --bg-panel: rgba(19, 23, 32, 0.85);
-  --border-color: #1e2430;
+  --border-color: #333946;
   --border-glow: #895bf7;
   --thinking-text: #9162db;
-  --text-primary: #e4e7ed;
+  --text-primary: #f9fafb;
   --text-secondary: #8b92a0;
   --accent: #3892f8;
   --accent-gradient: linear-gradient(120deg, #5f8ff5, #8f5fff);
@@ -29,18 +29,16 @@ p{margin:0;padding:4px;}
   --glass-border: 1px solid rgba(99, 102, 241, 0.2);
   --shadow-glow: 0 0 10px rgba(99, 102, 241, 0.08);
 }
-
 .no-select {
-  -webkit-user-select: none; /* Safari */
-  -moz-user-select: none;    /* Firefox */
-  -ms-user-select: none;     /* IE 10+ */
-  user-select: none;         /* 标准语法 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
-
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 .message-content img {
@@ -66,10 +64,6 @@ p{margin:0;padding:4px;}
 [theme-mode="light"] .message-content a:hover {
   background: rgba(0, 0, 0, 0.3);
 }
-
-
-
-
 
 .message-content .file-pdf::before {
   content: '';
@@ -434,23 +428,46 @@ tr:last-child td:last-child {
 .reasoning-block {
   margin: 12px 0;
   background: rgba(129, 78, 247, 0.06);
-  padding: 12px;
   border-radius: 6px;
+  overflow: hidden;
 }
-.reasoning-block summary {
+.reasoning-block .reasoning-summary {
   font-weight: 600;
+  padding: 12px;
   color: var(--thinking-text);
   cursor: pointer;
+  user-select: none;
+}
+.reasoning-block .reasoning-summary:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+.reasoning-inner {
+  padding: 12px;
+}
+.reasoning-summary::before {
+  content: '▶ ';
+  display: inline-block;
+  transition: transform 0.3s;
 }
 .reasoning-content {
-  margin-top: 8px;
   font-size: 0.9rem;
   color: var(--text-secondary);
+  max-height: 0;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+}
+.reasoning-block[data-reasoning="open"] .reasoning-summary {
+  background: rgba(99, 102, 241, 0.1);
+}
+.reasoning-block[data-reasoning="open"] .reasoning-summary::before {
+  transform: rotate(90deg);
+}
+.reasoning-block[data-reasoning="open"] .reasoning-content {
+  max-height: 200000px; /* 足够大即可 */
 }
 
 /* 工具调用卡片 */
 .tool-calls-container {
-  margin: 12px 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -502,18 +519,35 @@ tr:last-child td:last-child {
   background: var(--bg-secondary);
   overflow: hidden;
 }
-.tool-calls-block summary {
+.tool-calls-block .tool-summary {
   padding: 10px 14px;
   font-weight: 600;
   cursor: pointer;
   color: var(--accent);
   user-select: none;
 }
-.tool-calls-block summary:hover {
+.tool-summary::before {
+  content: '▶ ';
+  display: inline-block;
+  transition: transform 0.3s;
+}
+.tool-calls-block .tool-summary:hover {
   background: rgba(99, 102, 241, 0.05);
 }
 .tool-calls-block .tool-calls-container {
-  padding: 0 14px 14px;
+  max-height: 0;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+}
+.tool-inner {
+  padding: 12px;
+}
+
+.tool-calls-block[data-tool="open"] .tool-summary::before {
+  transform: rotate(90deg);
+}
+.tool-calls-block[data-tool="open"] .tool-calls-container {
+  max-height: 200000px; /* 足够大即可 */
 }
 
 

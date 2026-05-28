@@ -3,8 +3,9 @@ import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useMessage } from 'naive-ui'
-import { cleanMessages, addFileTypeClassToLinks } from '@/utils/message'
+import { cleanMessages, addFileTypeClassToLinks, renderMessageHtml } from '@/utils/message'
 import type { UploadedFile } from '@/composables/useFileUpload'
+
 
 export function useChat() {
   const chatStore = useChatStore()
@@ -45,6 +46,7 @@ export function useChat() {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullText = ''
+    let pendingScroll = false
 
     while (true) {
       const { done, value } = await reader.read()
@@ -55,8 +57,12 @@ export function useChat() {
       streamingContent.value = fullText
       
       // ✅ 滚动也做 RAF 节流，避免频繁触发布局重排阻塞 JS
-      if (scrollToBottom) {
-        scrollToBottom()
+      if (scrollToBottom  && !pendingScroll) {
+        pendingScroll = true
+        requestAnimationFrame(() => {
+          pendingScroll = false
+          scrollToBottom()
+        })
       }
     }
     
@@ -100,13 +106,6 @@ export function useChat() {
     chatStore.addMessageToLocal(userMsg)
     chatStore.saveMessageToBackend(userMsg).catch((e) => console.warn('保存用户消息失败', e))
 
-    const tempAssistantMsg: Message = {
-      id: 'streaming-temp', // 👈 使用一个固定的特殊字符串作为 id
-      role: 'assistant',
-      content: '' // 初始为空
-    }
-    chatStore.addMessageToLocal(tempAssistantMsg)
-
     // 3. 准备 API 调用
     isLoading.value = true
     streamingContent.value = ''
@@ -148,6 +147,7 @@ export function useChat() {
       fullText = await readStream(response, scrollToBottom)
 
       const assistantMsg: Message = { role: 'assistant', content: fullText }
+      assistantMsg.renderedHtml = renderMessageHtml(fullText, true)
       chatStore.addMessageToLocal(assistantMsg)
       chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn('保存助手消息失败', e))
 
@@ -280,12 +280,17 @@ export function useChat() {
 
       // 直接更新原消息对象
       assistantMsg.content = fullText
+      assistantMsg.renderedHtml = renderMessageHtml(fullText, true)
       if (assistantMsg.id) {
         fetch(`/api/chats/${chatStore.activeChatId}/messages/${assistantMsg.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'assistant', content: fullText }),
         }).catch((e) => console.warn('更新消息失败', e))
+      }
+
+      if (onStreamEnd.value) {
+        onStreamEnd.value(fullText)
       }
     } catch (error: any) {
       if (error.name === 'AbortError') return
