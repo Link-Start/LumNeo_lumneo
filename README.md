@@ -1,5 +1,15 @@
 #  LumNeo — 点亮灵感的 AI 桌面伙伴
 
+![Vue 3](https://img.shields.io/badge/vue%203-%2335495e.svg?style=flat&logo=vuedotjs&logoColor=%234FC08D)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=flat&logo=vite&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=flat&logo=typescript&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-8B5CF6?style=flat)
+![PyWebView](https://img.shields.io/badge/PyWebView-2c3e50?style=flat)
+![GitHub](https://img.shields.io/github/license/lumneo/LumNeo)
+![Stars](https://img.shields.io/github/stars/lumneo/LumNeo?style=social)
+
 > 不是冰冷的工具，是悄悄懂你的那束光 (◕ᴗ◕✿)
 
 LumNeo 是一款跨平台 AI 桌面应用，将**本地隐私**与**云端算力**融为一体。它不只是对话框，更是可自由塑造的**智能体工作台**——支持多角色切换、文件读写解析、MCP 工具扩展，让每个想法都有专属的执行者。界面现代优雅，桌面与移动端均完美适配，让 AI 协作如呼吸般自然。
@@ -105,8 +115,15 @@ LumNeo/
 
 ### 1. 安装后端依赖
 ```bash
+# 使用 conda 创建虚拟环境
 conda create -n lumneo python=3.12
 conda activate lumneo
+pip install -r requirements.txt
+
+# 或者使用自带的`venv`创建虚拟环境
+python -m venv lumneo
+lumneo\Scripts\activate # Windows
+source lumneo/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
