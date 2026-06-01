@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/vue-virtual": "^3.13.26",
+    "@tanstack/vue-virtual": "^3.13.27",
     "@vicons/ionicons5": "^0.13.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.17.0",

@@ -156,212 +156,76 @@
                 <svgWelcomeDark v-if="configStore.themeMode === 'dark'" />
                 <svgWelcomeLight v-else />
               </div>
-              <div
-                ref="virtualContainerRef"
-                class="virtual-scroller"
-                @scroll="handleScroll"
-              >
+              <div ref="virtualContainerRef" class="virtual-scroller" @scroll="handleScroll">
                 <div
-                  :style="{
-                    height: virtualizer.getTotalSize() + 'px',
-                    maxWidth: '1000px',
-                    position: 'relative',
-                    margin: '0 auto',
-                  }"
-                >
+                  :style="{height: virtualizer.getTotalSize() + 'px', maxWidth: '1000px', position: 'relative', margin: '0 auto'}">
                   <div
                     v-for="virtualRow in virtualizer.getVirtualItems()"
                     :key="<string>virtualRow.key"
                     :ref="(el) => virtualizer.measureElement(<Element>el)"
-                    :style="{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }"
+                    :style="{position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`}"
                     :data-index="virtualRow.index"
                   >
                     <!-- 流式输出气泡（列表最后一项） -->
                     <template v-if="listItems[virtualRow.index]?.__streaming">
                       <div class="streaming-after-item message-row assistant">
-                        <div
-                          v-if="streamDisplayHtml"
-                          class="bubble streaming"
-                          v-html="streamDisplayHtml"
-                        ></div>
+                        <div v-if="streamDisplayHtml" class="bubble streaming" v-html="streamDisplayHtml"></div>
                         <svgLoading v-else />
                       </div>
                     </template>
 
                     <!-- 正常消息 -->
                     <template v-else>
-                      <div
-                        :class="[
-                          'message-row',
-                          listItems[virtualRow.index].role,
-                        ]"
-                        @click=""
-                      >
-                        <div
-                          class="bubble"
-                          :class="{
-                            'has-file': listItems[virtualRow.index].file_ref,
-                          }"
-                        >
+                      <div :class="['message-row', listItems[virtualRow.index].role]" @click="">
+                        <div class="bubble" :class="{'has-file': listItems[virtualRow.index].file_ref}">
                           <!-- 文件附件 -->
-                          <div
-                            v-if="
-                              normalizeFileRef(
-                                listItems[virtualRow.index].file_ref
-                              ).length
-                            "
-                            class="message-files"
-                          >
-                            <div
-                              v-for="f in normalizeFileRef(
-                                listItems[virtualRow.index].file_ref
-                              )"
-                              :key="f.filename"
-                              class="msg-file-item"
-                            >
-                              <n-image
-                                v-if="f.type.startsWith('image/')"
-                                width="200"
-                                :src="f.url"
-                                class="msg-file-img"
-                              />
+                          <div v-if="normalizeFileRef(listItems[virtualRow.index].file_ref).length" class="message-files">
+                            <div v-for="f in normalizeFileRef(listItems[virtualRow.index].file_ref)" :key="f.filename" class="msg-file-item">
+                              <n-image v-if="f.type.startsWith('image/')" width="200" :src="f.url" class="msg-file-img"/>
                               <div v-else class="msg-file-other">
                                 <n-icon><DocumentOutline /></n-icon>
-                                <a :href="f.url" target="_blank">{{
-                                  f.filename
-                                }}</a>
+                                <a :href="f.url" target="_blank">{{f.filename}}</a>
                               </div>
                             </div>
                           </div>
 
                           <!-- 重新生成占位 -->
-                          <template
-                            v-if="
-                              listItems[virtualRow.index] === regeneratingMsg
-                            "
-                          >
+                          <template v-if="listItems[virtualRow.index] === regeneratingMsg">
                             <div style="height: 1px"></div>
                           </template>
                           <template v-else>
-                            <template
-                              v-if="
-                                listItems[virtualRow.index].role === 'user'
-                              "
-                            >
-                              <div
-                                class="message-content user-content"
-                                v-text="
-                                  listItems[virtualRow.index].content.trim()
-                                "
-                              ></div>
+                            <template v-if="listItems[virtualRow.index].role === 'user'">
+                              <div class="message-content user-content" v-text="listItems[virtualRow.index].content.trim()"></div>
                             </template>
                             <template v-else>
-                              <div
-                                class="message-content"
-                                v-html="
-                                  listItems[virtualRow.index].renderedHtml ||
-                                    renderMessageHtml(
-                                      listItems[
-                                        virtualRow.index
-                                      ].content.trim(),
-                                      false
-                                    )
-                                "
+                              <div class="message-content" v-html="listItems[virtualRow.index].renderedHtml || renderMessageHtml(listItems[virtualRow.index].content.trim(),false)"
                                 @click="onContainerClick"
                               ></div>
                             </template>
                           </template>
 
                           <!-- 操作按钮 -->
-                          <div
-                            :class="
-                              'message-actions ' +
-                              (listItems[virtualRow.index].role === 'assistant'
-                                ? 'assistant-actions'
-                                : 'user-actions')
-                            "
-                            v-if="
-                              !isLoading ||
-                              listItems[virtualRow.index] !== regeneratingMsg
-                            "
-                          >
-                            <n-button
-                              text
-                              class="icon-btn"
-                              size="small"
-                              @click="
-                                copyContent(listItems[virtualRow.index])
-                              "
-                              title="复制"
-                            >
-                              <template #icon
-                                ><n-icon
-                                  ><m-svg :name="copySvgName" /></n-icon
-                              ></template>
+                          <div :class=" 'message-actions ' + (listItems[virtualRow.index].role === 'assistant' ? 'assistant-actions' : 'user-actions')"
+                            v-if="!isLoading || listItems[virtualRow.index] !== regeneratingMsg">
+                            <n-button text class="icon-btn" size="small" title="复制" @click="copyContent(listItems[virtualRow.index])">
+                              <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
                             </n-button>
-                            <n-button
-                              v-if="
-                                listItems[virtualRow.index].role ===
-                                  'assistant' &&
-                                virtualRow.index ===
-                                  currentMessages.length - 1
-                              "
-                              text
-                              class="icon-btn"
-                              size="small"
-                              @click="
-                                handleRegenerateResponse(
-                                  listItems[virtualRow.index]
-                                )
-                              "
-                              title="重新生成"
-                            >
-                              <template #icon
-                                ><n-icon
-                                  ><m-svg name="refresh" /></n-icon
-                              ></template>
+                            <n-button v-if="listItems[virtualRow.index].role === 'assistant' && virtualRow.index === currentMessages.length - 1"
+                              text class="icon-btn" size="small" title="重新生成" @click="handleRegenerateResponse(listItems[virtualRow.index])">
+                              <template #icon><n-icon><m-svg name="refresh" /></n-icon></template>
                             </n-button>
-                            <n-button
-                              text
-                              class="icon-btn"
-                              size="small"
-                              @click="
-                                startEditMessage(
-                                  listItems[virtualRow.index]
-                                )
-                              "
-                              title="编辑"
-                            >
-                              <template #icon
-                                ><n-icon :size="20"
-                                  ><m-svg name="edit" /></n-icon
-                              ></template>
+                            <n-button text class="icon-btn" size="small" title="编辑" @click="startEditMessage(listItems[virtualRow.index])">
+                              <template #icon><n-icon :size="20"><m-svg name="edit" /></n-icon></template>
                             </n-button>
                             <n-popconfirm
-                              @positive-click="
-                                () =>
-                                  chatStore.deleteMessage(
-                                    listItems[virtualRow.index].id!
-                                  )
-                              "
-                              negative-text="取消"
-                              positive-text="好的"
+                              @positive-click="() => chatStore.deleteMessage(listItems[virtualRow.index].id!)"
                               :negative-button-props="{ size: 'tiny' }"
                               :positive-button-props="{ size: 'tiny' }"
+                              negative-text="取消"
+                              positive-text="好的"
                             >
                               <template #trigger>
-                                <n-button
-                                  text
-                                  class="icon-btn"
-                                  size="small"
-                                  title="删除"
-                                >
+                                <n-button text class="icon-btn" size="small" title="删除">
                                   <template #icon
                                     ><n-icon :size="22"
                                       ><m-svg name="del" /></n-icon
@@ -384,12 +248,7 @@
           <div class="compose-area" v-if="chatStore.activeChatId">
             <!-- ✅ 回到底部按钮 -->
             <transition name="fade">
-              <n-button 
-                v-if="!isAutoScrollEnabled" 
-                circle 
-                class="scroll-to-bottom-btn" 
-                @click="forceScrollToBottom"
-              >
+              <n-button v-if="!isAutoScrollEnabled" circle class="scroll-to-bottom-btn" @click="forceScrollToBottom">
                 <n-icon size="22"><ArrowDownOutline /></n-icon>
                 <div v-show="isLoading" class="rotate-circle"></div>
               </n-button>
@@ -465,27 +324,15 @@
               </n-upload>
 
               <!-- 发送按钮 -->
-              <n-button
-                v-if="!isLoading"
-                class="send-btn"
-                @click="onSendMessage"
-                strong
-                secondary
-                type="primary"
+              <n-button v-if="!isLoading" class="send-btn" @click="onSendMessage"
+                strong secondary type="primary"
                 :disabled="!!(!currentInput.trim().length && chatStore.activeChatId)"
               >
                 <template #icon>
                   <n-icon><m-svg name="send"/></n-icon>
                 </template>
               </n-button>
-              <n-button
-                v-else
-                class="send-btn"
-                @click="stopGeneration"
-                strong
-                secondary
-                type="primary"
-              >
+              <n-button v-else class="send-btn" @click="stopGeneration" strong secondary type="primary">
                 <template #icon>
                   <n-icon><m-svg name="stop"/></n-icon>
                 </template>
