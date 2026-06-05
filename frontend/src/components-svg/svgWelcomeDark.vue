@@ -59,7 +59,7 @@
       </circle>
 
       <!-- 旋转圆环 -->
-      <g transform="translate(450, 280)">
+      <g transform="translate(480, 280)">
         <circle cx="0" cy="0" r="120" fill="none" stroke="#6366f1" stroke-width="0.5" opacity="0.1">
           <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="60s" repeatCount="indefinite"/>
         </circle>
@@ -69,13 +69,13 @@
       </g>
 
       <!-- Logo 脉冲动画 -->
-      <g transform="translate(450, 180)">
+      <g transform="translate(480, 168)">
         <circle cx="0" cy="0" r="50" fill="url(#pulseGlow)" opacity="0">
-          <animate attributeName="r" values="30;70;30" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="r" values="30;120;30" dur="3s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite"/>
         </circle>
         <circle cx="0" cy="0" r="50" fill="url(#pulseGlow)" opacity="0">
-          <animate attributeName="r" values="30;70;30" dur="3s" begin="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="r" values="30;120;30" dur="3s" begin="1.5s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" begin="1.5s" repeatCount="indefinite"/>
         </circle>
 
@@ -89,57 +89,57 @@
             <animate attributeName="opacity" values="0.9;1;0.9" dur="2s" repeatCount="indefinite"/>
           </polygon>
           <circle cx="0" cy="0" r="6" fill="#fff" opacity="0.9">
-            <animate attributeName="r" values="6;7;6" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="r" values="6;8;6" dur="1.5s" repeatCount="indefinite"/>
           </circle>
         </g>
       </g>
 
       <!-- 文字渐入动画 -->
-      <text x="450" y="260" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+      <text x="480" y="260" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
             font-size="28" font-weight="600" fill="#e2e8f0" letter-spacing="0.5" opacity="0">
         你好，我是 LumNeo
         <animate attributeName="opacity" values="0;1" dur="0.8s" begin="0.3s" fill="freeze"/>
         <animate attributeName="y" values="270;260" dur="0.8s" begin="0.3s" fill="freeze"/>
       </text>
 
-      <text x="450" y="295" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+      <text x="480" y="295" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
             font-size="15" fill="#94a3b8" letter-spacing="0.3" opacity="0">
         你的智能伙伴，随时为你效劳
         <animate attributeName="opacity" values="0;1" dur="0.8s" begin="0.6s" fill="freeze"/>
       </text>
 
       <!-- 分割线 -->
-      <line x1="380" y1="325" x2="520" y2="325" stroke="#334155" stroke-width="1" opacity="0">
+      <line x1="380" y1="325" x2="580" y2="325" stroke="#334155" stroke-width="1" opacity="0">
         <animate attributeName="opacity" values="0;0.5" dur="0.5s" begin="0.9s" fill="freeze"/>
-        <animate attributeName="x1" values="450;380" dur="0.5s" begin="0.9s" fill="freeze"/>
-        <animate attributeName="x2" values="450;520" dur="0.5s" begin="0.9s" fill="freeze"/>
+        <animate attributeName="x1" values="480;380" dur="0.5s" begin="0.9s" fill="freeze"/>
+        <animate attributeName="x2" values="480;580" dur="0.5s" begin="0.9s" fill="freeze"/>
       </line>
 
-      <text x="450" y="355" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
+      <text x="480" y="355" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
             font-size="13" fill="#64748b" opacity="0">
         你可以尝试以下功能
         <animate attributeName="opacity" values="0;1" dur="0.5s" begin="1.1s" fill="freeze"/>
       </text>
 
       <!-- 按钮渐入动画 -->
-      <g transform="translate(210, 390)" filter="url(#softShadow)" opacity="0">
+      <g transform="translate(214, 390)" filter="url(#softShadow)" opacity="0">
         <rect x="0" y="0" width="170" height="56" rx="12" fill="#1e1e2e" stroke="#2d2d44" stroke-width="1"/>
         <text x="24" y="22" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
               font-size="14" font-weight="500" fill="#e2e8f0">💻 写代码</text>
         <text x="24" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
               font-size="11" fill="#64748b">生成、调试、优化代码</text>
         <animate attributeName="opacity" values="0;1" dur="0.5s" begin="1.3s" fill="freeze"/>
-        <animateTransform attributeName="transform" type="translate" values="210,400;210,390" dur="0.5s" begin="1.3s" fill="freeze"/>
+        <animateTransform attributeName="transform" type="translate" values="214,400;214,390" dur="0.5s" begin="1.3s" fill="freeze"/>
       </g>
 
-      <g transform="translate(400, 390)" filter="url(#softShadow)" opacity="0">
+      <g transform="translate(402, 390)" filter="url(#softShadow)" opacity="0">
         <rect x="0" y="0" width="170" height="56" rx="12" fill="#1e1e2e" stroke="#2d2d44" stroke-width="1"/>
         <text x="24" y="22" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
               font-size="14" font-weight="500" fill="#e2e8f0">📄 文件解析</text>
         <text x="24" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
               font-size="11" fill="#64748b">解析文档、提取关键信息</text>
         <animate attributeName="opacity" values="0;1" dur="0.5s" begin="1.5s" fill="freeze"/>
-        <animateTransform attributeName="transform" type="translate" values="400,400;400,390" dur="0.5s" begin="1.5s" fill="freeze"/>
+        <animateTransform attributeName="transform" type="translate" values="402,400;402,390" dur="0.5s" begin="1.5s" fill="freeze"/>
       </g>
 
       <g transform="translate(590, 390)" filter="url(#softShadow)" opacity="0">
@@ -173,7 +173,7 @@
       </g>
 
       <!-- 底部提示 -->
-      <g transform="translate(450, 555)" opacity="0">
+      <g transform="translate(480, 555)" opacity="0">
         <text x="0" y="0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" 
               font-size="12" fill="#475569">
           💡 支持上传文件、图片，或直接输入你的问题
@@ -181,7 +181,7 @@
         <animate attributeName="opacity" values="0;1" dur="0.5s" begin="2.3s" fill="freeze"/>
       </g>
 
-      <line x1="350" y1="575" x2="550" y2="575" stroke="#334155" stroke-width="1" opacity="0">
+      <line x1="420" y1="575" x2="550" y2="575" stroke="#334155" stroke-width="1" opacity="0">
         <animate attributeName="opacity" values="0;0.3" dur="0.5s" begin="2.5s" fill="freeze"/>
       </line>
     </svg>
@@ -203,8 +203,14 @@ export default {
 }
 
 .neon-sign svg {
-  min-width: 680px;
+  width: 100%;
   max-width: 980px;
   height: auto;
+}
+
+@media (max-width: 768px) {
+  .neon-sign svg {
+    min-width: 680px;
+  }
 }
 </style>

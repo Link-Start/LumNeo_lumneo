@@ -7,7 +7,7 @@
         <aside v-show="!sidebarCollapsed" class="sidebar-panel border-marquee-right" :class="{ collapsed: sidebarCollapsed, 'sidebar-open': sidebarOpen }">
           <!-- 展开状态 -->
           <div class="sidebar-header">
-            <span class="logo-text">✨ LumNeo</span>
+            <span class="logo-text"><m-svg name="star" style="position: absolute;left:120px;top:18px;"/>✨ LumNeo</span>
             <n-button v-if="!isMobile" text class="icon-btn" @click="sidebarCollapsed = true" title="收起侧栏">
               <template #icon>
                 <n-icon :size="22">
@@ -22,7 +22,7 @@
               创建新对话
             </n-button>
           </div>
-          <n-scrollbar content-style="padding:0 16px" style="max-height: calc(100vh - 220px);">
+          <n-scrollbar content-style="padding:0 16px" style="max-height: calc(100vh - 200px);">
             <n-list hoverable clickable :show-divider="false">
               <n-list-item v-for="chat in chatStore.chats" :key="chat.id" 
                 @click="openChat(chat.id)"

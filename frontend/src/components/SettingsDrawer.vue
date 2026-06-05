@@ -186,7 +186,7 @@
               :min="0"
               :max="2"
               :step="0.1"
-              style="width: 120px"
+              style="width: 200px"
             />
             <n-input-number
               v-model:value="profileForm.temperature"
@@ -194,20 +194,20 @@
               :min="0"
               :max="2"
               :step="0.1"
-              style="width: 80px"
+              style="width: 100px"
             />
           </n-space>
         </n-form-item>
 
         <!-- Top P -->
         <n-form-item label="Top P采样" label-placement="left" label-width="100">
-          <n-space align="center">
+          <n-space align="center" style="width:100%">
             <n-slider
               v-model:value="profileForm.top_p"
               :min="0"
               :max="1"
               :step="0.05"
-              style="width: 120px"
+              style="width: 60%"
             />
             <n-input-number
               v-model:value="profileForm.top_p"
@@ -215,7 +215,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              style="width: 80px"
+              style="width: 100px"
             />
           </n-space>
         </n-form-item>
@@ -228,7 +228,7 @@
               :min="1"
               :max="100"
               :step="1"
-              style="width: 120px"
+              style="width: 200px"
             />
             <n-input-number
               v-model:value="profileForm.top_k"
@@ -236,7 +236,7 @@
               :min="1"
               :max="100"
               :step="1"
-              style="width: 80px"
+              style="width: 100px"
             />
           </n-space>
         </n-form-item>
@@ -248,7 +248,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 120px"
+              style="width: 200px"
             />
             <n-input-number
               v-model:value="profileForm.frequency_penalty"
@@ -256,7 +256,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 80px"
+              style="width: 100px"
             />
           </n-space>
         </n-form-item>
@@ -269,7 +269,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 120px"
+              style="width: 200px"
             />
             <n-input-number
               v-model:value="profileForm.presence_penalty"
@@ -277,7 +277,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 80px"
+              style="width: 100px"
             />
           </n-space>
         </n-form-item>

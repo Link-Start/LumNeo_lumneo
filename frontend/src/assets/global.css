@@ -49,23 +49,32 @@ p{margin:0;padding:4px;}
   cursor: pointer;
 }
 .message-content a {
-  padding: 8px;
+  display: inline-block;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
   border-radius: 4px;
   position: relative;
 }
 .message-content a:hover {
-  background: rgba(100, 104, 230, 0.3);
+  background: rgba(100, 104, 230, 0.4);
 }
 
 [theme-mode="light"] .message-content a {
   background: rgba(0, 0, 0, 0.1);
-  color: #333;
+  color: #000;
 }
 
 [theme-mode="light"] .message-content a:hover {
   background: rgba(0, 0, 0, 0.3);
+}
+
+[theme-mode="light"] .reasoning-summary::after {
+  background-color: #666;
+}
+
+[theme-mode="light"] .tool-summary::after {
+  background-color: #666;
 }
 
 .message-content .file-pdf::before {
@@ -444,6 +453,8 @@ tr:last-child td:last-child {
   color: var(--thinking-text);
   cursor: pointer;
   user-select: none;
+  position: relative;
+  padding-left:40px;
 }
 .reasoning-block .reasoning-summary:hover {
   background: rgba(99, 102, 241, 0.05);
@@ -452,9 +463,36 @@ tr:last-child td:last-child {
   padding: 12px;
 }
 .reasoning-summary::before {
-  content: '▶ ';
+  content: '';
   display: inline-block;
-  transition: transform 0.3s;
+  width: 0;
+  height: 0;
+  /* 三角形大小 */
+  border-top: 0.6em solid transparent;
+  border-bottom: 0.6em solid transparent;
+  border-left: 0.9em solid currentColor;   /* 使用当前文字颜色 */
+  margin-right: 0.4em;
+  transition: transform 0.3s ease;
+  vertical-align: middle;
+  position: relative;
+  left: -26px;
+}
+.reasoning-summary::after {
+  content: '';
+  position: absolute;
+  left: 34px;
+  top: calc(50% - 0.6em);
+  width: 1.2em;
+  height: 1.2em;
+  mask-image: url('/thinking.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  background-color: #fff;
+  -webkit-mask-image: url('/thinking.svg');
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
 }
 .reasoning-content {
   font-size: 0.9rem;
@@ -489,6 +527,23 @@ tr:last-child td:last-child {
   font-weight: 600;
   color: #3b82f6;
 }
+.tool-name::before {
+  content: '';
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  margin-right: 0.4em;
+  vertical-align: text-bottom;
+  background-color: currentColor;
+  mask-image: url('/tool.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/tool.svg');
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
 .tool-args, .result-content {
   background: var(--bg-secondary);
   padding: 8px;
@@ -509,7 +564,22 @@ tr:last-child td:last-child {
 }
 .result-label, .tool-label {
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+}
+.result-label:before {
+  content: '';
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  margin-right: 0.4em;
+  vertical-align: text-bottom;
+  background-color: currentColor; /* 颜色跟随文字 */
+  mask-image: url('/result.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/result.svg');
+  -webkit-mask-size: contain;
 }
 
 .token-usage {
@@ -522,6 +592,32 @@ tr:last-child td:last-child {
   display:block !important; /* 显示token使用情况 */
 }
 
+.generation-speed::before {
+  content: '';
+  display: inline-block;
+  width: 1.5em;
+  height: 1.5em;
+  margin-right: 0.4em;
+  vertical-align: text-bottom;
+  background-image: url('/speed.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+
+}
+.complation-tokens::before {
+  content: '';
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  margin-left: 0.8em;
+  vertical-align: text-bottom;
+  background-image: url('/tokens.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
 .tool-calls-block {
   margin: 12px 0;
   border: 1px solid var(--border-color);
@@ -530,16 +626,44 @@ tr:last-child td:last-child {
   overflow: hidden;
 }
 .tool-calls-block .tool-summary {
-  padding: 10px 14px;
+  padding: 12px;
   font-weight: 600;
   cursor: pointer;
-  color: var(--accent);
+  color: var(--thinking-text);
   user-select: none;
+  position: relative;
+  padding-left: 60px;
 }
 .tool-summary::before {
-  content: '▶ ';
+  content: '';
   display: inline-block;
-  transition: transform 0.3s;
+  width: 0;
+  height: 0;
+  /* 三角形大小 */
+  border-top: 0.6em solid transparent;
+  border-bottom: 0.6em solid transparent;
+  border-left: 0.9em solid currentColor;   /* 使用当前文字颜色 */
+  margin-right: 0.4em;
+  transition: transform 0.3s ease;
+  vertical-align: middle;
+  position: absolute;
+  left: 12px;
+  top: calc(50% - 0.6em)
+}
+.tool-summary::after {
+  content: '';
+  position: absolute;
+  left: 34px;
+  top: calc(50% - 0.6em);
+  width: 1.2em;
+  height: 1.2em;
+  background-color: #fff;
+  mask-image: url('/tools.svg');
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: url('/tools.svg');
+  -webkit-mask-size: contain;
 }
 .tool-calls-block .tool-summary:hover {
   background: rgba(99, 102, 241, 0.05);
@@ -629,10 +753,10 @@ tr:last-child td:last-child {
     width: 96% !important;
     flex-wrap: wrap;
   }
-
-  .message-row.assistant:last-child {
-    margin-bottom: 160px !important; /* 最后一条消息底部留白 */
+  .virtual-scroller {
+    margin-bottom: 140px;
   }
+
   /* 文件预览列表横排滚动 */
   .file-preview-list {
     flex-wrap: nowrap;
@@ -655,7 +779,6 @@ tr:last-child td:last-child {
 
   /* 工具栏按钮缩小 */
   .compose-tools-tar .n-button {
-    padding: 6px 10px;
     font-size: 0.85rem;
   }
 

@@ -215,8 +215,8 @@ def start_gui():
     webview.create_window(
         title="LumNeo",
         url=FRONTEND_URL,
-        width=1200, height=800,
-        min_size=(800, 600),
+        width=1200, height=860,
+        min_size=(800, 768),
         resizable=True,
         text_select=True,
         js_api=Api(),

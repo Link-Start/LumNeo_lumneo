@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" style="display:inline-block;vertical-align:middle;margin-right:4px;">
+  <defs>
+    <linearGradient id="mainStar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <!-- 左下角小星星（动态） -->
+  <g transform="translate(6, 6)">
+    <path d="M0 -2.5 Q0.5 -0.5 2.5 0 Q0.5 0.5 0 2.5 Q-0.5 0.5 -2.5 0 Q-0.5 -0.5 0 -2.5Z" 
+          fill="#a78bfa">
+      <animateTransform 
+        attributeName="transform" 
+        type="scale" 
+        values="1.1;1.1;1.1" 
+        dur="1.2s" 
+        repeatCount="indefinite"/>
+      <animate 
+        attributeName="opacity" 
+        values="0.2;1;0.2" 
+        dur="1.2s" 
+        repeatCount="indefinite"/>
+    </path>
+  </g>
+</svg>

@@ -97,7 +97,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     (_, content, time) => {
       const key = `<!--BLOCK_0${blockMap.size}-->` // 使用 HTML 注释占位符
       const timeStr = time ? ` (${time}秒)` : ''
-      const html = `<div class="reasoning-block"><div class="reasoning-summary no-select">💭 已思考 ${timeStr}</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(content)}</div></div></div>`
+      const html = `<div class="reasoning-block"><div class="reasoning-summary no-select">已思考 ${timeStr}</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(content)}</div></div></div>`
       blockMap.set(key, html)
       return key
     }
@@ -109,7 +109,7 @@ export function processMessageContent(text: string, isStreaming = false): string
     if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
       const afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       const key = `<!--BLOCK_${blockMap.size}-->`
-      const html = `<div class="reasoning-block" data-reasoning="open"><div class="reasoning-summary no-select">💭 思考中...</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(afterStart)}</div></div></div>`
+      const html = `<div class="reasoning-block" data-reasoning="open"><div class="reasoning-summary no-select">思考中...</div><div class="reasoning-content"><div class="reasoning-inner">${marked.parse(afterStart)}</div></div></div>`
       // 移除原始标记，只保留占位符
       processedText = processedText.substring(0, startIdx) + key
       blockMap.set(key, html)
@@ -198,13 +198,13 @@ export function processMessageContent(text: string, isStreaming = false): string
           formattedArgs = JSON.stringify(parsed, null, 2)
         } catch {}
         cardsHtml += `<div class="tool-call-card streaming">
-          <span class="tool-name">🛠 ${escapeHtml(card.name)}</span>
+          <span class="tool-name">${escapeHtml(card.name)}</span>
           <pre class="tool-args"><code>${escapeHtml(formattedArgs)}</code></pre>
         </div>`
       }
 
       const toolCount = cards.length
-      const title = toolCount > 0 ? `🔧 工具调用中… (${toolCount}个)` : '🔧 工具调用中…'
+      const title = toolCount > 0 ? `工具调用中… (${toolCount}个)` : '工具调用中…'
       const blockHtml = `<div class="tool-calls-block" data-tool="open">
         <div class="tool-summary no-select">${title}</div>
         <div class="tool-calls-container">
@@ -246,9 +246,9 @@ export function processMessageContent(text: string, isStreaming = false): string
             } else {
               formatted = String(formatted)
             }
-            cardsHtml += `<div class="tool-call-card"><span class="tool-name">🛠 ${escapeHtml(tool.name || '未知工具')}</span><pre class="tool-args"><code>${escapeHtml(formatted)}</code></pre></div>`
+            cardsHtml += `<div class="tool-call-card"><span class="tool-name">${escapeHtml(tool.name || '未知工具')}</span><pre class="tool-args"><code>${escapeHtml(formatted)}</code></pre></div>`
           } catch {
-            cardsHtml += `<div class="tool-call-card"><span class="tool-name">🛠 工具参数解析失败</span><pre class="tool-args"><code>${escapeHtml(b64Str)}</code></pre></div>`
+            cardsHtml += `<div class="tool-call-card"><span class="tool-name">工具参数解析失败</span><pre class="tool-args"><code>${escapeHtml(b64Str)}</code></pre></div>`
           }
         } else if (match[2] !== undefined) {
           // 匹配到 tool_result
@@ -267,15 +267,15 @@ export function processMessageContent(text: string, isStreaming = false): string
             } else {
               formatted = String(formatted)
             }
-            cardsHtml += `<div class="tool-result"><span class="result-label">📑 结果：</span><pre class="result-content"><code>${escapeHtml(formatted)}</code></pre></div>`
+            cardsHtml += `<div class="tool-result"><span class="result-label">结果：</span><pre class="result-content"><code>${escapeHtml(formatted)}</code></pre></div>`
           } catch {
-            cardsHtml += `<div class="tool-result"><span class="result-label">📑 结果解析失败：</span><pre class="result-content"><code>${escapeHtml(jsonStr)}</code></pre></div>`
+            cardsHtml += `<div class="tool-result"><span class="result-label">结果解析失败：</span><pre class="result-content"><code>${escapeHtml(jsonStr)}</code></pre></div>`
           }
         }
       }
 
       const toolCount = (cardsHtml.match(/tool-call-card/g) || []).length
-      const title = toolCount > 0 ? `🔧 工具调用 (${toolCount}个)` : '🔧 工具调用'
+      const title = toolCount > 0 ? `工具调用 (${toolCount}个)` : '工具调用'
 
       const html = `<div class="tool-calls-block"><div class="tool-summary no-select">${title}</div><div class="tool-calls-container"><div class="tool-inner">${cardsHtml}</div></div></div>`
       const key = `<!--BLOCK_${blockMap.size}-->`
@@ -296,7 +296,7 @@ export function processMessageContent(text: string, isStreaming = false): string
           const completionTokens = data.final_answer_usage?.completion_tokens ?? 0
           // const totalTokens = data.total_usage_all_steps?.total_tokens ?? 0
 
-          let html = `<div class="token-usage"><span title="生成速度">🚀 ${speed}</span><span title="本次回答消耗"> 📈 ${completionTokens} token</span>`
+          let html = `<div class="token-usage"><span title="生成速度" class="generation-speed"> ${speed}</span><span title="本次消耗" class="complation-tokens"> ${completionTokens} token</span>`
 
           html += `</div>`
           const key = `<!--BLOCK_${blockMap.size}-->`

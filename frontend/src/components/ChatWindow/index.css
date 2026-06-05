@@ -11,6 +11,7 @@
 /* ========== 侧边栏 ========== */
 .sidebar-panel {
   max-width: 260px;
+  min-width: 220px;
   width: 26%;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
@@ -88,7 +89,6 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  width: 80%;
   background: var(--bg-secondary);
 }
 .main-stage--full {

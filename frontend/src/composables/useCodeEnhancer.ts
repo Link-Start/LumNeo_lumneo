@@ -123,6 +123,11 @@ export function useCodeEnhancer(containerRef: Ref<HTMLElement | null>) {
               await window.pywebview.api.download_file(fullUrl, link.textContent?.trim() || '')
             }
             // 其他协议（mailto, tel 等）保持默认行为
+          } else {
+            if (isLocalFilePath(href)) {
+              e.preventDefault()
+              message.warning('暂不支持浏览器中打开，请使用桌面端打开')
+            }
           }
         })
         smartClickBound = true
