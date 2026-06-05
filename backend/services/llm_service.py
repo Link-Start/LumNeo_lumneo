@@ -129,7 +129,11 @@ class LLMService:
                     "top_k": params.get('top_k', 20),
                     "chat_template_kwargs": {"enable_thinking": self.thinking == "enabled", "preserve_thinking": True},
                     "enable_thinking": self.thinking == "enabled",
-                    "preserve_thinking": True
+                    "preserve_thinking": True,
+                    "chat_template_kwargs": {
+                        "add_generation_prompt": True,
+                        "enable_thinking": self.thinking == "enabled"
+                    }
                 }
             }
 
@@ -184,11 +188,13 @@ class LLMService:
                     }
 
                 if chunk.choices:
-                    d = chunk.choices[0].delta
+                    delta = chunk.choices[0].delta
                     if first_token_time is None:
-                        first_token_time = time.time()
+                        if (getattr(delta, 'reasoning_content', None) or
+                            getattr(delta, 'content', None) or
+                            getattr(delta, 'tool_calls', None)):
+                            first_token_time = time.time()
                 else:
-                    # 无 choices 的 chunk（如仅含 usage）直接跳过后续内容处理
                     continue
 
                 delta = chunk.choices[0].delta
@@ -345,10 +351,16 @@ class LLMService:
 
         # ---------- 最终 token 统计输出 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:
-            speed = last_step_usage["completion_tokens"] / last_step_generation_time if last_step_generation_time > 0 else 0.0
+            tokens = last_step_usage["completion_tokens"]
+            gen_time = last_step_generation_time
+            if tokens < 20 or gen_time < 0.1:
+                speed_str = "⚡瞬间完成"
+            else:
+                speed = tokens / gen_time if gen_time > 0 else 0.0
+                speed_str = f"{speed:.2f} token/s"
             token_info = {
                 "final_answer_usage": last_step_usage,
                 "total_usage_all_steps": total_usage_all_steps,
-                "speed": f"{speed:.2f} token/s"
+                "speed": speed_str
             }
             yield f"\n<!--token_usage:{json.dumps(token_info)}-->"
