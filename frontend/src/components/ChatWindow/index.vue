@@ -456,10 +456,10 @@ onStreamEnd.value = (fullText: string) => {
     msg.content = fullText
     msg.renderedHtml = renderMessageHtml(fullText, true)  // 缓存渲染结果
     regeneratingMsg.value = null   // 清空标记，恢复成普通消息显示
-    nextTick(() => {
+    nextTick(async () => {
       setStreaming(false)
       addCopyButtons()
-      renderMermaidDiagrams()
+      await renderMermaidDiagrams()
       addFileTypeClassToLinks(virtualContainerRef.value!)
       nextTick(() => virtualizer.value?.measure())
     })
@@ -472,9 +472,9 @@ onStreamEnd.value = (fullText: string) => {
     if (!lastMsg.renderedHtml) {
       lastMsg.renderedHtml = renderMessageHtml(fullText, true)
     }
-    nextTick(() => {
+    nextTick(async () => {
       addCopyButtons()
-      renderMermaidDiagrams()
+      await renderMermaidDiagrams()
       addFileTypeClassToLinks(virtualContainerRef.value!)
       virtualizer.value?.measure()
     })
@@ -866,9 +866,9 @@ watch(
   () => chatStore.currentChatMessages.length,
   () => {
     // 确保 DOM 更新后再渲染图表和按钮
-    nextTick(() => {
+    nextTick(async () => {
       addCopyButtons()
-      renderMermaidDiagrams()
+      await renderMermaidDiagrams()
       addFileTypeClassToLinks(virtualContainerRef.value!)
       // 如果处于自动滚动模式，则滚动到底部
       if (isAutoScrollEnabled.value) {
@@ -922,7 +922,7 @@ onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   await profileStore.loadProfiles()
-  renderMermaidDiagrams()
+  await renderMermaidDiagrams()
   startObserving()
   fetch('/api/local-ip').then(async (res) => {
     local_ip.value = await res.json()
@@ -972,7 +972,7 @@ watch(() => chatStore.activeChatId, async (newId) => {
         isAutoScrollEnabled.value = true
         virtualizer.value.scrollToIndex(listItems.value.length - 1, { align: 'end' })
         addCopyButtons()
-        renderMermaidDiagrams()
+        await renderMermaidDiagrams()
         addFileTypeClassToLinks(virtualContainerRef.value!)
       }
     } else {

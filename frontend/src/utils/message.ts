@@ -1,7 +1,6 @@
 // src/utils/message.ts
 import { ref } from 'vue'
 import { marked } from 'marked'
-import mermaid from 'mermaid'
 import { markedHighlight } from 'marked-highlight'
 import { type Message } from '@/stores/chat'
 import type { UploadedFile } from '@/composables/useFileUpload'
@@ -10,18 +9,6 @@ import markedKatex from 'marked-katex-extension'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/atom-one-dark.css'
 
-
-// 初始化 mermaid
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'dark',
-  securityLevel: 'loose',
-  themeVariables: {
-    primaryColor: '#6366f1',
-    primaryTextColor: '#e4e7ed',
-    lineColor: '#8b5cf6',
-  }
-})
 
 marked.use({
   extensions: [

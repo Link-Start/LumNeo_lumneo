@@ -1,7 +1,27 @@
 import { ref, nextTick, type Ref } from 'vue'
-import mermaid from 'mermaid'
 import { useMessage } from 'naive-ui'
+import { useChatStore } from '@/stores/chat'
 
+
+let mermaidInstance: any = null
+
+async function getMermaid() {
+  if (!mermaidInstance) {
+    const module = await import('mermaid')
+    mermaidInstance = module.default
+    mermaidInstance.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      themeVariables: {
+        primaryColor: '#6366f1',
+        primaryTextColor: '#e4e7ed',
+        lineColor: '#8b5cf6',
+      }
+    })
+  }
+  return mermaidInstance
+}
 
 /**
  * 判断一个路径是否代表本地文件
@@ -216,8 +236,9 @@ export function useCodeEnhancer(containerRef: Ref<HTMLElement | null>) {
     if (!containerRef.value) return
     // 监听新节点
     observer = new MutationObserver(async () => {
+      if (isStreaming.value) return
       addCopyButtons()
-      renderMermaidDiagrams()
+      await renderMermaidDiagrams()
       addFileTypeClassToLinks(containerRef.value!)
     })
     observer.observe(containerRef.value, {
@@ -238,18 +259,24 @@ export function useCodeEnhancer(containerRef: Ref<HTMLElement | null>) {
   async function renderMermaidDiagrams() {
     await nextTick()
     if (!containerRef.value) return
-
+    const chatStore = useChatStore()
     const mermaidCodes = containerRef.value.querySelectorAll(
       'pre code.language-mermaid'
     )
     for (const codeEl of mermaidCodes) {
       const preEl = codeEl.parentElement!
+      const scrollerItem = preEl.closest('[data-index]')
+      if (!scrollerItem) continue
+      const msgIndex = parseInt(scrollerItem.getAttribute('data-index') || '0', 10)
+      const msg = chatStore.currentChatMessages[msgIndex]
+      if (msg?.mermaidRendered) continue
       if (preEl.dataset.mermaidRendered) continue
 
       const code = codeEl.textContent || ''
       if (!code.trim()) continue
 
       try {
+        const mermaid = await getMermaid()
         const { svg } = await mermaid.render(
           'mermaid-' + Math.random().toString(36).substr(2, 9),
           code
@@ -262,6 +289,16 @@ export function useCodeEnhancer(containerRef: Ref<HTMLElement | null>) {
       } catch (e) {
         console.warn('Mermaid 渲染失败', e)
       }
+    }
+
+    // 标记当前活跃聊天中所有已包含 mermaid 渲染的消息
+    const messages = chatStore.currentChatMessages
+    if (messages) {
+      messages.forEach((msg: any) => {
+        if (msg.content.includes('```mermaid')) {
+          msg.mermaidRendered = true
+        }
+      })
     }
   }
 

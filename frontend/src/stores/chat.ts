@@ -7,6 +7,7 @@ export interface Message {
   content: any
   file_ref?: any
   renderedHtml?: string | null // 用于缓存渲染后的 HTML
+  mermaidRendered?: boolean // 是否已完成 mermaid 渲染
 }
 
 export interface Chat {
