@@ -20,3 +20,23 @@ export function isRunningInPyWebView(): boolean {
   // 后备检查 UA（某些旧版本可能没有 pywebview 全局对象）
   return /pywebview/i.test(navigator.userAgent)
 }
+
+// 复制文本到粘贴板
+export const copyToClipboard = (text: string) => {
+
+    if (!navigator.clipboard) {
+        // 如果浏览器不支持 Clipboard API，则退回到旧的 execCommand 方法
+        var tempInput = document.createElement('input')
+        document.body.appendChild(tempInput)
+        tempInput.value = text
+        tempInput.select()
+        document.execCommand('copy')
+        document.body.removeChild(tempInput)
+        return
+    }
+
+    // 使用现代的 Clipboard API
+    navigator.clipboard.writeText(text).catch(err => {
+        console.error('Could not copy text: ', err)
+    })
+}

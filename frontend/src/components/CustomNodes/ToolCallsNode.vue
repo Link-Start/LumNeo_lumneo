@@ -13,11 +13,29 @@
             :class="{ 'streaming': tool.status === 'calling' }"
           >
             <span class="tool-name">{{ tool.name }}</span>
-            <pre class="tool-args"><code>{{ formatArgs(tool.arguments) }}</code></pre>
+            <div class="code-block-wrapper">
+              <n-button class="copy-code-btn" @click="handleCopy(formatArgs(tool.arguments))">
+                <template #icon>
+                  <m-svg :name="copySuccess ? 'succ' : 'copy'"/>
+                </template>
+                复制
+              </n-button>
+              <pre class="tool-args"><code>{{ formatArgs(tool.arguments) }}</code></pre>
+            </div>
 
             <div v-if="tool.result !== undefined" class="tool-result">
               <span class="result-label">结果：</span>
-              <pre class="result-content"><code>{{ formatResult(tool.result) }}</code></pre>
+              <div class="code-block-wrapper">
+                <n-button class="copy-code-btn" @click="handleCopy(formatResult(tool.result))">
+                  <template #icon>
+                    <m-svg :name="copySuccess ? 'succ' : 'copy'"/>
+                  </template>
+                  复制
+                </n-button>
+                <pre class="result-content">
+                  <code>{{ formatResult(tool.result) }}</code>
+                </pre>
+              </div>
             </div>
           </div>
         </div>
@@ -27,7 +45,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import { NButton } from 'naive-ui'
+import MSvg from '@/components/MSvg.vue'
+import { copyToClipboard } from '@/utils/common'
 
 const props = defineProps<{
   node: {
@@ -47,6 +68,8 @@ interface ToolCall {
   result?: any
   status: 'calling' | 'done' | 'error'
 }
+
+const copySuccess = ref(false)
 
 const tools = computed<ToolCall[]>(() => {
   try {
@@ -89,6 +112,14 @@ function formatResult(result: any): string {
     }
   }
   return JSON.stringify(result, null, 2)
+}
+
+function handleCopy(content: string) {
+  copyToClipboard(content)
+  copySuccess.value = true
+  setTimeout(() => {
+    copySuccess.value = false
+  }, 800)
 }
 
 function toggle(e: MouseEvent) {
@@ -204,17 +235,58 @@ const title = computed(() => {
   50% { opacity: 0.7; }
 }
 
+.code-block-wrapper {
+  position: relative;
+  margin: 6px 0;
+}
+
+.tool-args, .result-content {
+  background: var(--bg-secondary);
+  padding: 8px;
+  min-height: 30px;
+  max-height: 320px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: Consolas, '微软雅黑', monospace;
+  margin: 6px 0 0;
+  overflow: auto;
+}
+
 .tool-args code {
   font-family: 'Courier New', monospace;
   font-size: 12px;
   color: var(--text-code, #999);
 }
 
-
 .result-content code {
   font-family: 'Courier New', monospace;
   font-size: 12px;
   color: var(--text-success, #52c41a);
+}
+.code-block-wrapper .copy-code-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+}
+.code-block-wrapper .copy-code-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #fff;
+}
+.code-block-wrapper:hover .copy-code-btn {
+  opacity: 1;
 }
 
 /* 工具调用卡片 */
@@ -250,18 +322,6 @@ const title = computed(() => {
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-}
-.tool-args, .result-content {
-  background: var(--bg-secondary);
-  padding: 8px;
-  min-height: 30px;
-  max-height: 320px;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: Consolas, '微软雅黑', monospace;
-  margin: 6px 0 0;
 }
 .streaming .tool-args, .streaming .result-content {
   max-height: none;
