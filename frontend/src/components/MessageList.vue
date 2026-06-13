@@ -50,7 +50,7 @@
                         :themes="['vitesse-light', 'vitesse-dark']"
                         code-block-dark-theme="vitesse-dark"
                         code-block-light-theme="vitesse-light"
-                        :content="safeProcessContent(msg.content.trim(), false)"
+                        :content="processMessageContent(msg.content.trim(), false)"
                         :final="true"
                         :fade="false"
                         :typewriter="false"
@@ -109,7 +109,7 @@
                     :themes="['vitesse-light', 'vitesse-dark']"
                     code-block-dark-theme="vitesse-dark"
                     code-block-light-theme="vitesse-light"
-                    :content="safeProcessContent(streamingContent, true)"
+                    :content="processMessageContent(streamingContent, true)"
                     :final="false"
                     :typewriter="false"
                     :max-live-nodes="0"
@@ -262,11 +262,11 @@ function scrollToLatestSmooth(duration: number = 400) {
   scrollAnimationId = requestAnimationFrame(animate)
 }
 
-function safeProcessContent(raw: string, isStreaming: boolean): string {
-  // 移除非法的连续强调符号（超过 10 个连续的 * 或 _）
-  const sanitized = raw.replace(/([*_]){10,}/g, (match, char) => char.repeat(3))
-  return processMessageContent(sanitized, isStreaming)
-}
+// function safeProcessContent(raw: string, isStreaming: boolean): string {
+//   // 移除非法的连续强调符号（超过 10 个连续的 * 或 _）
+//   const sanitized = raw.replace(/([*_]){10,}/g, (match, char) => char.repeat(3))
+//   return processMessageContent(sanitized, isStreaming)
+// }
 
 // 生成 item key
 function getItemKey(msg: any, index: number|string): string {
