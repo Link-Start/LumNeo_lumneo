@@ -235,7 +235,6 @@ const profileStore = useProfileStore()
 const isMobile = ref(false)
 const sidebarOpen = ref(false)
 const qrCodeUrl = ref('')
-const local_ip = ref('')
 const showQRCode = ref(true)
 
 const isDark = computed(() => configStore.themeMode === 'dark')
@@ -384,7 +383,7 @@ const profileOptions = computed(() =>
 )
 
 function setQRCodeUrl() {
-  qrCodeUrl.value = window.location.href.replace(/\b(?:localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, local_ip.value)
+  qrCodeUrl.value = window.location.href.replace(/\b(?:localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, localIP.value)
 }
 
 const createChat = async () => {
