@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 import httpx
+import aiofiles
+from starlette.responses import StreamingResponse
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +20,39 @@ from backend.database import init_db
 from backend.mcp_client import MCPClientManager
 from config_loader import config
 
+
+class PrecompressedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope) -> Response:
+        # 检查 .br 文件
+        br_path = path + ".br"
+        full_br = os.path.join(self.directory, br_path) if self.directory else br_path
+        if os.path.isfile(full_br):
+            # 异步打开文件
+            file_handle = await aiofiles.open(full_br, mode="rb")
+            
+            async def file_iterator():
+                try:
+                    while chunk := await file_handle.read(64 * 1024):
+                        yield chunk
+                finally:
+                    await file_handle.close()
+            
+            # 获取正确的 Content-Type（基于原始文件扩展名）
+            content_type, _ = mimetypes.guess_type(path)
+            headers = {
+                "Content-Encoding": "br",
+                "Content-Type": content_type or "application/octet-stream",
+                "Vary": "Accept-Encoding",
+            }
+            # 注意：不设置 Content-Length，因为 StreamingResponse 会自动分块传输
+            return StreamingResponse(
+                file_iterator(),
+                status_code=200,
+                headers=headers,
+            )
+        
+        # 无 .gz 文件时回退
+        return await super().get_response(path, scope)
 
 # ============ Lifespan 管理 ============
 @asynccontextmanager
@@ -110,7 +145,7 @@ async def proxy_generate(request: Request, file_path: str):
 app.mount("/files/uploads", StaticFiles(directory=config.uploads_dir), name="uploaded_files")
 
 if os.path.exists(config.static_dir):
-    app.mount("/app", StaticFiles(directory=config.static_dir, html=True), name="static")
+    app.mount("/app", PrecompressedStaticFiles(directory=config.static_dir, html=True), name="static")
 
 
 # ============ 运行模式判断 ============

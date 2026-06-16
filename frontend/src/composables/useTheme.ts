@@ -12,8 +12,11 @@ export function useTheme() {
 
   const themeOverrides: GlobalThemeOverrides = {
     common: {
-      primaryColor: '#4a7cf7',
-      borderRadius: '8px',
+      borderRadius: "8px",
+      primaryColor: "#6366f1",
+      primaryColorHover: "#6366f1",
+      primaryColorPressed: "#8b5cf6",
+      primaryColorSuppl: "#3967B4FF"
     },
   }
 

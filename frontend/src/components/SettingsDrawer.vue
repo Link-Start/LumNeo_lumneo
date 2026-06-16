@@ -207,7 +207,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              style="width: 60%"
+              style="width: 100px"
             />
             <n-input-number
               v-model:value="profileForm.top_p"
@@ -215,7 +215,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              style="width: 100px"
+              style="width: 200px"
             />
           </n-space>
         </n-form-item>

@@ -1,6 +1,7 @@
 # backend/utils/base.py
 import os
 import sys
+import socket
 from pathlib import Path
 from datetime import datetime, timezone as tz
 
@@ -52,3 +53,15 @@ def get_current_time(timezone: str = "local") -> str:
         return f"{now.strftime("%Y-%m-%d %H:%M:%S")} {weekday_cn} "
     except Exception as e:
         return f"获取时间失败：{str(e)}"
+
+def get_local_ip():
+    """获取本机IP地址"""
+    try:
+        # 创建一个UDP套接字，连接到一个外部地址（不发送数据）
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"

@@ -1,9 +1,9 @@
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useMessage } from 'naive-ui'
-import { cleanMessages, renderMessageHtml } from '@/utils/message'
+import { cleanMessages } from '@/utils/message'
 import type { UploadedFile } from '@/composables/useFileUpload'
 
 
@@ -25,22 +25,17 @@ export function useChat() {
       abortController.value = null
     }
     isLoading.value = false
-    streamingContent.value = ''
     regeneratingMsg.value = null
   }
 
   const onStreamEnd = ref<((fullText: string) => void) | null>(null)
 
-  async function readStream(
-    response: Response, 
-    scrollToBottom?: () => void
-  ): Promise<string> {
+  async function readStream(response: Response): Promise<string> {
     if (!response.ok || !response.body) throw new Error('网络响应失败')
     
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullText = ''
-    let pendingScroll = false
 
     while (true) {
       const { done, value } = await reader.read()
@@ -49,15 +44,6 @@ export function useChat() {
       fullText += decoder.decode(value, { stream: true })
       // ✅ 只更新原始文本，绝不等待 DOM 更新
       streamingContent.value = fullText
-      
-      // ✅ 滚动也做 RAF 节流，避免频繁触发布局重排阻塞 JS
-      if (scrollToBottom  && !pendingScroll) {
-        pendingScroll = true
-        requestAnimationFrame(() => {
-          pendingScroll = false
-          scrollToBottom()
-        })
-      }
     }
     
     return fullText
@@ -140,17 +126,29 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      fullText = await readStream(response, scrollToBottom)
+      fullText = await readStream(response)
 
       if (chatStore.activeChatId === chatId) {
         const assistantMsg: Message = { role: 'assistant', content: fullText }
-        assistantMsg.renderedHtml = renderMessageHtml(fullText, true)
         chatStore.addMessageToLocal(assistantMsg)
         chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn('保存助手消息失败', e))
       }
 
     } catch (error: any) {
-      if (error.name === 'AbortError') return
+      if (error.name === 'AbortError') {
+        if (streamingContent.value.trim()) {
+          const partialMsg: Message = {
+            role: 'assistant',
+            content: streamingContent.value.trim() + '\n\n[已停止]',  // 可加标记
+          }
+          chatStore.addMessageToLocal(partialMsg)
+          chatStore.saveMessageToBackend(partialMsg).catch((e) =>
+            console.warn('保存截断消息失败', e)
+          )
+          streamingContent.value = ''   // 保存后再清空
+        }
+        return
+      }
       if (chatStore.activeChatId === chatId) {
         console.error('发送失败:', error)
         const errorMsg: Message = { role: 'assistant', content: `**错误：** ${error.message}` }
@@ -171,7 +169,7 @@ export function useChat() {
   /**
    * 重新生成当前对话（通常用于编辑用户消息后）
    */
-  async function regenerateFromCurrentHistory(scrollToBottom: () => void) {
+  async function regenerateFromCurrentHistory() {
     if (!chatStore.activeChatId) return
     const currentModel = configStore.activeModel
     if (!currentModel) {
@@ -180,7 +178,6 @@ export function useChat() {
     }
 
     isLoading.value = true
-    streamingContent.value = ''
 
     if (abortController.value) {
       abortController.value.abort()
@@ -210,14 +207,27 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      const fullText = await readStream(response, scrollToBottom)
+      const fullText = await readStream(response)
       
       const assistantMsg: Message = { role: 'assistant', content: fullText }
       chatStore.addMessageToLocal(assistantMsg)
       chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn(e))
 
     } catch (error: any) {
-      if (error.name === 'AbortError') return
+      if (error.name === 'AbortError') {
+        if (streamingContent.value.trim()) {
+          const partialMsg: Message = {
+            role: 'assistant',
+            content: streamingContent.value.trim() + '\n\n[已停止]',  // 可加标记
+          }
+          chatStore.addMessageToLocal(partialMsg)
+          chatStore.saveMessageToBackend(partialMsg).catch((e) =>
+            console.warn('保存截断消息失败', e)
+          )
+          streamingContent.value = ''   // 保存后再清空
+        }
+        return
+      }
       const errMsg: Message = { role: 'assistant', content: `错误：${error.message}` }
       chatStore.addMessageToLocal(errMsg)
       chatStore.saveMessageToBackend(errMsg).catch((e) => console.warn(e))
@@ -231,7 +241,7 @@ export function useChat() {
   /**
    * 针对某条助手消息重新生成（使用该消息前的历史）
    */
-  async function regenerateResponse(assistantMsg: Message, scrollToBottom: () => void) {
+  async function regenerateResponse(assistantMsg: Message) {
     if (!chatStore.activeChatId) return
     const currentModel = configStore.activeModel
     if (!currentModel) {
@@ -247,7 +257,6 @@ export function useChat() {
     regeneratingMsg.value = assistantMsg
 
     isLoading.value = true
-    streamingContent.value = ''
 
     if (abortController.value) {
       abortController.value.abort()
@@ -277,11 +286,10 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      const fullText = await readStream(response, scrollToBottom)
+      const fullText = await readStream(response)
 
       // 直接更新原消息对象
       assistantMsg.content = fullText
-      assistantMsg.renderedHtml = renderMessageHtml(fullText, true)
       if (assistantMsg.id) {
         fetch(`/api/chats/${chatStore.activeChatId}/messages/${assistantMsg.id}`, {
           method: 'PUT',
@@ -294,7 +302,20 @@ export function useChat() {
         onStreamEnd.value(fullText)
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') return
+      if (error.name === 'AbortError') {
+        if (streamingContent.value.trim()) {
+          const partialMsg: Message = {
+            role: 'assistant',
+            content: streamingContent.value.trim() + '\n\n[已停止]',  // 可加标记
+          }
+          chatStore.addMessageToLocal(partialMsg)
+          chatStore.saveMessageToBackend(partialMsg).catch((e) =>
+            console.warn('保存截断消息失败', e)
+          )
+          streamingContent.value = ''   // 保存后再清空
+        }
+        return
+      }
       console.error('重新生成失败:', error)
     } finally {
       abortController.value = null

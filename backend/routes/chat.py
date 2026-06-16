@@ -1,7 +1,6 @@
 # backend/routes/chat.py
 import re
 import json
-import socket
 import traceback
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -10,7 +9,7 @@ from typing import List, Dict, Optional, Any
 from backend.services.llm_service import LLMService
 from backend.services.tools import get_local_tools, get_mcp_tools
 from backend.database import get_db
-from backend.utils.base import resource_path, get_current_time
+from backend.utils.base import resource_path, get_current_time, get_local_ip
 from config_loader import config
 import backend
 
@@ -176,15 +175,11 @@ async def get_tools(mcp_manager=Depends(get_mcp_manager)):
     enable_tools.extend(mcp_tools)
     return {"tools": enable_tools}
 
-@router.get('/local-ip')
-async def get_local_ip():
-    """获取本机IP地址"""
-    try:
-        # 创建一个UDP套接字，连接到一个外部地址（不发送数据）
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
+    
+@router.get("/system-info")
+async def get_system_info():
+    return {
+        "workspace_dir": backend.workspace_path,
+        "upload_dir": config.uploads_dir,
+        "local_ip": get_local_ip(),
+    }

@@ -101,7 +101,10 @@ class LLMService:
         last_step_usage = None
         last_step_generation_time = 0.0
 
-        MAX_STEPS = 6
+        MAX_STEPS = 60
+        MAX_CONSECUTIVE_FAILURES = 3      # ← 新增：最多连续失败次数
+        consecutive_failures = 0          # ← 新增：连续失败计数
+        force_final = False               # ← 新增：强制进入最终总结的标志
 
         for step in range(MAX_STEPS):
             if request and await request.is_disconnected():
@@ -137,13 +140,24 @@ class LLMService:
                 }
             }
 
-            if step == MAX_STEPS - 1:
-                yield "\n⚠️ 工具调用次数已达上限，正在基于已收集信息生成最终总结...\n"
+            # 连续失败上限或达到最大步数，都强制让模型直接总结
+            if force_final or step == MAX_STEPS - 1:
+                if force_final:
+                    yield "\n⚠️ 工具连续调用失败次数过多，正在基于已收集信息生成最终总结...\n"
+                else:
+                    yield "\n⚠️ 工具调用次数已达上限，正在基于已收集信息生成最终总结...\n"
+
                 current_messages.append({
                     "role": "user",
-                    "content": "【系统指令】你的工具调用次数已达最大限制。请立即放弃尝试调用工具，根据上面已经收集到的上下文信息，直接回答我的问题并进行最终总结。"
+                    "content": ("【系统指令】你的工具调用已达限制或连续多次失败。"
+                                "请立即放弃尝试调用工具，根据上面已经收集到的上下文信息，"
+                                "直接回答我的问题并进行最终总结。")
                 })
                 kwargs["messages"] = current_messages
+                # 关键：不再提供工具列表
+                tools = None
+                # 重置标志，避免重复添加系统消息
+                force_final = False
             elif tools:
                 kwargs["tools"] = tools
                 kwargs["tool_choice"] = "auto"
@@ -328,13 +342,24 @@ class LLMService:
                     yield f"\n❌ 工具 `{func_name}` 参数错误：{error_detail}\n"
                     args = {}
 
+                failed = False
                 try:
                     result = await execute_tool(func_name, args, mcp_manager)
+                    # 工具正常返回，但结果中包含错误标记也视作失败
+                    if isinstance(result, str) and result.startswith("工具执行出错:"):
+                        failed = True
                 except Exception as e:
                     error_msg = str(e)
                     if len(error_msg) > 1000:
                         error_msg = error_msg[:1000] + "...(错误信息过长已截断)"
                     result = f"工具执行出错: {error_msg}"
+                    failed = True
+
+                # 更新连续失败计数
+                if failed:
+                    consecutive_failures += 1
+                else:
+                    consecutive_failures = 0
 
                 result_str = str(result)
                 json_str = json.dumps({'name': func_name, 'arguments': args})
@@ -348,6 +373,9 @@ class LLMService:
                     "content": result_str
                 })
             yield "<!--tool_calls:end-->"
+
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                force_final = True
 
         # ---------- 最终 token 统计输出 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:
