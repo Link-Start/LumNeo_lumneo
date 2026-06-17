@@ -86,7 +86,17 @@ export function useChat() {
 
     // 2. 加入本地 store
     chatStore.addMessageToLocal(userMsg)
-    await chatStore.saveMessageToBackend(userMsg).catch((e) => console.warn('保存用户消息失败', e))
+    await chatStore.saveMessageToBackend(userMsg)
+
+    const assistantMsg: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: '',
+    }
+    chatStore.addMessageToLocal(assistantMsg)
+    
+    await chatStore.saveMessageToBackend(assistantMsg)
+    const assistantMessageId = assistantMsg.id
 
     // 3. 准备 API 调用
     isLoading.value = true
@@ -115,6 +125,7 @@ export function useChat() {
 					thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
+        message_id: assistantMessageId,
       })
 
       setTimeout(() => scrollToBottom(), 160)
@@ -129,31 +140,42 @@ export function useChat() {
       fullText = await readStream(response)
 
       if (chatStore.activeChatId === chatId) {
-        const assistantMsg: Message = { role: 'assistant', content: fullText }
-        chatStore.addMessageToLocal(assistantMsg)
-        chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn('保存助手消息失败', e))
+        // 更新本地消息
+        const localMsg = chatStore.currentChatMessages.find((m: any) => m.id === assistantMsg.id)
+        if (localMsg) {
+          localMsg.content = fullText
+        }
+        // 更新后端
+        chatStore.editMessage(<number>assistantMsg.id, fullText).catch((e: any) => 
+          console.warn('更新助手消息失败', e)
+        )
       }
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
         if (streamingContent.value.trim()) {
-          const partialMsg: Message = {
-            role: 'assistant',
-            content: streamingContent.value.trim() + '\n\n[已停止]',  // 可加标记
+          const partialContent = streamingContent.value.trim() + '\n\n[已停止]'
+          const localMsg = chatStore.currentChatMessages.find((m: any) => m.id === assistantMsg.id)
+          if (localMsg) {
+            localMsg.content = partialContent
           }
-          chatStore.addMessageToLocal(partialMsg)
-          chatStore.saveMessageToBackend(partialMsg).catch((e) =>
+          chatStore.editMessage(<number>assistantMsg.id, partialContent).catch((e) =>
             console.warn('保存截断消息失败', e)
           )
-          streamingContent.value = ''   // 保存后再清空
+          streamingContent.value = ''
         }
         return
       }
       if (chatStore.activeChatId === chatId) {
         console.error('发送失败:', error)
-        const errorMsg: Message = { role: 'assistant', content: `**错误：** ${error.message}` }
-        chatStore.addMessageToLocal(errorMsg)
-        chatStore.saveMessageToBackend(errorMsg).catch((e) => console.warn('保存错误消息失败', e))
+        const errorContent = `**错误：** ${error.message}`
+        const localMsg = chatStore.currentChatMessages.find((m: any) => m.id === assistantMsg.id)
+        if (localMsg) {
+          localMsg.content = errorContent
+        }
+        chatStore.editMessage(<number>assistantMsg.id, errorContent).catch((e) => 
+          console.warn('保存错误消息失败', e)
+        )
       }
     } finally {
       abortController.value = null
@@ -185,6 +207,15 @@ export function useChat() {
     const controller = new AbortController()
     abortController.value = controller
 
+    const assistantMsg: Message = {
+    id: Date.now() + 1,
+    role: 'assistant',
+    content: '',
+  }
+  chatStore.addMessageToLocal(assistantMsg)
+  await chatStore.saveMessageToBackend(assistantMsg)
+  const messageId = assistantMsg.id 
+
     try {
 
 			const body = JSON.stringify({
@@ -198,6 +229,7 @@ export function useChat() {
 					thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
 				},
 				profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
+				message_id: messageId,
 			})
 
       const response = await fetch('/api/chat', {
@@ -209,9 +241,9 @@ export function useChat() {
 
       const fullText = await readStream(response)
       
-      const assistantMsg: Message = { role: 'assistant', content: fullText }
-      chatStore.addMessageToLocal(assistantMsg)
-      chatStore.saveMessageToBackend(assistantMsg).catch((e) => console.warn(e))
+      const localMsg = chatStore.currentChatMessages.find(m => m.id === assistantMsg.id)
+      if (localMsg) localMsg.content = fullText
+      chatStore.editMessage(<number>assistantMsg.id, fullText).catch(e => console.warn(e))
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -255,6 +287,7 @@ export function useChat() {
 
     const history = allMessages.slice(0, idx)
     regeneratingMsg.value = assistantMsg
+    const messageId = assistantMsg.id
 
     isLoading.value = true
 
@@ -277,6 +310,7 @@ export function useChat() {
 					thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
 				},
 				profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
+        message_id: messageId,
 			})
 
       const response = await fetch('/api/chat', {

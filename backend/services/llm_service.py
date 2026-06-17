@@ -132,13 +132,13 @@ class LLMService:
                 "stream_options": {"include_usage": True},
                 "extra_body": {
                     "top_k": params.get('top_k', 20),
-                    "chat_template_kwargs": {"enable_thinking": self.thinking == "enabled", "preserve_thinking": True},
+                    "chat_template_kwargs": {
+                        "add_generation_prompt": True, 
+                        "enable_thinking": self.thinking == "enabled", 
+                        "preserve_thinking": True
+                    },
                     "enable_thinking": self.thinking == "enabled",
                     "preserve_thinking": True,
-                    "chat_template_kwargs": {
-                        "add_generation_prompt": True,
-                        "enable_thinking": self.thinking == "enabled"
-                    }
                 }
             }
 
@@ -239,20 +239,31 @@ class LLMService:
                             idx = tc_delta.id if tc_delta.id else str(uuid.uuid4())
 
                         if idx not in tool_preview_active and tc_delta.function and tc_delta.function.name:
+                            import uuid
+                            call_id = str(uuid.uuid4())
                             func_name = tc_delta.function.name
+                            # 生成唯一 call_id
+                            call_id = str(uuid.uuid4())
                             tool_preview_active[idx] = {
+                                'call_id': call_id,
                                 'name': func_name,
                                 'db_created': False
                             }
-                            # 发送轻量标记：只包含 call_id 和 name
-                            yield f"<!--tool_preview:start:{idx}:{func_name}-->"
-                            
-                            # 创建数据库记录
+                            if idx in tool_calls_by_index:
+                                tool_calls_by_index[idx]['call_id'] = call_id
+                            else:
+                                # 防御：万一 tool_calls_by_index 还没建，临时补一个
+                                tool_calls_by_index[idx] = {
+                                    "id": None, "type": "function", "function": {"name": "", "arguments": ""},
+                                    "call_id": call_id
+                                }
+
+                            # 创建数据库记录（使用真实 call_id）
                             if message_id:
                                 try:
                                     await create_tool_call(
                                         message_id=message_id,
-                                        call_id=str(idx),
+                                        call_id=call_id,
                                         tool_name=func_name
                                     )
                                     tool_preview_active[idx]['db_created'] = True
@@ -263,7 +274,8 @@ class LLMService:
                             tool_calls_by_index[idx] = {
                                 "id": getattr(tc_delta, 'id', None),
                                 "type": "function",
-                                "function": {"name": "", "arguments": ""}
+                                "function": {"name": "", "arguments": ""},
+                                "call_id": None
                             }
                         target = tool_calls_by_index[idx]
                         if tc_delta.id:
@@ -276,17 +288,7 @@ class LLMService:
                             target["function"]["arguments"] += arg_delta
 
                 elif delta_content:
-                    # 关闭所有活跃的 tool_preview
-                    for idx in list(tool_preview_active.keys()):
-                        yield f"<!--tool_preview:end:{idx}-->"
-                        del tool_preview_active[idx]
                     yield delta_content
-
-            # 循环结束后处理可能残留的 tool_preview
-            if tool_preview_active:
-                for idx in list(tool_preview_active.keys()):
-                    yield f"<!--tool_preview:end:{idx}-->"
-                    del tool_preview_active[idx]
 
             # 记录本步骤生成时间
             if first_token_time is not None:
@@ -302,7 +304,7 @@ class LLMService:
             if step_usage_record:
                 last_step_usage = step_usage_record
 
-            # 构建工具调用字典
+            # ---------- 构建工具调用字典 (用于 assistant_msg) ----------
             tool_calls = {}
             for idx, tc in tool_calls_by_index.items():
                 if tc.get("id"):
@@ -318,11 +320,11 @@ class LLMService:
             if not tool_calls:
                 break
 
-            # 过滤无效工具调用
+            # ---------- 构建 valid_calls (用于执行工具，保留 idx) ----------
             valid_calls = {}
-            for tid, tc in tool_calls.items():
+            for idx, tc in tool_calls_by_index.items():
                 if tc["function"]["name"].strip():
-                    valid_calls[tid] = tc
+                    valid_calls[idx] = tc  # ✅ 使用整数 idx 作为键
                 else:
                     yield "\n⚠️ 检测到无效工具调用（名称空白），已忽略。\n"
 
@@ -334,14 +336,25 @@ class LLMService:
             assistant_msg = {
                 "role": "assistant",
                 "content": None,
-                "tool_calls": list(valid_calls.values())
+                "tool_calls": list(tool_calls.values())  # 使用包含 id 的 tool_calls
             }
             current_messages.append(assistant_msg)
 
-            for tc in valid_calls.values():
+            # ---------- 执行工具 ----------
+            for idx, tc in valid_calls.items():
+                call_id = tc.get('call_id')
+                if not call_id:
+                    print(f"[WARN] 跳过工具 {tc['function']['name']}，因为未找到 call_id")
+                    continue
+
                 func_name = tc["function"]["name"]
                 raw_args = tc["function"]["arguments"]
-                call_id = tc["id"]
+                
+                # ✅ 通过整数 idx 获取之前生成的 UUID call_id
+                call_id = tool_preview_active[idx]['call_id']
+
+                # 发送轻量标记：使用 call_id 作为唯一标识
+                yield f"<!--tool_preview:start:{call_id}:{func_name}-->"
                 
                 try:
                     args = json.loads(raw_args) if raw_args else {}
@@ -362,7 +375,6 @@ class LLMService:
                 failed = False
                 try:
                     result = await execute_tool(func_name, args, mcp_manager)
-                    # 工具正常返回，但结果中包含错误标记也视作失败
                     if isinstance(result, str) and result.startswith("工具执行出错:"):
                         failed = True
                 except Exception as e:
@@ -374,9 +386,10 @@ class LLMService:
 
                 exec_time_ms = int((time.time() - start_time) * 1000)
 
+                # 更新结果和状态 (存入数据库)
                 if message_id:
                     try:
-                        result_str = str(result)[:20000]  # 限制长度
+                        result_str = str(result)[:20000]
                         await update_tool_call(
                             call_id=call_id,
                             result=result_str,
@@ -393,8 +406,10 @@ class LLMService:
                 else:
                     consecutive_failures = 0
 
-                yield f"<!--tool_call:{call_id}-->"
-                yield f"<!--tool_result:{call_id}-->"
+                if idx in tool_preview_active:
+                    call_id = tool_preview_active[idx]['call_id']
+                    yield f"<!--tool_preview:end:{call_id}-->"
+                    del tool_preview_active[idx]
 
                 current_messages.append({
                     "role": "tool",

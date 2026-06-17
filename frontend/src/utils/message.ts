@@ -18,126 +18,83 @@ function escapeMarkdownSensitive(str: string): string {
 
 
 /** 解析思考块和工具调用，输出 markstream-vue 自定义标签格式 */
+/** 解析工具预览标记，输出 <toolpreview> 自定义标签 */
 export function processMessageContent(text: string, isStreaming = false): string {
   if (!text) return ''
 
   let processedText = text
 
-  // 1. 处理完整的思考块 → 转换为 <reasoning> 自定义标签
+  // 1. 处理思考块（不变）
   processedText = processedText.replace(
     /<!--reasoning:start-->([\s\S]*?)<!--reasoning:end:(.*?)-->/g,
     (_, content, time) => {
-      // 将 mermaid 代码块转为 text 避免内部渲染问题
       content = content.replace(/```mermaid(\s|$)/g, '```text$1')
-      // 转义内容中的 </reasoning> 避免提前闭合
       const safeContent = content.replace(/<\/reasoning>/g, '\u003c/reasoning>')
       return `\n\n<reasoning time="${time}">${safeContent}</reasoning>\n\n`
     }
   )
 
-  // 2. 处理流式未闭合的思考块
   if (isStreaming) {
     const startIdx = processedText.indexOf('<!--reasoning:start-->')
     if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
       let afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       afterStart = afterStart.replace(/```mermaid(\s|$)/g, '```text$1')
-      // 转义闭合标签
       const safeContent = afterStart.replace(/<\/reasoning>/g, '\u003c/reasoning>')
-      // 移除原始标记，替换为未闭合的自定义标签（markstream-vue 会自动处理 loading 状态）
       processedText = processedText.substring(0, startIdx) + `\n\n<reasoning loading="true">${safeContent}`
     }
   }
 
-  // 如果已经出现最终的工具调用块，则清除所有工具预览标记
-  const hasToolCallsStart = processedText.includes('<!--tool_calls:start-->')
-  const hasToolCallsEnd   = processedText.includes('<!--tool_calls:end-->')
-  const shouldClearPreview = hasToolCallsStart && (!isStreaming || hasToolCallsEnd)
-
-  if (shouldClearPreview) {
-      // 删除闭合的预览段
-      processedText = processedText.replace(/<!--tool_preview:start:\S+?:.*?-->[\s\S]*?<!--tool_preview:end:\S+?:.*?-->/g, '')
-      // 删除未闭合的预览段
-      processedText = processedText.replace(/<!--tool_preview:start:\S+?:.*?-->[\s\S]*$/g, '')
-      // 清理残留 end
-      processedText = processedText.replace(/<!--tool_preview:end:\S+?:.*?-->/g, '')
-  }
-
-  // 3. 处理工具预览 → 转换为 <toolpreview> 自定义标签（注意：标签名不能包含下划线）
-  if (!processedText.includes('<!--tool_calls:start-->')) {
-    const startRegex = /<!--tool_preview:start:(\S+?):(.*?)-->/g
-    const endRegex = /<!--tool_preview:end:(\S+?)-->/g
-
-    let firstStart = -1
-    let lastEnd = -1
-    let startMatch
-
-    startRegex.lastIndex = 0
-    if ((startMatch = startRegex.exec(processedText)) !== null) {
-      firstStart = startMatch.index
-    }
-
-    let endMatch
-    endRegex.lastIndex = 0
-    while ((endMatch = endRegex.exec(processedText)) !== null) {
-      lastEnd = endMatch.index + endMatch[0].length
-    }
-
-    if (firstStart !== -1) {
-      const previewRegionEnd = lastEnd !== -1 ? lastEnd : processedText.length
-      const previewRegion = processedText.substring(firstStart, previewRegionEnd)
-
-      const idxSet = new Set<string>()
-      const toolNames: Record<string, string> = {}
-      
-      startRegex.lastIndex = 0
-      let sMatch
-      while ((sMatch = startRegex.exec(previewRegion)) !== null) {
-        idxSet.add(sMatch[1])
-        toolNames[sMatch[1]] = sMatch[2]
-      }
-
-      const endedIds = new Set<string>()
-      endRegex.lastIndex = 0
-      let eMatch
-      while ((eMatch = endRegex.exec(previewRegion)) !== null) {
-        endedIds.add(eMatch[1])
-      }
-
-      const tools = Array.from(idxSet).map(idx => ({
-        call_id: idx,
-        name: toolNames[idx] || '未知工具',
-        streaming: !endedIds.has(idx)
-      }))
-
-      const tagContent = JSON.stringify({
-        tools,
-        count: tools.length,
-        loading: tools.some(t => t.streaming)
-      })
-
-      const key = `\n\n<toolpreview>${tagContent}</toolpreview>\n\n`
-      processedText = processedText.substring(0, firstStart) + key + processedText.substring(previewRegionEnd)
-    }
-  }
-
-  // 4. 处理工具调用块 → 转换为 <toolcalls> 自定义标签（注意：标签名不能包含下划线）
+  // 2. 处理工具调用容器
   processedText = processedText.replace(
     /<!--tool_calls:start-->([\s\S]*?)<!--tool_calls:end-->/g,
-    (_, inner) => {
-      const callIds: string[] = []
-      
-      const callRegex = /<!--tool_call:(.*?)-->/g
-      let match
-      while ((match = callRegex.exec(inner)) !== null) {
-        callIds.push(match[1].trim())
+    (_, innerContent) => {
+      // 在容器内部解析 start 和 end
+      const startRegex = /<!--tool_preview:start:([^:]+?):(.*?)-->/g
+      const endRegex = /<!--tool_preview:end:([^:]+?)-->/g
+
+      // Map 用来去重和合并状态，key 为 call_id
+      const toolsMap = new Map<string, { call_id: string; name: string; streaming: boolean }>()
+
+      let match: RegExpExecArray | null
+      // 1. 找出所有 start，记录 call_id 和 name
+      while ((match = startRegex.exec(innerContent)) !== null) {
+        const call_id = match[1]
+        const name = match[2]
+        if (!toolsMap.has(call_id)) {
+          toolsMap.set(call_id, { call_id, name, streaming: true })
+        }
       }
 
-      const tagContent = JSON.stringify({ call_ids: callIds })
+      // 2. 找出所有 end，将对应的状态改为 false
+      while ((match = endRegex.exec(innerContent)) !== null) {
+        const call_id = match[1]
+        if (toolsMap.has(call_id)) {
+          toolsMap.get(call_id)!.streaming = false
+        }
+      }
+
+      // 如果没有解析出任何工具，直接移除占位符
+      if (toolsMap.size === 0) {
+        return ''
+      }
+
+      // 3. 构建前端需要的预览数据结构
+      const toolsData = Array.from(toolsMap.values())
+      const tagContent = JSON.stringify({
+        tools: toolsData,
+        count: toolsData.length,
+        loading: toolsData.some(t => t.streaming)
+      })
+
+      // 返回自定义组件标签
       return `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
     }
   )
 
-  // 5. 处理 Token 用量 → 转换为 <tokenusage> 自定义标签（注意：标签名不能包含下划线）
+  processedText = processedText.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
+  processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
+
+  // 3. 处理 Token 用量
   processedText = processedText.replace(
     /<!--token_usage:(.*?)-->/g,
     (_, jsonStr) => {
@@ -153,8 +110,10 @@ export function processMessageContent(text: string, isStreaming = false): string
       }
     }
   )
+
   // 清理多余换行
   processedText = processedText.replace(/\n{3,}/g, '\n\n')
+  
   return processedText.trim()
 }
 

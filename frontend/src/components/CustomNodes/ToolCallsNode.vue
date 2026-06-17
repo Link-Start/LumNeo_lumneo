@@ -1,32 +1,33 @@
 <template>
-  <div class="toolcalls-block" :class="{ 'streaming': isLoading }">
+  <div class="toolcalls-block" :class="{ 'streaming': isLoading, 'expanded': expanded }">
     <div class="toolcalls-summary no-select" @click="toggleExpand">
       <span class="summary-icon">
-        <m-svg name="tools" />
+        <m-svg name="tools" :size="20"/>
       </span>
       <span class="summary-text">{{ title }}</span>
-      <span class="summary-count" v-if="callIds.length > 0">
-        {{ callIds.length }}个
-      </span>
-      <span class="expand-icon" :class="{ 'expanded': expanded }">
-        <m-svg name="chevron-down" />
+      <span class="summary-count" v-if="toolsList.length > 0">
+        {{ toolsList.length }}个
       </span>
     </div>
     
-    <div v-show="expanded" class="toolcalls-list">
-      <div 
-        v-for="callId in callIds" 
-        :key="callId"
-        class="toolcall-item"
-        @click.stop="openDetail(callId)"
-      >
-        <span class="item-status" :class="getStatusClass(callId)">
-          <m-svg :name="getStatusIcon(callId)" />
-        </span>
-        <span class="item-name">{{ getToolName(callId) }}</span>
-        <span class="item-arrow">
-          <m-svg name="chevron-right" />
-        </span>
+    <div class="toolcalls-container">
+      <div class="toolcalls-inner">
+        <div class="toolcalls-list">
+          <div 
+            v-for="tool in toolsList" 
+            :key="tool.call_id"
+            class="toolcall-item"
+            @click.stop="openDetail(tool.call_id)"
+          >
+            <span class="item-status" :class="getStatusClass(tool)">
+              <m-svg :name="getStatusIcon(tool)" />
+            </span>
+            <span class="item-name">{{ tool.name }}</span>
+            <span class="item-arrow">
+              <m-svg name="chevron-right" />
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -42,6 +43,9 @@ import { ref, computed } from 'vue'
 import MSvg from '@/components/MSvg.vue'
 import ToolCallDetail from './ToolCallDetail.vue'
 
+defineOptions({
+  inheritAttrs: false
+})
 const props = defineProps<{
   node: {
     type: 'toolcalls'
@@ -57,23 +61,28 @@ const expanded = ref(false)
 const detailVisible = ref(false)
 const selectedCallId = ref('')
 
-const callIds = computed<string[]>(() => {
+// 解析 props.node.content 获取 tool 列表
+const parsedData = computed(() => {
   try {
     const content = props.node.content || '{}'
-    const parsed = JSON.parse(content)
-    return parsed.call_ids || []
+    return JSON.parse(content)
   } catch {
-    return []
+    return { tools: [], count: 0, loading: false }
   }
 })
 
-const isLoading = computed(() => props.node.loading || false)
+// 解析出的工具列表数据
+const toolsList = computed(() => parsedData.value.tools || [])
 
+// 是否处于加载状态
+const isLoading = computed(() => props.node.loading || parsedData.value.loading || false)
+
+// 标题动态显示
 const title = computed(() => {
   if (isLoading.value) {
-    return callIds.value.length > 0 ? '工具调用中…' : '工具调用中…'
+    return toolsList.value.length > 0 ? `正在调用工具...` : '正在准备调用工具...'
   }
-  return '工具调用'
+  return `已调用工具`
 })
 
 function toggleExpand() {
@@ -85,17 +94,16 @@ function openDetail(callId: string) {
   detailVisible.value = true
 }
 
-// 状态可以从全局 store 获取，这里简化处理
-function getStatusClass(callId: string): string {
+// 根据工具状态渲染类名
+function getStatusClass(tool: { call_id: string; name: string; streaming: boolean }) {
+  if (tool.streaming) return 'status-calling'
   return 'status-success'
 }
 
-function getStatusIcon(callId: string): string {
+// 根据工具状态渲染图标
+function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean }) {
+  if (tool.streaming) return 'spinner'
   return 'check'
-}
-
-function getToolName(callId: string): string {
-  return `工具 #${callId.slice(-6)}`
 }
 </script>
 
@@ -118,6 +126,10 @@ function getToolName(callId: string): string {
   50% { opacity: 0.7; }
 }
 
+.toolcalls-block.expanded .toolcalls-summary {
+  background: rgba(99, 102, 241, 0.1);
+}
+
 .toolcalls-summary {
   display: flex;
   align-items: center;
@@ -125,22 +137,40 @@ function getToolName(callId: string): string {
   cursor: pointer;
   user-select: none;
   gap: 10px;
+  transition: background 0.2s;
 }
 
 .toolcalls-summary:hover {
   background: rgba(99, 102, 241, 0.05);
 }
 
-.summary-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--primary-color, #3b82f6);
-  flex-shrink: 0;
+.toolcalls-summary::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  /* 三角形大小 */
+  border-top: 0.6em solid transparent;
+  border-bottom: 0.6em solid transparent;
+  border-left: 0.9em solid currentColor;   /* 使用当前文字颜色 */
+  margin-right: 0.4em;
+  transition: transform 0.3s ease;
+  vertical-align: middle;
+  position: relative;
 }
 
+.toolcalls-block.expanded .toolcalls-summary::before {
+  transform: rotate(90deg);
+}
+.summary-icon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-primary);
+}
 .summary-text {
   font-weight: 600;
-  font-size: 15px;
   color: var(--text-primary);
   flex: 1;
 }
@@ -153,24 +183,30 @@ function getToolName(callId: string): string {
   border-radius: 12px;
 }
 
-.expand-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--text-secondary);
-  transition: transform 0.3s ease;
-  flex-shrink: 0;
+/* ---- 折叠容器 ---- */
+.toolcalls-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+  overflow: hidden;
 }
 
-.expand-icon.expanded {
-  transform: rotate(180deg);
+.toolcalls-container > .toolcalls-inner {
+  min-height: 0;
 }
 
+.toolcalls-block.expanded .toolcalls-container {
+  grid-template-rows: 1fr;
+}
+
+/* ---- 列表样式（与原来一致） ---- */
 .toolcalls-list {
   border-top: 1px solid var(--border-color);
   padding: 8px;
 }
 
 .toolcall-item {
+  width:200px;
   display: flex;
   align-items: center;
   padding: 10px 12px;
@@ -188,6 +224,10 @@ function getToolName(callId: string): string {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .item-status.status-success { color: #52c41a; }

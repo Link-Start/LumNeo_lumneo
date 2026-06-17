@@ -74,16 +74,6 @@ async def init_db():
             FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
         )
     """)
-    
-    # 创建索引
-    await db.execute("""
-        CREATE INDEX IF NOT EXISTS idx_tool_calls_message_id 
-        ON tool_calls(message_id)
-    """)
-    await db.execute("""
-        CREATE INDEX IF NOT EXISTS idx_tool_calls_call_id 
-        ON tool_calls(call_id)
-    """)
 
     await db.commit()
     await db.close()

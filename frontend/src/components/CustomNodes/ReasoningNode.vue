@@ -1,7 +1,10 @@
 <template>
   <div class="reasoning-block" :data-reasoning="isExpanded ? 'open' : undefined">
     <div class="reasoning-summary no-select" @click="toggle">
-      {{ summaryText }}
+      <span class="summary-icon">
+        <m-svg name="thinking" :size="20"/>
+      </span>
+      <span class="summary-text">{{ summaryText }}</span>
     </div>
     <div class="reasoning-container">
       <div class="reasoning-inner">
@@ -25,6 +28,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import MSvg from '@/components/MSvg.vue'
 import MarkdownRender from 'markstream-vue'
 
 const props = defineProps<{
@@ -77,13 +81,20 @@ function toggle() {
 }
 .reasoning-block .reasoning-summary {
   font-weight: 600;
-  padding: 10px;
   font-size: 16px!important;
   color: var(--thinking-text);
   cursor: pointer;
   user-select: none;
   position: relative;
-  padding-left:40px;
+}
+.reasoning-summary {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  gap: 10px;
+  transition: background 0.2s;
 }
 .reasoning-block .reasoning-summary:hover {
   background: rgba(99, 102, 241, 0.05);
@@ -108,25 +119,16 @@ function toggle() {
   transition: transform 0.3s ease;
   vertical-align: middle;
   position: relative;
-  left: -26px;
 }
-.reasoning-summary::after {
-  content: '';
-  position: absolute;
-  left: 34px;
-  top: calc(50% - 0.6em);
-  width: 1.2em;
-  height: 1.2em;
-  mask-image: url('/svg/thinking.svg');
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  background-color: #fff;
-  -webkit-mask-image: url('/svg/thinking.svg');
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
+.summary-icon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--thinking-text);
 }
+
+
 .reasoning-container {
   font-size: 0.9rem;
   color: var(--text-secondary);

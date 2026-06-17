@@ -300,6 +300,8 @@ watch(() => props.streamingContent, async () => {
   }
 })
 
+let resizeObserver: ResizeObserver | null = null
+
 onMounted(() => {
   setInfographicLoader(() => import('@antv/infographic'))
   setCustomComponents('chat', {
@@ -312,10 +314,19 @@ onMounted(() => {
   })
   // 初始化时滚动到底部
   nextTick(() => scrollToLatest())
+
+  if (scrollContainerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      // 尺寸变化时，重新计算是否在底部
+      showScrollBtn.value = !isAtEnd()
+    })
+    resizeObserver.observe(scrollContainerRef.value)
+  }
 })
 
 onUnmounted(() => {
   removeCustomComponents('chat')
+  resizeObserver?.disconnect()
 })
 </script>
 
