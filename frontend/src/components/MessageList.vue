@@ -144,12 +144,11 @@ import svgLoading from '@/components-svg/svgLoading.vue'
 import mSvg from '@/components/MSvg.vue'
 import ReasoningNode from '@/components/CustomNodes/ReasoningNode.vue'
 import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
-import ToolPreviewNode from '@/components/CustomNodes/ToolPreviewNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
 import ImageNode from '@/components/CustomNodes/ImageNode.vue'
 import LinkNode from '@/components/CustomNodes/LinkNode.vue'
 
-const customHtmlTags = ['reasoning', 'toolcalls', 'toolpreview', 'tokenusage']
+const customHtmlTags = ['reasoning', 'toolcalls', 'tokenusage']
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
@@ -263,12 +262,6 @@ function scrollToLatestSmooth(duration: number = 400) {
   scrollAnimationId = requestAnimationFrame(animate)
 }
 
-// function safeProcessContent(raw: string, isStreaming: boolean): string {
-//   // 移除非法的连续强调符号（超过 10 个连续的 * 或 _）
-//   const sanitized = raw.replace(/([*_]){10,}/g, (match, char) => char.repeat(3))
-//   return processMessageContent(sanitized, isStreaming)
-// }
-
 // 生成 item key
 function getItemKey(msg: any, index: number|string): string {
   if (msg.__streaming) return `streaming-${index}`
@@ -308,7 +301,6 @@ onMounted(() => {
   setCustomComponents('chat', {
     reasoning: ReasoningNode,
     toolcalls: ToolCallsNode,
-    toolpreview: ToolPreviewNode,
     tokenusage: TokenUsageNode,
     image: ImageNode,
     link: LinkNode
@@ -392,8 +384,7 @@ onUnmounted(() => {
 }
 
 .bubble {
-  padding: 6px;
-  border-radius: 12px;
+  border-radius: 8px;
   backdrop-filter: blur(6px);
   word-break: break-word;
   position: relative;
@@ -413,7 +404,7 @@ onUnmounted(() => {
 }
 .user-content {
   max-height: 200px;
-  padding: 6px;
+  padding: 12px;
   overflow-y: auto;
   white-space: pre-wrap;
 }
@@ -422,6 +413,7 @@ onUnmounted(() => {
 
 .streaming {
   border: 1px solid var(--accent);
+  padding: 12px;
   animation: breathe .8s ease-in-out infinite;
 }
 

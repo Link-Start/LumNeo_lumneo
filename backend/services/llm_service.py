@@ -2,7 +2,6 @@
 import uuid
 import json
 import time
-import base64
 from fastapi import Request
 from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
@@ -104,9 +103,9 @@ class LLMService:
         last_step_generation_time = 0.0
 
         MAX_STEPS = 60
-        MAX_CONSECUTIVE_FAILURES = 3      # ← 新增：最多连续失败次数
-        consecutive_failures = 0          # ← 新增：连续失败计数
-        force_final = False               # ← 新增：强制进入最终总结的标志
+        MAX_CONSECUTIVE_FAILURES = 3
+        consecutive_failures = 0
+        force_final = False
 
         for step in range(MAX_STEPS):
             if request and await request.is_disconnected():
@@ -116,9 +115,7 @@ class LLMService:
             reasoning_buffer = ""
             in_reasoning = False
 
-            # 当前步骤的 usage 记录（会在收到 usage chunk 时填充）
             step_usage_record = None
-            # 当前步骤从第一个 token 开始计时的生成时间
             step_generation_time = 0.0
 
             kwargs = {
@@ -130,17 +127,22 @@ class LLMService:
                 "frequency_penalty": params.get('frequency_penalty', 0.0),
                 "presence_penalty": params.get('presence_penalty', 0.0),
                 "stream_options": {"include_usage": True},
-                "extra_body": {
-                    "top_k": params.get('top_k', 20),
-                    "chat_template_kwargs": {
-                        "add_generation_prompt": True, 
-                        "enable_thinking": self.thinking == "enabled", 
-                        "preserve_thinking": True
-                    },
-                    "enable_thinking": self.thinking == "enabled",
-                    "preserve_thinking": True,
+            }
+
+            extra_body = {
+                "top_k": params.get('top_k', 20),
+                "chat_template_kwargs": {
+                    "add_generation_prompt": True,
                 }
             }
+
+            if self.thinking == "enabled":
+                extra_body["enable_thinking"] = True
+                extra_body["preserve_thinking"] = True
+                extra_body["chat_template_kwargs"]["enable_thinking"] = True
+                extra_body["chat_template_kwargs"]["preserve_thinking"] = True
+
+            kwargs["extra_body"] = extra_body
 
             # 连续失败上限或达到最大步数，都强制让模型直接总结
             if force_final or step == MAX_STEPS - 1:
@@ -156,9 +158,7 @@ class LLMService:
                                 "直接回答我的问题并进行最终总结。")
                 })
                 kwargs["messages"] = current_messages
-                # 关键：不再提供工具列表
                 tools = None
-                # 重置标志，避免重复添加系统消息
                 force_final = False
             elif tools:
                 kwargs["tools"] = tools
@@ -172,12 +172,13 @@ class LLMService:
 
             first_token_time = None
             tool_preview_active = {}
+            tool_calls_started = False
 
             async for chunk in response:
                 if request and await request.is_disconnected():
                     break
 
-                # ---------- usage 收集（无论 choices 是否存在，都处理）----------
+                # ---------- usage 收集 ----------
                 if hasattr(chunk, 'usage') and chunk.usage:
                     step_usage = chunk.usage
                     try:
@@ -185,7 +186,6 @@ class LLMService:
                     except AttributeError:
                         su = dict(step_usage)
 
-                    # 累加到全步骤总计费 token
                     total_usage_all_steps["prompt_tokens"] += su.get("prompt_tokens", 0) or 0
                     total_usage_all_steps["completion_tokens"] += su.get("completion_tokens", 0) or 0
                     total_usage_all_steps["total_tokens"] += su.get("total_tokens", 0) or 0
@@ -195,7 +195,6 @@ class LLMService:
                         total_usage_all_steps["completion_tokens_details"][k] = \
                             total_usage_all_steps["completion_tokens_details"].get(k, 0) + (v or 0)
 
-                    # 保存本步 usage（可能会被同一步内多次覆盖，最终保留最后一个）
                     step_usage_record = {
                         "prompt_tokens": su.get("prompt_tokens", 0) or 0,
                         "completion_tokens": su.get("completion_tokens", 0) or 0,
@@ -233,32 +232,35 @@ class LLMService:
                     in_reasoning = False
 
                 if tool_calls_data:
+                    if not tool_calls_started:
+                        tool_calls_started = True
+                        yield "\n<!--tool_calls:start-->"
+
                     for tc_delta in tool_calls_data:
                         idx = getattr(tc_delta, 'index', None)
                         if idx is None:
                             idx = tc_delta.id if tc_delta.id else str(uuid.uuid4())
 
                         if idx not in tool_preview_active and tc_delta.function and tc_delta.function.name:
-                            import uuid
                             call_id = str(uuid.uuid4())
                             func_name = tc_delta.function.name
-                            # 生成唯一 call_id
-                            call_id = str(uuid.uuid4())
                             tool_preview_active[idx] = {
                                 'call_id': call_id,
                                 'name': func_name,
-                                'db_created': False
+                                'db_created': False,
+                                'preview_sent': True
                             }
                             if idx in tool_calls_by_index:
                                 tool_calls_by_index[idx]['call_id'] = call_id
                             else:
-                                # 防御：万一 tool_calls_by_index 还没建，临时补一个
                                 tool_calls_by_index[idx] = {
                                     "id": None, "type": "function", "function": {"name": "", "arguments": ""},
                                     "call_id": call_id
                                 }
 
-                            # 创建数据库记录（使用真实 call_id）
+                            yield f"<!--tool_preview:start:{call_id}:{func_name}-->"
+
+                            # 创建数据库记录
                             if message_id:
                                 try:
                                     await create_tool_call(
@@ -281,7 +283,6 @@ class LLMService:
                         if tc_delta.id:
                             target["id"] = tc_delta.id
                         if tc_delta.function:
-                            # 只在 name 未赋值时赋予，避免重复拼接
                             if tc_delta.function.name and not target["function"]["name"]:
                                 target["function"]["name"] = tc_delta.function.name
                             arg_delta = tc_delta.function.arguments or ""
@@ -293,14 +294,12 @@ class LLMService:
             # 记录本步骤生成时间
             if first_token_time is not None:
                 step_generation_time = time.time() - first_token_time
-                # 将步骤时间赋值给最后一步记录变量（下一步的循环会覆盖）
                 last_step_generation_time = step_generation_time
 
             if in_reasoning:
                 reasoning_time = time.time() - reasoning_start_time
                 yield f"<!--reasoning:end:{reasoning_time:.2f}-->"
 
-            # 将收集到的 usage 记录赋给最后一步
             if step_usage_record:
                 last_step_usage = step_usage_record
 
@@ -310,9 +309,8 @@ class LLMService:
                 if tc.get("id"):
                     tool_calls[tc["id"]] = tc
                 else:
-                    temp_id = f"call_{idx}"
-                    tc["id"] = temp_id
-                    tool_calls[temp_id] = tc
+                    print(f"[ERROR] 工具 {tc['function']['name']} 缺失 ID，可能流式解析异常，跳过")
+                    continue
 
             if tool_calls and request and await request.is_disconnected():
                 break
@@ -324,38 +322,39 @@ class LLMService:
             valid_calls = {}
             for idx, tc in tool_calls_by_index.items():
                 if tc["function"]["name"].strip():
-                    valid_calls[idx] = tc  # ✅ 使用整数 idx 作为键
+                    valid_calls[idx] = tc
                 else:
                     yield "\n⚠️ 检测到无效工具调用（名称空白），已忽略。\n"
 
             if not valid_calls:
                 break
 
-            yield f"\n<!--tool_calls:start-->"
+            if not tool_calls_started:
+                yield "\n<!--tool_calls:start-->"
 
             assistant_msg = {
                 "role": "assistant",
                 "content": None,
-                "tool_calls": list(tool_calls.values())  # 使用包含 id 的 tool_calls
+                "tool_calls": list(tool_calls.values())
             }
             current_messages.append(assistant_msg)
 
             # ---------- 执行工具 ----------
             for idx, tc in valid_calls.items():
-                call_id = tc.get('call_id')
-                if not call_id:
-                    print(f"[WARN] 跳过工具 {tc['function']['name']}，因为未找到 call_id")
+                if idx not in tool_preview_active:
+                    print(f"[WARN] 跳过工具 {tc['function']['name']}，因为未找到预览状态")
                     continue
 
-                func_name = tc["function"]["name"]  or "未知工具"
-                raw_args = tc["function"]["arguments"]
-                
-                # ✅ 通过整数 idx 获取之前生成的 UUID call_id
-                call_id = tool_preview_active[idx]['call_id']
+                local_call_id = tool_preview_active[idx]['call_id']
 
-                # 发送轻量标记：使用 call_id 作为唯一标识
-                yield f"<!--tool_preview:start:{call_id}:{func_name}-->"
-                
+                func_name = tc["function"]["name"] or "未知工具"
+                raw_args = tc["function"]["arguments"]
+
+                if not tool_preview_active[idx].get('preview_sent', False):
+                    # 如果上面的流式阶段没有发（可能是非流式或者异常情况），在这里补发
+                    yield f"<!--tool_preview:start:{local_call_id}:{func_name}-->"
+                    tool_preview_active[idx]['preview_sent'] = True
+
                 try:
                     args = json.loads(raw_args) if raw_args else {}
                 except json.JSONDecodeError as e:
@@ -366,7 +365,7 @@ class LLMService:
                 # 更新数据库中的参数
                 if message_id:
                     try:
-                        await update_tool_call_arguments(call_id, args)
+                        await update_tool_call_arguments(local_call_id, args)
                     except Exception as e:
                         print(f"[DB] Failed to update arguments: {e}")
 
@@ -375,7 +374,18 @@ class LLMService:
                 failed = False
                 try:
                     result = await execute_tool(func_name, args, mcp_manager)
-                    if isinstance(result, str) and result.startswith("工具执行出错:"):
+                    if isinstance(result, str):
+                        # 尝试解析 JSON 字符串
+                        try:
+                            result_obj = json.loads(result)
+                            if isinstance(result_obj, dict) and result_obj.get("success") is False:
+                                failed = True
+                        except json.JSONDecodeError:
+                            # 非 JSON 字符串，检查是否为旧版错误提示
+                            if result.startswith("工具执行出错:"):
+                                failed = True
+                    elif isinstance(result, dict) and result.get("success") is False:
+                        # 如果直接返回的是字典对象
                         failed = True
                 except Exception as e:
                     error_msg = str(e)
@@ -391,7 +401,7 @@ class LLMService:
                     try:
                         result_str = str(result)[:20000]
                         await update_tool_call(
-                            call_id=call_id,
+                            call_id=local_call_id,
                             result=result_str,
                             status="error" if failed else "success",
                             execution_time=exec_time_ms,
@@ -403,21 +413,21 @@ class LLMService:
                 # 更新连续失败计数
                 if failed:
                     consecutive_failures += 1
-                    yield f"<!--tool_status:{call_id}:error-->"
+                    yield f"<!--tool_status:{local_call_id}:error-->"
                 else:
                     consecutive_failures = 0
-                    yield f"<!--tool_status:{call_id}:success-->"
+                    yield f"<!--tool_status:{local_call_id}:success-->"
 
-                if idx in tool_preview_active:
-                    call_id = tool_preview_active[idx]['call_id']
-                    yield f"<!--tool_preview:end:{call_id}-->"
-                    del tool_preview_active[idx]
+                yield f"<!--tool_preview:end:{local_call_id}-->"
+                del tool_preview_active[idx]
 
+                # ✅ 修复：使用 local_call_id，避免循环变量残留导致闭包延迟绑定问题
                 current_messages.append({
                     "role": "tool",
-                    "tool_call_id": call_id,
+                    "tool_call_id": local_call_id,
                     "content": str(result)
                 })
+
             yield "<!--tool_calls:end-->"
 
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:

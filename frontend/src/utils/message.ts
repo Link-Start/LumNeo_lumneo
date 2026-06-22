@@ -7,24 +7,13 @@ import type { UploadedFile } from '@/composables/useFileUpload'
 export const localIP = ref('')
 export const uploadDir = ref('')
 
-function escapeMarkdownSensitive(str: string): string {
-  // 对 *、_、`、~ 等可能导致解析器回溯的符号进行转义
-  return str
-    .replace(/\*/g, '\\*')
-    .replace(/_/g, '\\_')
-    .replace(/`/g, '\\`')
-    .replace(/~/g, '\\~')
-}
-
 
 /** 解析思考块和工具调用，输出 markstream-vue 自定义标签格式 */
 /** 解析工具预览标记，输出 <toolpreview> 自定义标签 */
 export function processMessageContent(text: string, isStreaming = false): string {
   if (!text) return ''
-
   let processedText = text
-
-  // 1. 处理思考块（不变）
+  // 1. 处理思考块
   processedText = processedText.replace(
     /<!--reasoning:start-->([\s\S]*?)<!--reasoning:end:(.*?)-->/g,
     (_, content, time) => {
@@ -33,33 +22,27 @@ export function processMessageContent(text: string, isStreaming = false): string
       return `\n\n<reasoning time="${time}">${safeContent}</reasoning>\n\n`
     }
   )
-
   if (isStreaming) {
     const startIdx = processedText.indexOf('<!--reasoning:start-->')
-    if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:-->')) {
+    if (startIdx !== -1 && !processedText.includes('<!--reasoning:end:')) {
       let afterStart = processedText.substring(startIdx + '<!--reasoning:start-->'.length)
       afterStart = afterStart.replace(/```mermaid(\s|$)/g, '```text$1')
       const safeContent = afterStart.replace(/<\/reasoning>/g, '\u003c/reasoning>')
       processedText = processedText.substring(0, startIdx) + `\n\n<reasoning loading="true">${safeContent}`
     }
   }
-
   // 2. 处理工具调用容器
   let match
   let lastIndex = 0
   let toolCallsResult = ''
-  // 核心正则：(捕获 start 到 end，或者 start 到文本末尾)
   const toolCallsRegex = /<!--tool_calls:start-->([\s\S]*?)(?:<!--tool_calls:end-->|$)/g
-
   while ((match = toolCallsRegex.exec(processedText)) !== null) {
     const fullMatch = match[0]
     const innerContent = match[1]
-    
-    // 判断当前是否已经收到 end 标记
+    // 判断当前是否已经收到 tool_calls:end 标记
     const hasEnd = fullMatch.includes('<!--tool_calls:end-->')
-
-    // 1. 解析内部的所有 start (获取 call_id 和 name)
-    const startRegex = /<!--tool_preview:start:([^:]+?)(?::(.*?))?-->/g
+    // 1. 解析内部的所有 tool_preview:start (获取 call_id 和 name)
+    const startRegex = /<!--tool_preview:start:([^:]+):([\s\S]*?)-->/g
     let sMatch
     const toolsMap = new Map<string, { call_id: string; name: string; streaming: boolean; status: string }>()
     while ((sMatch = startRegex.exec(innerContent)) !== null) {
@@ -71,23 +54,26 @@ export function processMessageContent(text: string, isStreaming = false): string
         name = name.replace(/^end:/, '')
       }
       if (!toolsMap.has(call_id)) {
-        // 默认都是 streaming: true
         toolsMap.set(call_id, { call_id, name, streaming: true, status: 'calling' })
       }
     }
-
-    // 2. 如果已经收到 end，解析内部所有的 end 来更新状态 (将已结束的工具设为 streaming: false)
-    if (hasEnd) {
-      const endRegex = /<!--tool_preview:end:([^:]+?)-->/g
-      let eMatch
-      while ((eMatch = endRegex.exec(innerContent)) !== null) {
-        const call_id = eMatch[1]
-        if (toolsMap.has(call_id)) {
-          toolsMap.get(call_id)!.streaming = false
+    // 无论是否收到 tool_calls:end，都解析 tool_preview:end
+    // 因为在流式传输中，单个工具可能已经执行完毕（已收到 tool_preview:end），
+    // 但整个 tool_calls 块的 end 标记可能还没到
+    const endRegex = /<!--tool_preview:end:([^:]+?)-->/g
+    let eMatch
+    while ((eMatch = endRegex.exec(innerContent)) !== null) {
+      const call_id = eMatch[1]
+      if (toolsMap.has(call_id)) {
+        const tool = toolsMap.get(call_id)!
+        tool.streaming = false
+        // 如果 status 仍为 'calling'，说明后端没发 error，默认标记为 success
+        if (tool.status === 'calling') {
+          tool.status = 'success'
         }
       }
     }
-
+    // 解析 tool_status 标记（更新工具状态）
     const statusRegex = /<!--tool_status:([^:]+?):([^:]+?)-->/g
     let statusMatch
     while ((statusMatch = statusRegex.exec(innerContent)) !== null) {
@@ -95,34 +81,42 @@ export function processMessageContent(text: string, isStreaming = false): string
       const status = statusMatch[2] // 'success' 或 'error'
       if (toolsMap.has(call_id)) {
         toolsMap.get(call_id)!.status = status
+        // 收到 status 标记说明工具已执行完毕，同步更新 streaming
+        if (status === 'success' || status === 'error') {
+          toolsMap.get(call_id)!.streaming = false
+        }
       }
     }
-
+    // 如果 hasEnd 为 true，将所有仍处于 streaming 状态的工具强制设为已完成
+    if (hasEnd) {
+      toolsMap.forEach((tool) => {
+        if (tool.streaming) {
+          tool.streaming = false
+          if (tool.status === 'calling') {
+            tool.status = 'success'
+          }
+        }
+      })
+    }
     const toolsData = Array.from(toolsMap.values())
-    // 判断是否有工具还在 streaming 状态
     const loading = toolsData.some(t => t.streaming)
-
     const tagContent = JSON.stringify({
       tools: toolsData,
       count: toolsData.length,
       loading: loading
     })
-
     const replacement = `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
     toolCallsResult += processedText.substring(lastIndex, match.index) + replacement
     lastIndex = match.index + fullMatch.length
   }
-
   // 拼接剩余未匹配的文本
   if (lastIndex < processedText.length) {
     toolCallsResult += processedText.substring(lastIndex)
   }
   processedText = toolCallsResult
-
   // 保底清理：清理可能残留在外面的 tool_preview 和 tool_call 标记
   processedText = processedText.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
   processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
-
   // 3. 处理 Token 用量
   processedText = processedText.replace(
     /<!--token_usage:(.*?)-->/g,
@@ -139,10 +133,8 @@ export function processMessageContent(text: string, isStreaming = false): string
       }
     }
   )
-
   // 清理多余换行
   processedText = processedText.replace(/\n{3,}/g, '\n\n')
-  
   return processedText.trim()
 }
 

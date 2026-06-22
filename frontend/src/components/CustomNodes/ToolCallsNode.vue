@@ -23,7 +23,7 @@
             @click.stop="openDetail(tool.call_id)"
           >
             <span class="item-status" :class="getStatusClass(tool)">
-              <m-svg :name="getStatusIcon(tool)" />
+              <m-svg :name="getStatusIcon(tool)" :size="tool.status === 'error' ? 20 : 16"/>
             </span>
             <span class="item-name">{{ tool.name }} #{{ (index as number)+1 }}</span>
             <span class="item-arrow">
@@ -91,6 +91,11 @@ const isLoading = computed(() => {
 
 // 标题动态显示
 const title = computed(() => {
+  // ✅ 新增兜底：如果正在 loading，但列表为空，说明参数还在生成中
+  if (isLoading.value && toolsList.value.length === 0) {
+    return '正在准备调用工具...'
+  }
+
   if (isLoading.value) {
     // 1. 如果正在准备（还没有获取到工具名称）
     if (activeTools.value.length === 0) {
@@ -100,12 +105,14 @@ const title = computed(() => {
     if (activeTools.value.length === 1) {
       return `正在调用【${activeTools.value[0].name}】...`
     }
-    // 3. 如果有多个同时调用（极少见），显示调用数量
+    // 3. 如果有多个同时调用
     return `正在调用 ${activeTools.value.length} 个工具...`
   }
+  
   // 4. 工具全部执行完毕后的状态
   return `已调用工具`
 })
+
 
 function toggleExpand() {
   expanded.value = !expanded.value
@@ -124,8 +131,9 @@ function getStatusClass(tool: { call_id: string; name: string; streaming: boolea
 }
 
 // 根据工具状态渲染图标
-function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean }) {
+function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean, status?: string }) {
   if (tool.streaming) return 'spinner'
+  if (tool.status === 'error') return 'error'
   return 'check'
 }
 </script>

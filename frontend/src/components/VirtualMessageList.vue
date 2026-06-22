@@ -149,12 +149,11 @@ import svgLoading from '@/components-svg/svgLoading.vue'
 import mSvg from '@/components/MSvg.vue'
 import ReasoningNode from '@/components/CustomNodes/ReasoningNode.vue'
 import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
-import ToolPreviewNode from '@/components/CustomNodes/ToolPreviewNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
 import ImageNode from '@/components/CustomNodes/ImageNode.vue'
 import LinkNode from '@/components/CustomNodes/LinkNode.vue'
 
-const customHtmlTags = ['reasoning', 'toolcalls', 'toolpreview', 'tokenusage']
+const customHtmlTags = ['reasoning', 'toolcalls', 'tokenusage']
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
@@ -295,7 +294,6 @@ onMounted(() => {
   setCustomComponents('chat', {
     reasoning: ReasoningNode,
     toolcalls: ToolCallsNode,
-    toolpreview: ToolPreviewNode,
     tokenusage: TokenUsageNode,
     image: ImageNode,
     link: LinkNode
