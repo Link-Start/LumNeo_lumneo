@@ -138,7 +138,7 @@ function toggle() {
   overflow: hidden;
 }
 .reasoning-container > .reasoning-inner {
-  min-height: 0; /* 必须，否则 grid 不会折叠 */
+  min-height: 0;
 }
 .reasoning-block[data-reasoning="open"] .reasoning-summary {
   background: rgba(99, 102, 241, 0.1);
