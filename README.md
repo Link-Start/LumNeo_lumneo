@@ -18,6 +18,9 @@ LumNeo 是一款跨平台 AI 桌面应用，将**本地隐私**与**云端算力
   <img src="screenshots/dark.png"  width="45%" alt="深色模式">
   <img src="screenshots/light.png" width="45%" alt="浅色模式">
 </p>
+<p align="center">
+  <video src="screenshots/v0.mp4" muted autoplay width="100%" alt="演示视频">
+</p>
 
 ---
 
