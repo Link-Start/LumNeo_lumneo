@@ -15,8 +15,8 @@
 LumNeo 是一款跨平台 AI 桌面应用，将**本地隐私**与**云端算力**融为一体。它不只是对话框，更是可自由塑造的**智能体工作台**——支持多角色切换、文件读写解析、MCP 工具扩展，让每个想法都有专属的执行者。界面现代优雅，桌面与移动端均完美适配，让 AI 协作如呼吸般自然。
 
 <p align="center">
-  <img src="screenshots/light.jpg" width="45%" alt="浅色模式">
-  <img src="screenshots/dark.jpg"  width="45%" alt="深色模式">
+  <img src="screenshots/dark.png"  width="45%" alt="深色模式">
+  <img src="screenshots/light.png" width="45%" alt="浅色模式">
 </p>
 
 ---
@@ -55,7 +55,7 @@ LumNeo 不仅仅是一个生产力工具，还准备打造一个不断进化的*
 
 | 阶段 | 版本 | 核心目标 | 状态 |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | **v1.0** | **极致生产力底座**<br>实现多模态交互基础，开放 MCP 接口生态，打造最强本地 AI 助手。 |  ✅ |
+| **Phase 1** | **v1.0** | **极致生产力底座**<br>实现多模态交互基础，开放 MCP 接口生态，打造轻量级本地 AI 助手。 |  ✅ |
 | **Phase 2** | **v2.0** | **进化为“数字生命体”**<br>赋予 AI 长期记忆、个性化性格与主动服务能力，让它从工具变为真正的伙伴。 |  规划中 |
 | **Phase 3** | **Future** | **打破虚实边界**<br>接入多模态感知（视觉、语音）与 IoT 硬件控制，实现真正的 AIoT 智能交互（现实版贾维斯）。 |  规划中 |
 
@@ -188,7 +188,7 @@ build.bat
 
 | 深色主题 | 浅色主题 |
 |---------|---------|
-| ![深色](screenshots/dark.jpg) | ![浅色](screenshots/light.jpg) |
+| ![深色](screenshots/dark.png) | ![浅色](screenshots/light.png) |
 
 更多截图请查看 [screenshots](screenshots/) 目录。
 
