@@ -15,8 +15,8 @@
 LumNeo 是一款跨平台 AI 桌面应用，将**本地隐私**与**云端算力**融为一体。它不只是对话框，更是可自由塑造的**智能体工作台**——支持多角色切换、文件读写解析、MCP 工具扩展，让每个想法都有专属的执行者。界面现代优雅，桌面与移动端均完美适配，让 AI 协作如呼吸般自然。
 
 <p align="center">
-  <img src="screenshots/dark.png"  width="45%" alt="深色模式">
-  <img src="screenshots/light.png" width="45%" alt="浅色模式">
+  <img src="screenshots/dark.png"  width="50%" alt="深色模式">
+  <img src="screenshots/light.png" width="50%" alt="浅色模式">
 </p>
 <p align="center">
   <img src="screenshots/p5.gif" width="100%" alt="演示视频">
