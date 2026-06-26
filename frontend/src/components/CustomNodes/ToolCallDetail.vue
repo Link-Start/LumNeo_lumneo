@@ -17,7 +17,9 @@
         <!-- 工具描述 -->
         <div class="detail-section">
           <div class="section-label">工具描述</div>
-          <div class="tool-description">{{ toolStore.toolsInfo[data.tool_name].description || '无' }}</div>
+          <div class="tool-description">
+            {{ toolStore.toolsInfo[data.tool_name]?.description || '无' }}
+          </div>
         </div>
         <!-- 状态 -->
         <div class="detail-section">
@@ -100,7 +102,7 @@ const loading = ref(false)
 const copied = ref(false)
 
 const title = computed(() => {
-  return data.value ? `${toolStore.toolsInfo[data.value.tool_name].title || data.value.tool_name} - 详情` : '工具调用详情'
+  return data.value ? `${toolStore.toolsInfo[data.value.tool_name]?.title || data.value.tool_name} - 详情` : '工具调用详情'
 })
 
 const statusType = computed(() => {
@@ -187,6 +189,10 @@ function handleCopy(content: string) {
 
 .detail-section {
   margin-bottom: 20px;
+}
+.tool-description {
+    max-height: 80px;
+    overflow: auto;
 }
 
 .section-label {

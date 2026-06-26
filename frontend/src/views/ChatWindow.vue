@@ -444,6 +444,21 @@ watch(() => selected.value, (newVal) => {
   localStorage.setItem('thinking', newVal ? 'true' : 'false')
 })
 
+async function waitForBackend() {
+  try {
+    const res = await fetch('/api/wait-ready')
+    const data = await res.json()
+    if (data.ready) {
+      await toolStore.loadToolsInfo()
+    } else {
+      console.error('❌ 后台初始化失败:', data.error)
+      // 显示错误提示
+    }
+  } catch (err) {
+    console.error('等待后台就绪时网络异常:', err)
+  }
+}
+
 onMounted(async () => {
   checkMobile()
   let resizeTimer: ReturnType<typeof setTimeout>
@@ -461,10 +476,10 @@ onMounted(async () => {
     uploadDir.value = data.upload_dir
     setQRCodeUrl()
   })
+  waitForBackend()
   setTimeout(() => {
     isRender.value = true
   }, 150)
-  await toolStore.loadToolsInfo()
 })
 
 onUnmounted(() => {
