@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from backend.services.llm_service import LLMService
-from backend.services.tools import get_local_tools, get_mcp_tools
+from backend.services.tools import get_local_tools, get_mcp_tools, get_all_tools
 from backend.database import get_db
 from backend.utils.base import resource_path, get_current_time, get_local_ip
 from config_loader import config
@@ -178,13 +178,10 @@ async def get_tools(mcp_manager=Depends(get_mcp_manager)):
     return {"tools": enable_tools}
 
 @router.get("/tools-info")
-async def get_tools_titles(mcp_manager=Depends(get_mcp_manager)):
-    local_tools = get_local_tools()
-    enable_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
-    mcp_tools = await get_mcp_tools(mcp_manager)
-    enable_tools.extend(mcp_tools)
+async def get_tools_info(mcp_manager=Depends(get_mcp_manager)):
+    all_tools = await get_all_tools(mcp_manager)
     tool_json = {}
-    for tool in enable_tools:
+    for tool in all_tools:
         tool_json[tool["function"]["name"]] = {
             'title': tool["function"]["title"],
             'description': tool["function"]["description"],
