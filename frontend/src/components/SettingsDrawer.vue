@@ -74,7 +74,7 @@
             <n-divider />
             <h3 style="margin-bottom: 12px;">角色管理</h3>
             <n-select
-              v-model:value="profileStore.activeProfileId"
+              v-model:value="profileId"
               :options="profileOptions"
               placeholder="选择角色"
               clearable
@@ -83,7 +83,15 @@
             <n-space>
               <n-button @click="openCreateProfile" size="small" secondary type="primary">新建角色</n-button>
               <n-button @click="openEditProfile" size="small" secondary :disabled="!profileStore.activeProfile">编辑</n-button>
-              <n-button @click="deleteCurrentProfile" size="small" secondary type="error" :disabled="!profileStore.activeProfile">删除</n-button>
+              <n-popconfirm
+                @positive-click="deleteCurrentProfile"
+              >
+                <template #trigger>
+                  <n-button size="small" secondary type="error" :disabled="!profileStore.activeProfile">删除</n-button>
+                </template>
+                确定删除当前角色吗？
+              </n-popconfirm>
+              
             </n-space>
           </div>
         </n-tab-pane>
@@ -163,7 +171,7 @@
               <n-checkbox v-for="tool in allTools" :key="tool.function.name" :value="tool.function.name">
                 <n-popover trigger="hover" placement="right" :width="400">
                   <template #trigger>
-                    <span style="cursor: pointer;">{{ tool.function.name }}</span>
+                    <span style="cursor: pointer;">{{tool.function.title}} - {{ tool.function.name }}</span>
                   </template>
                   <div style="word-break: break-word; white-space: pre-wrap;">
                     {{ tool.function.description }}
@@ -309,10 +317,22 @@ const chatStore = useChatStore()
 const configStore = useConfigStore()
 const profileStore = useProfileStore()
 const version = ref(import.meta.env.VITE_APP_VERSION)
+const profileId = ref()
 
 // 对话框状态
 const showModelDialog = ref(false)
 const editingModelId = ref<string | null>(null)
+
+watch(() => props.show, (val) => {
+  if (val) {
+    profileId.value = profileStore.activeProfileId
+  }
+})
+
+watch(() => profileStore.activeProfileId, (val) => {
+  profileId.value = val
+})
+
 const modelForm = reactive<{
   name: string
   type: 'local' | 'online'
@@ -467,7 +487,7 @@ async function saveWorkspace(path: string, isMsg: boolean = true) {
 }
 
 // ---------- 角色管理 ----------
-const allTools = ref<{ function: { name: string; description: string } }[]>([])
+const allTools = ref<{ function: { name: string; title: string; description: string } }[]>([])
 
 // 加载全局工具列表
 async function loadTools() {

@@ -31,7 +31,10 @@ export const useProfileStore = defineStore('profile', () => {
     }))
     profiles.value = data
     if (!activeProfileId.value || !profiles.value.find(p => p.id === activeProfileId.value)) {
-      if (profiles.value.length > 0) activeProfileId.value = profiles.value[0].id
+      if (profiles.value.length > 0) {
+        const pid = localStorage.getItem('activeProfileId')
+        activeProfileId.value = pid ? Number(pid) : profiles.value[0].id
+      }
     }
   }
 
@@ -99,6 +102,7 @@ export const useProfileStore = defineStore('profile', () => {
     profiles.value = profiles.value.filter(p => p.id !== id)
     if (activeProfileId.value === id) {
       activeProfileId.value = profiles.value[0]?.id ?? null
+      localStorage.setItem('activeProfileId', activeProfileId.value?.toString() ?? '')
     }
   }
 

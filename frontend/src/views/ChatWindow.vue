@@ -121,6 +121,7 @@
                 placeholder="选择角色"
                 style="width: 150px; margin-right: 12px;"
                 clearable
+                @update:value="switchActiveProfile"
               />
             </div>
           </n-flex>
@@ -251,6 +252,7 @@ import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@v
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
+import { useToolStore } from '@/stores/tools'
 import SettingsDrawer from '@/components/SettingsDrawer.vue'
 import Introduction from '@/components/Introduction.vue'
 import mSvg from '@/components/MSvg.vue'
@@ -269,6 +271,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const configStore = useConfigStore()
 const profileStore = useProfileStore()
+const toolStore = useToolStore()
 
 const isMobile = ref(false)
 const sidebarOpen = ref(false)
@@ -386,33 +389,6 @@ const onSaveEdit = async () => {
 // ========== 动效与初始化 ==========
 const isRender = ref(false)
 
-onMounted(async () => {
-  checkMobile()
-  let resizeTimer: ReturnType<typeof setTimeout>
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => {
-      checkMobile()
-    }, 150)
-  })
-  window.addEventListener('keydown', onKeydown)
-  await profileStore.loadProfiles()
-  fetch('/api/system-info').then(async (res) => {
-    const data = await res.json()
-    localIP.value = data.local_ip
-    uploadDir.value = data.upload_dir
-    setQRCodeUrl()
-  })
-  setTimeout(() => {
-    isRender.value = true
-  }, 150)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
-  window.removeEventListener('keydown', onKeydown)
-})
-
 const showWelcome = ref(false)
 
 watch(() => route.params.id, (newId) => {
@@ -442,6 +418,10 @@ const profileOptions = computed(() =>
   profileStore.profiles.map((p) => ({ label: p.name, value: p.id }))
 )
 
+const switchActiveProfile = (profileId: string) => {
+  localStorage.setItem('activeProfileId', profileId)
+}
+
 function setQRCodeUrl() {
   qrCodeUrl.value = window.location.href.replace(/\b(?:localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, localIP.value)
 }
@@ -462,6 +442,34 @@ const openChat = (chatId: string) => {
 
 watch(() => selected.value, (newVal) => {
   localStorage.setItem('thinking', newVal ? 'true' : 'false')
+})
+
+onMounted(async () => {
+  checkMobile()
+  let resizeTimer: ReturnType<typeof setTimeout>
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => {
+      checkMobile()
+    }, 150)
+  })
+  window.addEventListener('keydown', onKeydown)
+  await profileStore.loadProfiles()
+  fetch('/api/system-info').then(async (res) => {
+    const data = await res.json()
+    localIP.value = data.local_ip
+    uploadDir.value = data.upload_dir
+    setQRCodeUrl()
+  })
+  setTimeout(() => {
+    isRender.value = true
+  }, 150)
+  await toolStore.loadToolsInfo()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 

@@ -20,8 +20,10 @@ def load_tools_from_config(config_path: str):
             "type": "function",
             "function": {
                 "name": tool_cfg['name'],
+                "title": tool_cfg['title'],
                 "description": tool_cfg['description'],
                 "parameters": tool_cfg['parameters'],
+                "meta": tool_cfg.get('meta', {})
             }
         })
         # 动态导入函数

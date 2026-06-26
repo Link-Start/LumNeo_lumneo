@@ -14,6 +14,11 @@
           <div class="tool-name-display">{{ data.tool_name }}</div>
         </div>
 
+        <!-- 工具描述 -->
+        <div class="detail-section">
+          <div class="section-label">工具描述</div>
+          <div class="tool-description">{{ toolStore.toolsInfo[data.tool_name].description || '无' }}</div>
+        </div>
         <!-- 状态 -->
         <div class="detail-section">
           <div class="section-label">执行状态</div>
@@ -72,6 +77,7 @@ import { ref, computed, watch } from 'vue'
 import { NModal, NTag, NButton, NSpin } from 'naive-ui'
 import MSvg from '@/components/MSvg.vue'
 import { copyToClipboard } from '@/utils/common'
+import { useToolStore } from '@/stores/tools'
 
 const props = defineProps<{
   callId: string
@@ -81,6 +87,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
 }>()
+
+const toolStore = useToolStore()
 
 const show = computed({
   get: () => props.visible,
@@ -92,7 +100,7 @@ const loading = ref(false)
 const copied = ref(false)
 
 const title = computed(() => {
-  return data.value ? `${data.value.tool_name} - 详情` : '工具调用详情'
+  return data.value ? `${toolStore.toolsInfo[data.value.tool_name].title || data.value.tool_name} - 详情` : '工具调用详情'
 })
 
 const statusType = computed(() => {

@@ -177,6 +177,20 @@ async def get_tools(mcp_manager=Depends(get_mcp_manager)):
     enable_tools.extend(mcp_tools)
     return {"tools": enable_tools}
 
+@router.get("/tools-info")
+async def get_tools_titles(mcp_manager=Depends(get_mcp_manager)):
+    local_tools = get_local_tools()
+    enable_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
+    mcp_tools = await get_mcp_tools(mcp_manager)
+    enable_tools.extend(mcp_tools)
+    tool_json = {}
+    for tool in enable_tools:
+        tool_json[tool["function"]["name"]] = {
+            'title': tool["function"]["title"],
+            'description': tool["function"]["description"],
+        }
+    return tool_json
+
     
 @router.get("/system-info")
 async def get_system_info():

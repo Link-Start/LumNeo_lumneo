@@ -26,7 +26,7 @@
               <span class="item-status" :class="getStatusClass(tool)">
                 <m-svg :name="getStatusIcon(tool)" :size="tool.status === 'error' ? 20 : 16"/>
               </span>
-              <span class="item-name">{{ tool.name }} #{{ (index as number)+1 }}</span>
+              <span class="item-name">{{ toolStore.toolsInfo[tool.name].title || tool.name }} #{{ (index as number)+1 }}</span>
               <span class="item-arrow">
                 <m-svg name="chevron-right" />
               </span>
@@ -47,6 +47,7 @@
 import { ref, computed } from 'vue'
 import MSvg from '@/components/MSvg.vue'
 import ToolCallDetail from './ToolCallDetail.vue'
+import { useToolStore } from '@/stores/tools'
 
 defineOptions({
   inheritAttrs: false
@@ -62,6 +63,7 @@ const props = defineProps<{
   isDark?: boolean
 }>()
 
+const toolStore = useToolStore()
 const expanded = ref(false)
 const detailVisible = ref(false)
 const selectedCallId = ref('')
@@ -105,7 +107,7 @@ const title = computed(() => {
     }
     // 2. 如果只有一个工具正在调用，显示【工具名称】
     if (activeTools.value.length === 1) {
-      return `正在调用【${activeTools.value[0].name}】...`
+      return `正在调用【${toolStore.toolsInfo[activeTools.value[0].name].title || activeTools.value[0].name}】...`
     }
     // 3. 如果有多个同时调用
     return `正在调用 ${activeTools.value.length} 个工具...`

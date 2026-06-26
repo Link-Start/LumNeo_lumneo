@@ -57,6 +57,7 @@ class MCPClientManager:
                 "name": tool.name,
                 "description": tool.description,
                 "input_schema": tool.inputSchema,
+                "annotations": tool.annotations,
             }
             for tool in tools
         ]
@@ -97,6 +98,7 @@ class MCPClientManager:
                     "type": "function",
                     "function": {
                         "name": f"mcp_{server_name}__{tool['name']}",
+                        "title": getattr(tool["annotations"], 'title', '') if tool["annotations"] else '',
                         "description": tool["description"],
                         "parameters": tool["input_schema"],
                     }
