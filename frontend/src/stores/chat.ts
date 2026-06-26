@@ -171,12 +171,28 @@ export const useChatStore = defineStore('chat', () => {
   // 删除消息（本地移除 + 后端删除）
   async function deleteMessage(messageId: number) {
     if (!activeChatId.value) return
-    // 调用后端，只删除单条消息
-    await fetch(`/api/chats/${activeChatId.value}/messages/${messageId}?cascade=false`, {
-      method: 'DELETE'
-    }).catch(e => console.warn('删除消息失败', e))
 
-    // 从本地列表中移除该条消息
+    // 1. 先尝试删除主消息
+    const msgRes = await fetch(`/api/chats/${activeChatId.value}/messages/${messageId}?cascade=false`, {
+      method: 'DELETE'
+    }).catch(e => {
+      console.warn('删除消息请求失败', e)
+      return null
+    })
+
+    // 2. 判断主消息是否真的被删除成功
+    // fetch 只有在网络错误时才会抛异常，所以要检查 ok 状态
+    if (!msgRes || !msgRes.ok) {
+      console.warn('主消息删除失败，取消后续操作')
+      return
+    }
+
+    // 3. 主消息删除成功后，再删除关联的工具调用记录
+    await fetch(`/api/tool-calls/message/${messageId}`, {
+      method: 'DELETE'
+    }).catch(e => console.warn('删除关联工具调用记录失败', e))
+
+    // 4. 更新本地状态：从列表中移除该条消息
     const chat = chats.value.find(c => c.id === activeChatId.value)
     if (chat) {
       chat.messages = chat.messages.filter(m => m.id !== messageId)
