@@ -71,28 +71,31 @@
 
           <!-- ========== 角色管理 ========== -->
           <div v-if="chatStore.enableProfile">
-            <n-divider />
-            <h3 style="margin-bottom: 12px;">角色管理</h3>
-            <n-select
-              v-model:value="profileId"
-              :options="profileOptions"
-              placeholder="选择角色"
-              clearable
-              style="margin-bottom: 12px;"
-            />
-            <n-space>
-              <n-button @click="openCreateProfile" size="small" secondary type="primary">新建角色</n-button>
-              <n-button @click="openEditProfile" size="small" secondary :disabled="!profileStore.activeProfile">编辑</n-button>
-              <n-popconfirm
-                @positive-click="deleteCurrentProfile"
-              >
-                <template #trigger>
-                  <n-button size="small" secondary type="error" :disabled="!profileStore.activeProfile">删除</n-button>
-                </template>
-                确定删除当前角色吗？
-              </n-popconfirm>
-              
-            </n-space>
+            <div>
+              <n-divider />
+              <h3 style="margin-bottom: 12px;">角色管理</h3>
+              <n-select
+                v-model:value="profileId"
+                :options="profileOptions"
+                placeholder="选择角色"
+                clearable
+                style="margin-bottom: 12px;"
+              />
+              <n-space>
+                <n-button @click="openCreateProfile" size="small" secondary type="primary">新建角色</n-button>
+                <n-button @click="openEditProfile" size="small" secondary :disabled="!profileId">编辑</n-button>
+                <n-button @click="openProfileSkills" size="small" secondary :disabled="!profileId">习得技能</n-button>
+                <n-popconfirm
+                  @positive-click="deleteCurrentProfile"
+                >
+                  <template #trigger>
+                    <n-button size="small" secondary type="error" :disabled="!profileId">删除</n-button>
+                  </template>
+                  确定删除当前角色吗？
+                </n-popconfirm>
+                
+              </n-space>
+            </div>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -101,211 +104,29 @@
   </n-drawer>
 
   <!-- 新增/编辑模型对话框 -->
-  <n-modal v-model:show="showModelDialog" :auto-focus="false" preset="dialog" draggable :mask-closable="false" :loading="configStore.loading" :title="editingModelId ? '编辑模型' : '添加模型'"
-    positive-text="保存" negative-text="取消" @positive-click="saveModel">
-    <n-form :model="modelForm" label-placement="left" label-width="80">
-      <n-form-item label="名称" required>
-        <n-input v-model:value="modelForm.name" placeholder="例如：我的 GPT-4" />
-      </n-form-item>
-      <n-form-item label="类型">
-        <n-radio-group v-model:value="modelForm.type">
-          <n-radio value="local">本地模型</n-radio>
-          <n-radio value="online">线上模型</n-radio>
-        </n-radio-group>
-      </n-form-item>
-      <n-form-item label="模型 ID" required>
-        <n-space>
-          <n-select
-            style="width: 240px"
-            v-model:value="modelForm.modelName"
-            :options="modelOptions"
-            filterable
-            placeholder="请选择或输入模型名称"
-            :loading="modelsLoading"
-            @focus="autoFetchModels"
-          />
-          <n-button @click="fetchModels">获取</n-button>
-        </n-space>
-      </n-form-item>
-      <n-form-item label="Base URL">
-        <n-input v-model:value="modelForm.baseUrl" placeholder="http://localhost:1234/v1" />
-      </n-form-item>
-      <n-form-item label="API Key">
-        <n-input v-model:value="modelForm.apiKey" type="password" placeholder="sk-..." />
-      </n-form-item>
-    </n-form>
-  </n-modal>
+  <edit-model-modal v-model:show="showModalVisible" :model-data="editingModel" />
 
   <!-- 新建/编辑角色模态框 -->
-  <n-modal 
-  v-model:show="profileModalVisible" 
-  :auto-focus="false"
-  preset="dialog" 
-  draggable
-  :mask-closable="false"
-  style="max-width:520px;width:96%;" 
-  :title="isEditing ? '编辑角色' : '新建角色'"
-  positive-text="确认"
-  negative-text="关闭"
-  @positive-click="saveProfile"
-  @negative-click="profileModalVisible = false">
-    <n-form :model="profileForm" label-placement="left" label-width="70">
-      <n-form-item label="角色名称">
-        <n-input v-model:value="profileForm.name" placeholder="例如：程序员、生活助手" :maxlength="12" show-count/>
-      </n-form-item>
-      <n-form-item label="角色描述">
-        <n-input
-          v-model:value="profileForm.profile_prompt"
-          type="textarea"
-          placeholder="例如：你是一个专业的 Python 开发者，回答要简洁..."
-          show-count
-          :maxlength="300"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-        />
-      </n-form-item>
-      <n-form-item label="赋予能力">
-        <n-button size="small" style="position:absolute;left:-64px;top:40px;" @click="loadTools">刷新</n-button>
-        <div style="width: 420px; max-height: 200px; overflow-y: auto;">
-          <n-checkbox-group v-model:value="profileForm.tools">
-            <n-space vertical>
-              <n-checkbox v-for="tool in allTools" :key="tool.function.name" :value="tool.function.name">
-                <n-popover trigger="hover" placement="right" :width="400">
-                  <template #trigger>
-                    <span style="cursor: pointer;">{{tool.function.title}} - {{ tool.function.name }}</span>
-                  </template>
-                  <div style="word-break: break-word; white-space: pre-wrap;">
-                    {{ tool.function.description }}
-                  </div>
-                </n-popover>
-              </n-checkbox>
-            </n-space>
-          </n-checkbox-group>
-        </div>
-        <p v-if="allTools.length === 0" style="color: gray;">暂无可用工具，请检查 MCP 服务或工具配置。</p>
-      </n-form-item>
-    </n-form>
-    <n-collapse :default-expanded-names="[]">
-      <n-collapse-item title="高级设置" name="params">
-        <!-- Temperature -->
-        <n-form-item label="温度" label-placement="left" label-width="100">
-          <n-space align="center">
-            <n-slider
-              v-model:value="profileForm.temperature"
-              :min="0"
-              :max="2"
-              :step="0.1"
-              style="width: 200px"
-            />
-            <n-input-number
-              v-model:value="profileForm.temperature"
-              size="small"
-              :min="0"
-              :max="2"
-              :step="0.1"
-              style="width: 100px"
-            />
-          </n-space>
-        </n-form-item>
+  <edit-profile-modal v-model:show="profileModalVisible" :is-editing="isEditing" :profile-id="profileId"/>
 
-        <!-- Top P -->
-        <n-form-item label="Top P采样" label-placement="left" label-width="100">
-          <n-space align="center" style="width:100%">
-            <n-slider
-              v-model:value="profileForm.top_p"
-              :min="0"
-              :max="1"
-              :step="0.05"
-              style="width: 200px"
-            />
-            <n-input-number
-              v-model:value="profileForm.top_p"
-              size="small"
-              :min="0"
-              :max="1"
-              :step="0.05"
-              style="width: 100px"
-            />
-          </n-space>
-        </n-form-item>
-
-        <!-- Top K -->
-        <n-form-item label="Top K采样" label-placement="left" label-width="100">
-          <n-space align="center">
-            <n-slider
-              v-model:value="profileForm.top_k"
-              :min="1"
-              :max="100"
-              :step="1"
-              style="width: 200px"
-            />
-            <n-input-number
-              v-model:value="profileForm.top_k"
-              size="small"
-              :min="1"
-              :max="100"
-              :step="1"
-              style="width: 100px"
-            />
-          </n-space>
-        </n-form-item>
-        <!-- Frequency Penalty -->
-        <n-form-item label="频率惩罚" label-placement="left" label-width="100">
-          <n-space align="center">
-            <n-slider
-              v-model:value="profileForm.frequency_penalty"
-              :min="-2"
-              :max="2"
-              :step="0.1"
-              style="width: 200px"
-            />
-            <n-input-number
-              v-model:value="profileForm.frequency_penalty"
-              size="small"
-              :min="-2"
-              :max="2"
-              :step="0.1"
-              style="width: 100px"
-            />
-          </n-space>
-        </n-form-item>
-
-        <!-- Presence Penalty -->
-        <n-form-item label="存在惩罚" label-placement="left" label-width="100">
-          <n-space align="center">
-            <n-slider
-              v-model:value="profileForm.presence_penalty"
-              :min="-2"
-              :max="2"
-              :step="0.1"
-              style="width: 200px"
-            />
-            <n-input-number
-              v-model:value="profileForm.presence_penalty"
-              size="small"
-              :min="-2"
-              :max="2"
-              :step="0.1"
-              style="width: 100px"
-            />
-          </n-space>
-        </n-form-item>
-      </n-collapse-item>
-    </n-collapse>
-  </n-modal>
+  <!-- 习得技能 -->
+   <edit-skill-modal v-model:show="skillModalVisible" :profile-id="profileId"/>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import {
-  NDrawer, NDrawerContent, NForm, NFormItem, NInput, NPopover, NFlex,
-  NRadioGroup, NRadio, NSwitch, NButton, NSpace, NDivider, NIcon,
+  NDrawer, NDrawerContent, NForm, NFormItem, NInput, NFlex,
+  NSwitch, NButton, NSpace, NDivider, NIcon,
   NTabs, NTabPane, NList, NListItem, NPopconfirm, NTag, NAlert, 
-  NModal, NSelect, NCheckboxGroup, NCheckbox, NText, useMessage, NSlider,
-  NInputNumber, NCollapseItem, NCollapse
+  NSelect, NText, useMessage
 } from 'naive-ui'
+import EditProfileModal from '@/components/Modals/EditProfileModal.vue'
+import EditModelModal from '@/components/Modals/EditModelModal.vue'
+import EditSkillModal from '@/components/Modals/EditSkillModal.vue'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore, type ModelConfig } from '@/stores/config'
-import { useProfileStore, type Profile } from '@/stores/profiles'
+import { useProfileStore } from '@/stores/profiles'
 import mSvg from '@/components/MSvg.vue'
 
 
@@ -320,8 +141,8 @@ const version = ref(import.meta.env.VITE_APP_VERSION)
 const profileId = ref()
 
 // 对话框状态
-const showModelDialog = ref(false)
-const editingModelId = ref<string | null>(null)
+const showModalVisible = ref(false)
+const editingModel = ref<ModelConfig | null>(null)
 
 watch(() => props.show, (val) => {
   if (val) {
@@ -333,113 +154,18 @@ watch(() => profileStore.activeProfileId, (val) => {
   profileId.value = val
 })
 
-const modelForm = reactive<{
-  name: string
-  type: 'local' | 'online'
-  modelName?: string
-  baseUrl: string
-  apiKey: string
-}>({
-  name: '',
-  type: 'local',
-  modelName: undefined,
-  baseUrl: '',
-  apiKey: ''
-})
-
-function handleProfile(val: boolean) {
+const handleProfile = (val: boolean) => {
   localStorage.setItem('enableProfile', val.toString())
 }
 
-function openAddModelDialog() {
-  editingModelId.value = null
-  modelForm.name = ''
-  modelForm.type = 'local'
-  modelForm.modelName = undefined
-  modelForm.baseUrl = ''
-  modelForm.apiKey = ''
-  showModelDialog.value = true
+const openAddModelDialog = () => {
+  editingModel.value = null
+  showModalVisible.value = true
 }
 
-function editModel(model: ModelConfig) {
-  editingModelId.value = model.id
-  modelForm.name = model.name
-  modelForm.type = model.type
-  modelForm.modelName = model.modelName
-  modelForm.baseUrl = model.baseUrl
-  modelForm.apiKey = model.apiKey || ''
-  showModelDialog.value = true
-}
-
-const modelOptions = ref<{ label: string; value: string }[]>([])
-const modelsLoading = ref(false)
-
-async function fetchModels() {
-  if (modelsLoading.value) return
-  if (!modelForm.baseUrl) {
-    message.warning('请先填写 Base URL')
-    return
-  }
-  modelsLoading.value = true
-  try {
-    const res = await fetch('/api/model', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        base_url: modelForm.baseUrl,
-        api_key: modelForm.apiKey || ''
-      })
-    })
-    const data = await res.json()
-    if(data.detail) {
-      if (data.detail.indexOf('timed out') !== -1) {
-        message.error('请求超时，请检查网络')
-      } else {
-        message.error("请正确填写API Key")
-      }
-      modelOptions.value = []
-      return
-    }
-    modelOptions.value = data.map((id: string) => ({ label: id, value: id }))
-    if (data.length === 0) {
-      message.info('未检测到可用模型，请检查服务或手动输入')
-    }
-  } catch (e) {
-    message.error('获取模型列表失败')
-  } finally {
-    modelsLoading.value = false
-  }
-}
-
-// 当 baseUrl 或 apiKey 改变时，可自动刷新（可选）
-watch(() => [modelForm.baseUrl, modelForm.apiKey], () => {
-  modelOptions.value = []
-})
-
-// 在打开添加/编辑对话框时，若已有 baseUrl 可自动拉取
-watch(showModelDialog, (show) => {
-  if (show && modelForm.baseUrl) {
-    autoFetchModels()
-  }
-})
-
-function autoFetchModels() {
-  if (!modelOptions.value.length && modelForm.baseUrl) {
-    fetchModels()
-  }
-}
-
-function saveModel() {
-  if ( !modelForm.modelName || (!modelForm.name.trim() || !modelForm.modelName.trim())) {
-    message.warning('名称和模型 ID 不能为空')
-    return false
-  }
-  if (editingModelId.value) {
-    configStore.updateModel(editingModelId.value, { ...modelForm })
-  } else {
-    configStore.addModel({ ...modelForm })
-  }
-  showModelDialog.value = false
+const editModel = (model: ModelConfig) => {
+  editingModel.value = model
+  showModalVisible.value = true
 }
 
 const workspacePath = ref(localStorage.getItem('workspacePath') || '')
@@ -456,7 +182,7 @@ async function selectFolder() {
   }
 }
 
-async function getWorkspace() {
+const getWorkspace = async () => {
   try {
     const res = await fetch('/api/workspace')
     const data = await res.json()
@@ -469,7 +195,7 @@ async function getWorkspace() {
   }
 }
 
-async function saveWorkspace(path: string, isMsg: boolean = true) {
+const saveWorkspace = async (path: string, isMsg: boolean = true) => {
   await fetch('/api/workspace/set', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -486,115 +212,30 @@ async function saveWorkspace(path: string, isMsg: boolean = true) {
   })
 }
 
-// ---------- 角色管理 ----------
-const allTools = ref<{ function: { name: string; title: string; description: string } }[]>([])
-
-// 加载全局工具列表
-async function loadTools() {
-  try {
-    const res = await fetch('/api/tools')
-    const data = await res.json()
-    allTools.value = data.tools || []
-  } catch (e) {
-    console.warn('获取工具列表失败', e)
-  }
-}
-
 // 角色相关状态
 const profileModalVisible = ref(false)
 const isEditing = ref(false)
-const editingProfile = ref<Profile | null>(null)
-const profileForm = reactive({
-  name: '',
-  tools: [] as string[],
-  profile_prompt: '',
-  temperature: 1,
-  top_p: 1,
-  top_k: 40,
-  frequency_penalty: 0,
-  presence_penalty: 0
-})
+const skillModalVisible = ref(false)
 
 const profileOptions = computed(() =>
   profileStore.profiles.map(p => ({ label: p.name, value: p.id }))
 )
 
-function openCreateProfile() {
-  if(allTools.value.length === 0) {
-    loadTools()
-  }
+const openCreateProfile = () => {
   isEditing.value = false
-  editingProfile.value = null
-  profileForm.name = ''
-  profileForm.tools = []
-  profileForm.profile_prompt = ''
-  profileForm.temperature = 1
-  profileForm.top_p = 1
-  profileForm.top_k = 40
-  profileForm.frequency_penalty = 0
-  profileForm.presence_penalty = 0
   profileModalVisible.value = true
 }
 
-function openEditProfile() {
-  if (!profileStore.activeProfile) return
-  if(allTools.value.length === 0) {
-    loadTools()
-  }
+const openEditProfile = () => {
   isEditing.value = true
-  const p = profileStore.activeProfile
-  editingProfile.value = { ...p }
-  profileForm.name = p.name
-  profileForm.tools = [...p.tools]
-  profileForm.profile_prompt = p.profile_prompt || ''
-  // 读取角色保存的参数，若旧角色没有则使用默认值
-  profileForm.temperature = p.temperature ?? 1
-  profileForm.top_p = p.top_p ?? 1
-  profileForm.top_k = p.top_k ?? 40
-  profileForm.frequency_penalty = p.frequency_penalty ?? 0
-  profileForm.presence_penalty = p.presence_penalty ?? 0
   profileModalVisible.value = true
 }
 
-async function saveProfile() {
-  const payload = {
-    name: profileForm.name,
-    tools: profileForm.tools,
-    profile_prompt: profileForm.profile_prompt,
-    temperature: profileForm.temperature,
-    top_p: profileForm.top_p,
-    top_k: profileForm.top_k,
-    frequency_penalty: profileForm.frequency_penalty,
-    presence_penalty: profileForm.presence_penalty,
-  }
-  if (isEditing.value && editingProfile.value) {
-    await profileStore.updateProfile(
-      editingProfile.value.id,
-      profileForm.name,
-      profileForm.tools,
-      profileForm.profile_prompt,
-      profileForm.temperature,
-      profileForm.top_p,
-      profileForm.top_k,
-      profileForm.frequency_penalty,
-      profileForm.presence_penalty
-    )
-  } else {
-    await profileStore.createProfile(
-      profileForm.name,
-      profileForm.tools,
-      profileForm.profile_prompt,
-      profileForm.temperature,
-      profileForm.top_p,
-      profileForm.top_k,
-      profileForm.frequency_penalty,
-      profileForm.presence_penalty
-    )
-  }
-  profileModalVisible.value = false
+const openProfileSkills = () => {
+  skillModalVisible.value = true
 }
 
-async function deleteCurrentProfile() {
+const deleteCurrentProfile = async () => {
   if (profileStore.activeProfile) {
     await profileStore.deleteProfile(profileStore.activeProfile.id)
   }

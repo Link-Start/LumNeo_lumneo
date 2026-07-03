@@ -8,7 +8,7 @@ export interface toolConfig {
 }
 
 export const useToolStore = defineStore('tools', () => {
-  const toolsInfo = ref<toolConfig[]>([])
+  const toolsInfo = ref<Record<string, toolConfig>>({})
     async function loadToolsInfo() {
         const res = await fetch('/api/tools-info')
         const data = await res.json()

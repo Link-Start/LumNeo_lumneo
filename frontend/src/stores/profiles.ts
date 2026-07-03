@@ -113,5 +113,9 @@ export const useProfileStore = defineStore('profile', () => {
     return p ? new Set(p.tools) : new Set<string>()
   })
 
-  return { profiles, activeProfileId, activeProfile, activeToolsSet, loadProfiles, createProfile, updateProfile, deleteProfile }
+  const getProfile = (id: number) => {
+    return profiles.value.find(p => p.id === id)
+  }
+
+  return { profiles, activeProfileId, activeProfile, activeToolsSet, loadProfiles, getProfile, createProfile, updateProfile, deleteProfile }
 })
