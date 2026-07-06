@@ -15,23 +15,24 @@
     @negative-click="negativeClick"
   >
     <div class="modal-content">
-      <!-- 角色信息 -->
+      <!-- 角色信息 (只读展示) -->
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
           <n-form-item label="角色">
             <n-input v-model:value="localProfile.name" disabled />
           </n-form-item>
           <n-form-item label="能力">
-            <n-flex :size="4" style="margin-top:4px">
+            <n-flex :size="4" style="margin-top:6px">
               <n-tag v-for="name in localProfile.tools" :key="name" :bordered="false" type="info">
                 {{ toolStore.toolsInfo[name]?.title ?? name }}
               </n-tag>
             </n-flex>
           </n-form-item>
           <n-form-item label="技能">
-            <n-flex :size="8" v-if="selectedSkills.length">
-              <n-tag v-for="skill in selectedSkills" :key="skill" :bordered="false" type="warning">
-                {{ skill }}
+            <n-flex :size="4" v-if="selectedSkills.length">
+              <!-- 只展示已勾选的技能，并转换为名称 -->
+              <n-tag v-for="skillId in selectedSkills" :key="skillId" :bordered="false" type="warning">
+                {{ getSkillNameById(skillId) }}
               </n-tag>
             </n-flex>
             <span v-else style="color: var(--text-secondary)">未习得任何技能</span>
@@ -43,7 +44,6 @@
 
       <!-- 技能修炼区 -->
       <div class="skill-section">
-        <!-- 添加技能按钮 -->
         <n-button
           type="primary"
           dashed
@@ -57,17 +57,43 @@
           添加技能
         </n-button>
         <br>
-        <!-- 已有技能多选列表 -->
+        <!-- 技能列表 -->
         <div class="skill-checkbox-list" v-if="allSkills.length">
           <n-checkbox-group v-model:value="selectedSkills">
-            <n-flex>
-              <n-checkbox v-for="skill in allSkills" :key="skill" :value="skill">
-                {{ skill }}
+            <n-flex :size="12">
+              <n-checkbox 
+                v-for="skill in allSkills" 
+                :key="skill.id" 
+                :value="skill.id"
+              >
+                <div class="skill-item-wrapper">
+                  <div class="skill-header">
+                    <!-- 悬停展示描述 -->
+                    <n-tooltip trigger="hover" v-if="skill.description">
+                      <template #trigger>
+                        <span class="skill-name skill-name--has-desc">{{ skill.name }}</span>
+                      </template>
+                      <div class="skill-tooltip-desc">{{ skill.description }}</div>
+                    </n-tooltip>
+                    <span v-else class="skill-name">{{ skill.name }}</span>
+                    
+                    <!-- 全局标签：只要技能是全局的就显示 -->
+                    <n-tag 
+                      v-if="skill.isGlobal" 
+                      size="tiny" 
+                      type="success" 
+                      :bordered="false" 
+                      style="margin-left: 8px; transform: scale(0.9);"
+                    >
+                      全局
+                    </n-tag>
+                  </div>
+                </div>
               </n-checkbox>
             </n-flex>
           </n-checkbox-group>
         </div>
-        <span v-else style="color: #999; font-size: 14px">暂无技能，请添加</span>
+        <span v-else style="color: #999; font-size: 14px">无可用技能，请添加</span>
       </div>
     </div>
   </n-modal>
@@ -84,15 +110,21 @@
     @negative-click="cancelAdd"
   >
     <n-form label-placement="left" label-width="0" size="large" style="margin-top:20px">
-      <n-form-item>
+      <n-form-item label="" label-placement="left" label-width="0">
         <n-input
           v-model:value.trim="newSkillName"
           placeholder="请输入技能名称"
           :disabled="adding"
         />
       </n-form-item>
+      
+      <n-form-item label="" label-placement="left" label-width="0">
+        <n-checkbox v-model:checked="newSkillGlobal">
+          设为全局技能 (所有角色可用)
+        </n-checkbox>
+      </n-form-item>
+
       <n-form-item>
-        <!-- 原拖拽上传组件（保持原有样式和行为） -->
         <div class="skill-upload" @drop.prevent="onDrop" @dragover.prevent.stop>
           <n-upload
             directory
@@ -129,11 +161,18 @@
 
 <script setup lang="ts">
 import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, 
-  NCheckbox, NText, NButton, NUpload, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
+  NCheckbox, NText, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
 import { ref, reactive, watch, onUnmounted } from 'vue'
 import mSvg from '@/components/MSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
+
+interface SkillItem {
+  id: string
+  name: string
+  isGlobal: boolean
+  description?: string
+}
 
 const props = defineProps({
   show: Boolean,
@@ -152,38 +191,89 @@ const localProfile = reactive({
   skills: [] as string[],
 })
 
-// 所有可选技能（初始来自角色已有技能，新增技能也会加入）
-const allSkills = ref<string[]>([])
-// 勾选的技能（将保存为最终技能）
+const allSkills = ref<SkillItem[]>([])
 const selectedSkills = ref<string[]>([])
+const originalSelectedSkills = ref<string[]>([])
 
-// 监听主弹窗打开，加载角色数据
+// 根据技能 id 获取技能名称
+function getSkillNameById(id: string): string {
+  const skill = allSkills.value.find(s => s.id === id)
+  return skill?.name ?? '未知技能'
+}
+
+// 加载所有可用技能
+async function loadAllSkills() {
+  try {
+     const url = props.profileId ? `/api/skills/list?profile_id=${props.profileId}` : '/api/skills/list'
+    const res = await fetch(url)
+    const data = await res.json()
+    allSkills.value = (data || []).map((item: any) => ({
+      id: item.id,
+      name: item.name || item.id,
+      isGlobal: !!item.is_global,
+      description: item.description
+    }))
+  } catch (e) {
+    message.error("加载技能列表失败")
+  }
+}
+// 加载已习得技能
+async function loadLearnedSkills() {
+    try {
+    const res = await fetch(`/api/profiles/${props.profileId}/skills`)
+    const data = await res.json()
+    localProfile.skills = data || []
+  } catch (e) {
+    message.error("查询已习得技能失败")
+  }
+}
+
+// 监听弹窗打开
 watch(
   () => props.show,
-  (val) => {
+  async (val) => {
     if (val && props.profileId != null) {
+      // 加载所有可用技能
+      await loadAllSkills()
       const p = profileStore.getProfile(props.profileId)
       if (p) {
         localProfile.name = p.name || ''
         localProfile.tools = p.tools || []
-        localProfile.skills = p.skills ? [...p.skills] : []
+        await loadLearnedSkills()
       }
-      // 初始化可选和已选技能
-      allSkills.value = [...localProfile.skills]
+      
+      // 设置当前角色已选中的技能（用 ID 匹配）
       selectedSkills.value = [...localProfile.skills]
+
+      // 记录初始状态，用于后续对比
+      originalSelectedSkills.value = [...localProfile.skills]
     }
   },
   { immediate: true }
 )
 
-// 保存：将勾选的技能写入角色
-const saveSkill = () => {
-  if (props.profileId != null) {
-    const target = profileStore.getProfile(props.profileId)
-    if (target) {
-      target.skills = [...selectedSkills.value]
-    }
+// 保存配置
+const saveSkill = async () => {
+  if (props.profileId == null) {
+    emit('update:show', false)
+    return
   }
+
+  const response = await fetch('/api/skills/batch-select', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: props.profileId,
+      selected_skill_ids: selectedSkills.value,   // 当前所有勾选的 ID
+    }),
+  })
+
+  if (response.ok) {
+    message.success('技能配置已保存')
+  } else {
+    message.error('保存失败')
+  }
+
   emit('update:show', false)
 }
 
@@ -194,9 +284,9 @@ const negativeClick = () => {
 // ---------- 子弹窗（添加技能）相关 ----------
 const addSkillModalShow = ref(false)
 const newSkillName = ref('')
+const newSkillGlobal = ref(false)
 const adding = ref(false)
 
-// 将原上传组件的状态移植到此处
 const uploadPhase = ref<'idle' | 'progress' | 'finish'>('idle')
 let finishTimer: number | null = null
 
@@ -210,7 +300,6 @@ const uploadQueue = ref<UploadTask[]>([])
 let uploadTimer: number | null = null
 const activeUploads = ref(0)
 
-// 原拖拽/上传相关逻辑（完全保留）
 function startUpload() {
   if (finishTimer) {
     clearTimeout(finishTimer)
@@ -289,9 +378,14 @@ const flushQueue = async () => {
   if (tasks.length === 0) return
 
   const formData = new FormData()
-  // 使用用户输入的技能名称，而非从路径提取
   const skillName = newSkillName.value.trim()
+  
   formData.append('skillName', skillName)
+  formData.append('is_global', String(newSkillGlobal.value))
+  
+  if (props.profileId) {
+    formData.append('profile_id', String(props.profileId))
+  }
 
   tasks.forEach((task) => {
     formData.append('files', task.file, task.relativePath)
@@ -307,14 +401,31 @@ const flushQueue = async () => {
       const result = await response.json()
       if (result.success) {
         tasks.forEach((t) => t.onFinish())
-        // 上传成功后，将技能加入主弹窗列表并自动勾选
-        if (skillName && !allSkills.value.includes(skillName)) {
-          allSkills.value.push(skillName)
-          selectedSkills.value.push(skillName)
+        
+        const newSkill: SkillItem = {
+          id: result.id,
+          name: newSkillName.value,
+          isGlobal: result.is_global !== undefined ? result.is_global : newSkillGlobal.value,
+          description: result.description || ''
         }
-        message.success(`技能 [${skillName}] 修炼成功！`)
-        // 关闭子弹窗
-        addSkillModalShow.value = false
+
+        // 检查是否已在列表中
+        const existIndex = allSkills.value.findIndex(s => s.id === newSkill.id)
+        
+        if (existIndex === -1) {
+          allSkills.value.push(newSkill)
+        } else {
+          allSkills.value[existIndex] = newSkill
+        }
+        
+        // 自动勾选新添加的技能（使用 id）
+        if (!selectedSkills.value.includes(newSkill.id)) {
+            selectedSkills.value.push(newSkill.id)
+        }
+        setTimeout(() => {
+            message.success(`技能 [${newSkill.name}] 修炼成功！`)
+            addSkillModalShow.value = false
+        }, 3000)
       } else {
         message.error(result.message || '上传失败')
         tasks.forEach((t) => t.onError())
@@ -330,7 +441,6 @@ const flushQueue = async () => {
   }
 }
 
-// 拖拽文件夹处理（保留原逻辑）
 async function traverseEntry(entry: FileSystemEntry, basePath: string): Promise<File[]> {
   if (entry.isFile) {
     const file = await new Promise<File>((resolve, reject) => {
@@ -361,9 +471,8 @@ async function traverseEntry(entry: FileSystemEntry, basePath: string): Promise<
 }
 
 async function onDrop(e: DragEvent) {
-  
   if(!newSkillName.value.trim()) {
-    message.error("技能名称还没有填写呢！")
+    message.error("技能名称还没有填写哦~")
     return
   }
   if (uploadPhase.value === 'progress') return
@@ -411,30 +520,27 @@ async function onDrop(e: DragEvent) {
   })
 }
 
-// 打开添加技能弹窗
 const openAddSkillModal = () => {
   newSkillName.value = ''
+  newSkillGlobal.value = false
   uploadPhase.value = 'idle'
   addSkillModalShow.value = true
 }
 
-// 取消添加
 const cancelAdd = () => {
   addSkillModalShow.value = false
 }
 
-// 确认添加（需等待上传完成，这里通过按钮 loading 控制）
 const addSkill = async () => {
   const name = newSkillName.value.trim()
   if (!name) {
     message.warning('请输入技能名称')
     return false
   }
-  if (allSkills.value.includes(name)) {
+  if (allSkills.value.find(s => s.name === name)) {
     message.warning('技能名称已存在')
     return false
   }
-  // 若用户没有拖拽/选择文件，则不允许添加
   if (uploadQueue.value.length === 0 && activeUploads.value === 0) {
     message.warning('请通过拖拽或点击选择技能文件夹')
     return false
@@ -443,13 +549,10 @@ const addSkill = async () => {
     message.info('正在上传，请稍后...')
     return false
   }
-  // 如果已经处于 finish 状态，说明刚刚上传完成，可以直接关闭（已经在 flushQueue 中处理了关闭）
   if (uploadPhase.value === 'finish') {
-    // 此时技能已添加，直接关闭
     addSkillModalShow.value = false
     return true
   }
-  // 其他情况（idle 状态且没有文件）：提示
   message.warning('请先选择文件夹上传')
   return false
 }
@@ -471,17 +574,37 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 .skill-checkbox-list {
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
   margin-bottom: 12px;
+  padding-right: 4px;
 }
-.skill-list {
+
+.skill-item-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 4px;
+}
+.skill-header {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 0;
-  margin-bottom: 16px;
 }
+.skill-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+.skill-name--has-desc {
+  border-bottom: 1px dashed #999;
+  cursor: help;
+}
+.skill-tooltip-desc {
+  max-width: 320px;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
 .skill-upload{width:100%;}
 :deep(.n-upload-trigger) {
   display: block !important;

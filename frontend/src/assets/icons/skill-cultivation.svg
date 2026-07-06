@@ -64,7 +64,6 @@
     <animateTransform attributeName="transform" type="rotate"
       from="0 150 150" to="360 150 150" dur="22s" repeatCount="indefinite"/>
 
-
     <!-- 三个外圈小光点 -->
     <circle cx="150" cy="38"  r="4" fill="#fff" filter="url(#glowStrong)"/>
     <circle cx="247" cy="94" r="3" fill="#aef7ff" filter="url(#glow)"/>
@@ -86,14 +85,29 @@
   <g>
     <animateTransform attributeName="transform" type="rotate"
       from="360 150 150" to="0 150 150" dur="14s" repeatCount="indefinite"/>
+
+    <!-- 弧段1：顶部 → 右侧（90°） -->
     <path d="M 150 95 A 55 55 0 0 1 205 150"
           stroke="#ffd89b" stroke-width="1.2" fill="none"
           stroke-linecap="round" opacity="0.7" stroke-dasharray="2 4"/>
+
+    <!-- 弧段2：右侧 → 左侧（180°，经过底部） -->
     <path d="M 205 150 A 55 55 0 0 1 95 150"
           stroke="#3fe0ff" stroke-width="1.2" fill="none"
           stroke-linecap="round" opacity="0.6" stroke-dasharray="3 5"/>
+
+    <!-- ✅ 弧段3：左侧 → 顶部（90°，补全圆环） -->
+    <path d="M 95 150 A 55 55 0 0 1 150 95"
+          stroke="#b3aaff" stroke-width="1.2" fill="none"
+          stroke-linecap="round" opacity="0.65" stroke-dasharray="2.5 4.5"/>
+
+    <!-- 端点装饰 -->
     <circle cx="205" cy="150" r="2.5" fill="#fff" filter="url(#glow)"/>
     <circle cx="95" cy="150" r="2.5" fill="#aef7ff" filter="url(#glow)"/>
+    <!-- 可选：在顶部也加一个端点，保持对称 -->
+    <circle cx="150" cy="95" r="2.5" fill="#ffd89b" filter="url(#glow)" opacity="0.8"/>
+    <!-- 底部端点（下半弧中点，补全四象限对称） -->
+    <circle cx="150" cy="205" r="2.5" fill="#3fe0ff" filter="url(#glow)" opacity="0.8"/>
   </g>
 
   <!-- ============ 三个绕轨能量碎片 ============ -->

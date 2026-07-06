@@ -1,112 +1,163 @@
-# backend/routes/skills.py
 import os
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import List
-from config_loader import config  # 引用全局配置
 import shutil
+import uuid
+from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from typing import List, Optional
+from config_loader import config
+from backend.db.skills import create_skill, link_skill_to_profile, list_all_skills, get_available_skills_for_profile, batch_set_selected_skills
+from backend.utils.skill_parser import parse_skill_markdown
+from backend.utils.skill_cache import skill_cache
+
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
+class BatchSelectRequest(BaseModel):
+    profile_id: int
+    selected_skill_ids: list[str]
+
+# 1. 获取技能列表接口
+@router.get("/list")
+async def list_skills(profile_id: Optional[int] = None):
+    """
+    返回技能列表。
+    若提供 profile_id，则返回该角色可见的技能（全局+已关联）；
+    否则返回全部技能（兼容旧管理场景）。
+    """
+    if profile_id is not None:
+        records = await get_available_skills_for_profile(profile_id)
+    else:
+        records = await list_all_skills()
+
+    result_list = []
+    for record in records:
+        result_list.append({
+            "id": record.id,
+            "name": record.name,
+            "description": record.metadata.get("description", ""),
+            "is_global": record.is_global
+        })
+    return result_list
+
+# 2. 上传技能
 @router.post("/upload")
-async def upload_skill_folder(files: List[UploadFile] = File(...)):
-    """
-    接收上传的技能文件夹（前端会保留目录结构）
-    保存路径: {data_dir}/skills/{skill_name}/...
-    """
+async def upload_skill_folder(
+    files: List[UploadFile] = File(...), 
+    skillName: str = Form(None),
+    is_global: bool = Form(False),  
+    profile_id: Optional[int] = Form(None) 
+):
     if not files:
         raise HTTPException(status_code=400, detail="没有接收到文件")
 
-    # 获取技能名称（取第一个文件的根目录名）
-    # 假设前端传递的 filename 包含相对路径，如 "MySkill/SKILL.md"
+    # 1. 获取物理路径 (文件夹名仅用于文件管理)
     first_file_path = files[0].filename
     if not first_file_path:
         raise HTTPException(status_code=400, detail="无法解析文件路径")
-
-    # 标准化路径分隔符
+    
     first_file_path = first_file_path.replace("\\", "/")
-    
-    # 提取根目录作为 Skill 名称
     path_parts = first_file_path.split("/")
-    skill_name = path_parts[0]
+    folder_name = path_parts[0] 
 
-    # 定义保存根目录
     skills_root = os.path.join(config.data_dir, "skills")
-    skill_dir = os.path.join(skills_root, skill_name)
+    skill_dir = os.path.join(skills_root, folder_name)
     
-    # 安全检查：防止路径穿越
-    # 确保最终保存的绝对路径在 skills_root 目录内
+    # 安全检查
     abs_skill_dir = os.path.abspath(skill_dir)
     abs_skills_root = os.path.abspath(skills_root)
-    
     if not abs_skill_dir.startswith(abs_skills_root):
-        raise HTTPException(status_code=400, detail=f"非法的技能名称: {skill_name}")
+        raise HTTPException(status_code=400, detail="非法的技能名称")
 
-    # 创建目录
     os.makedirs(abs_skill_dir, exist_ok=True)
 
-    saved_count = 0
+    # 2. 保存文件
     for file in files:
         try:
-            # 获取文件的相对路径，构建保存路径
-            # file.filename 包含目录结构，如 "MySkill/scripts/run.py"
             relative_path = file.filename.replace("\\", "/")
-            
-            # 去掉最外层的 Skill 名称，只保留内部结构
-            # "MySkill/scripts/run.py" -> "scripts/run.py"
-            if relative_path.startswith(skill_name + "/"):
-                internal_path = relative_path[len(skill_name) + 1:]
+            if relative_path.startswith(folder_name + "/"):
+                internal_path = relative_path[len(folder_name) + 1:]
             else:
-                # 异常情况：文件不在 Skill 根目录下
                 internal_path = relative_path
-
-            if not internal_path:
-                continue # 跳过根目录本身
+            
+            if not internal_path: continue
 
             target_file_path = os.path.join(abs_skill_dir, internal_path)
-            target_file_dir = os.path.dirname(target_file_path)
-
-            # 再次安全检查
-            if not os.path.abspath(target_file_path).startswith(abs_skill_dir):
-                continue
-
-            # 创建子目录
-            os.makedirs(target_file_dir, exist_ok=True)
-
-            # 写入文件
+            os.makedirs(os.path.dirname(target_file_path), exist_ok=True)
             with open(target_file_path, "wb") as buffer:
-                # 使用 shutil.copyfileobj 可以更高效地处理大文件
                 shutil.copyfileobj(file.file, buffer)
-            
-            saved_count += 1
-            
         except Exception as e:
-            print(f"保存文件 {file.filename} 失败: {e}")
+            print(f"保存文件失败: {e}")
         finally:
             await file.close()
 
-    return {
-        "success": True, 
-        "skill_name": skill_name, 
-        "saved_files": saved_count,
-        "path": skill_dir
-    }
-
-@router.get("/list")
-async def list_skills():
-    """获取所有已安装的技能列表"""
-    skills_root = os.path.join(config.data_dir, "skills")
-    if not os.path.exists(skills_root):
-        return []
+    # 3. 确定 ID 和显示名称
+    skill_id = str(uuid.uuid4())
     
-    skills = []
-    for name in os.listdir(skills_root):
-        skill_path = os.path.join(skills_root, name)
-        if os.path.isdir(skill_path):
-            # 检查是否包含 SKILL.md
-            has_skill_md = os.path.exists(os.path.join(skill_path, "SKILL.md"))
-            skills.append({
-                "name": name,
-                "has_skill_md": has_skill_md,
-                "path": skill_path
-            })
-    return skills
+    # 默认名称为文件夹名
+    display_name = folder_name
+    
+    # 优先使用用户输入的名称
+    if skillName and skillName.strip():
+        display_name = skillName.strip()
+
+    description = ""
+    metadata = {}
+
+    skill_md_path = os.path.join(skill_dir, "SKILL.md")
+    
+    # 读取 SKILL.md 补充信息
+    if os.path.exists(skill_md_path):
+        try:
+            with open(skill_md_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            fm, _ = parse_skill_markdown(content)
+            
+            if fm:
+                # 如果用户没输入，用 SKILL.md 里的 name
+                if not (skillName and skillName.strip()):
+                    display_name = fm.get("name", display_name)
+                
+                description = fm.get("description", "")
+                # 合并 YAML 头部信息到 metadata
+                metadata.update(fm)
+        except Exception as e:
+            print(f"解析 SKILL.md 失败: {e}")
+
+    # 检查 Function Calling
+    if os.path.exists(os.path.join(skill_dir, "skill.json")):
+        metadata['has_function_definition'] = True
+
+    # 4. 存入数据库
+    try:
+        await create_skill(
+            skill_id=skill_id,
+            name=display_name, 
+            file_path=skill_dir,
+            metadata=metadata,
+            is_global=is_global
+        )
+
+        if profile_id is not None:
+            await link_skill_to_profile(profile_id, skill_id)
+
+        skill_cache.invalidate(skill_id)
+            
+        return {
+            "success": True,
+            "id": skill_id,
+            "name": display_name,
+            "description": description,
+            "is_global": is_global
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/batch-select")
+async def batch_select_skills(req: BatchSelectRequest):
+    """
+    一次性设置某个角色下所有选中技能。
+    请求体示例：{ "profile_id": 1, "selected_skill_ids": ["id1", "id2"] }
+    """
+    await batch_set_selected_skills(req.profile_id, req.selected_skill_ids)
+    return {"success": True, "message": "批量更新成功"}

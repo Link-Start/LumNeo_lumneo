@@ -75,5 +75,30 @@ async def init_db():
         )
     """)
 
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            is_global INTEGER DEFAULT 0,
+            metadata TEXT DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS profile_skills (
+            profile_id INTEGER NOT NULL,
+            skill_id TEXT NOT NULL,
+            is_selected INTEGER DEFAULT 0,
+            config_overrides TEXT DEFAULT '{}',
+            PRIMARY KEY (profile_id, skill_id),
+            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+            FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+        )
+    """)
+
     await db.commit()
     await db.close()
