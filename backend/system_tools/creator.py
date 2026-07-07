@@ -1,4 +1,4 @@
-# backend/system_tools/project_creator.py
+# backend/system_tools/creator.py
 """
 从目录结构文本创建项目目录
 """

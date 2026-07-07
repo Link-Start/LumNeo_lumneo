@@ -192,7 +192,7 @@ const profileForm = reactive({
   tools: [] as string[],
   profile_prompt: '',
   temperature: 1,
-  top_p: 1,
+  top_p: 0.95,
   top_k: 40,
   frequency_penalty: 0,
   presence_penalty: 0
@@ -229,7 +229,7 @@ const openCreateProfile = () => {
     profileForm.tools = []
     profileForm.profile_prompt = ''
     profileForm.temperature = 1
-    profileForm.top_p = 1
+    profileForm.top_p = 0.95
     profileForm.top_k = 40
     profileForm.frequency_penalty = 0
     profileForm.presence_penalty = 0
@@ -249,7 +249,7 @@ const openEditProfile = () => {
   profileForm.profile_prompt = p.profile_prompt || ''
   // 读取角色保存的参数，若旧角色没有则使用默认值
   profileForm.temperature = p.temperature ?? 1
-  profileForm.top_p = p.top_p ?? 1
+  profileForm.top_p = p.top_p ?? 0.95
   profileForm.top_k = p.top_k ?? 40
   profileForm.frequency_penalty = p.frequency_penalty ?? 0
   profileForm.presence_penalty = p.presence_penalty ?? 0

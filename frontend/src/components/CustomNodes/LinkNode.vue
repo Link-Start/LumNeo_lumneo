@@ -192,6 +192,14 @@ const handleSmartClick = async (e: MouseEvent) => {
   margin-right: 0.3em;
   vertical-align: middle;
 }
+.message-content .file-unknown {
+  color: #6663f8;
+  background: unset;
+  padding: 2px;
+}
+.message-content .file-unknown:hover {
+  background: unset;
+}
 .message-content a {
   display: inline-block;
   padding: 8px 12px;

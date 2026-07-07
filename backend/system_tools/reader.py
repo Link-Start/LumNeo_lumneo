@@ -498,7 +498,7 @@ async def file_read(
     """
     # 1. 路径与权限校验
     if allowed_dirs is None:
-        allowed_dirs = [config.uploads_dir, backend.workspace_path]
+        allowed_dirs = [config.uploads_dir, config.skill_dir, backend.workspace_path]
     allowed_paths = [Path(p).resolve() for p in allowed_dirs]
 
     max_bytes = max_size_mb * 1024 * 1024

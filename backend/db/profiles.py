@@ -13,7 +13,7 @@ class ProfileRecord:
         self.tools = self._parse_json(row['tools'])
         # 处理数值参数的默认值
         self.temperature = row['temperature'] if row['temperature'] is not None else 1.0
-        self.top_p = row['top_p'] if row['top_p'] is not None else 1.0
+        self.top_p = row['top_p'] if row['top_p'] is not None else 0.95
         self.top_k = row['top_k'] if row['top_k'] is not None else 40
         self.frequency_penalty = row['frequency_penalty'] if row['frequency_penalty'] is not None else 0.0
         self.presence_penalty = row['presence_penalty'] if row['presence_penalty'] is not None else 0.0

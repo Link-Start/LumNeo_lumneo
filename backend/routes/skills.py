@@ -59,11 +59,11 @@ async def upload_skill_folder(
     path_parts = first_file_path.split("/")
     folder_name = path_parts[0] 
 
-    skills_root = os.path.join(config.data_dir, "skills")
-    skill_dir = os.path.join(skills_root, folder_name)
+    skills_root = config.skill_dir
+    skill_path = os.path.join(skills_root, folder_name)
     
     # 安全检查
-    abs_skill_dir = os.path.abspath(skill_dir)
+    abs_skill_dir = os.path.abspath(skill_path)
     abs_skills_root = os.path.abspath(skills_root)
     if not abs_skill_dir.startswith(abs_skills_root):
         raise HTTPException(status_code=400, detail="非法的技能名称")
@@ -103,7 +103,7 @@ async def upload_skill_folder(
     description = ""
     metadata = {}
 
-    skill_md_path = os.path.join(skill_dir, "SKILL.md")
+    skill_md_path = os.path.join(skill_path, "SKILL.md")
     
     # 读取 SKILL.md 补充信息
     if os.path.exists(skill_md_path):
@@ -124,16 +124,12 @@ async def upload_skill_folder(
         except Exception as e:
             print(f"解析 SKILL.md 失败: {e}")
 
-    # 检查 Function Calling
-    if os.path.exists(os.path.join(skill_dir, "skill.json")):
-        metadata['has_function_definition'] = True
-
     # 4. 存入数据库
     try:
         await create_skill(
             skill_id=skill_id,
             name=display_name, 
-            file_path=skill_dir,
+            file_path=skill_path,
             metadata=metadata,
             is_global=is_global
         )

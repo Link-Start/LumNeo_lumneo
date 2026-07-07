@@ -24,7 +24,7 @@ export const useProfileStore = defineStore('profile', () => {
     data = data.map((p: any) => ({
       ...p,
       temperature: p.temperature ?? 1,
-      top_p: p.top_p ?? 1,
+      top_p: p.top_p ?? 0.95,
       top_k: p.top_k ?? 40,
       frequency_penalty: p.frequency_penalty ?? 0,
       presence_penalty: p.presence_penalty ?? 0,
@@ -45,7 +45,7 @@ export const useProfileStore = defineStore('profile', () => {
     tools: string[] = [],
     profile_prompt: string = '',
     temperature: number = 1,
-    top_p: number = 1,
+    top_p: number = 0.95,
     top_k: number = 40,
     frequency_penalty: number = 0,
     presence_penalty: number = 0,
@@ -68,7 +68,7 @@ export const useProfileStore = defineStore('profile', () => {
     const completeProfile: Profile = {
       ...newProfile,
       temperature: newProfile.temperature ?? 1,
-      top_p: newProfile.top_p ?? 1,
+      top_p: newProfile.top_p ?? 0.95,
       top_k: newProfile.top_k ?? 40,
       frequency_penalty: newProfile.frequency_penalty ?? 0,
       presence_penalty: newProfile.presence_penalty ?? 0,

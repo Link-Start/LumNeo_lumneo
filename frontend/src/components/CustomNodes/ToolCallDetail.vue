@@ -28,7 +28,7 @@
             {{ statusText }}
           </n-tag>
           <span v-if="data.execution_time" class="exec-time">
-            耗时 {{ data.execution_time }}ms
+            耗时 {{ formatDuration(data.execution_time) }}
           </span>
         </div>
 
@@ -78,7 +78,7 @@
 import { ref, computed, watch } from 'vue'
 import { NModal, NTag, NButton, NSpin } from 'naive-ui'
 import MSvg from '@/components/MSvg.vue'
-import { copyToClipboard } from '@/utils/common'
+import { formatDuration, copyToClipboard } from '@/utils/common'
 import { useToolStore } from '@/stores/tools'
 
 const props = defineProps<{

@@ -1,9 +1,8 @@
-# backend/db/skills.py
 import json
 import os
 import asyncio
 import aiosqlite
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from backend.database import get_db
 from backend.utils.skill_parser import parse_skill_markdown
 from backend.utils.skill_cache import skill_cache
@@ -16,39 +15,51 @@ class SkillRecord:
         self.enabled = bool(row['enabled'])
         self.is_global = bool(row['is_global'])
         self.metadata = json.loads(row['metadata'])
-        # 动态属性，稍后加载
-        self.prompt_content = "" 
+        # 从 metadata 中提取简短描述（用于轻量注入 System Prompt）
+        self.short_description = self.metadata.get('description', '')
+        # prompt_content 保留但默认不加载（懒加载）
+        self.prompt_content = ""
 
-    async def load_content(self):
-        """读取文件系统中的 SKILL.md 内容"""
+    async def load_full_content(self) -> str:
+        """
+        按需加载完整的 SKILL.md 正文内容（用于需要完整指令的场景）
+        返回内容字符串，若失败返回空字符串
+        """
+        # 检查缓存
         cached = skill_cache.get(self.id, self.file_path)
         if cached is not None:
             self.prompt_content = cached
-            return
-        skill_md_path = os.path.join(self.file_path, "SKILL.md")
-        if os.path.exists(skill_md_path):
-            try:
-                # 使用异步读取如果可能，但 Python 标准库文件 IO 是阻塞的
-                # 为了简单和兼容性，这里使用标准 open，在 gather 中运行即可
-                with open(skill_md_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                _, body = parse_skill_markdown(content)
-                self.prompt_content = body
-                skill_cache.set(self.id, self.file_path, body)
-            except Exception as e:
-                print(f"读取技能文件失败 {self.id}: {e}")
-                self.prompt_content = f"Error loading skill: {e}"
-        else:
-            self.prompt_content = ""
+            return cached
 
-    def to_dict(self):
+        if not self.file_path:
+            return ""
+
+        skill_md_path = os.path.join(self.file_path, "SKILL.md")
+        if not os.path.exists(skill_md_path):
+            return ""
+
+        try:
+            with open(skill_md_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # 去除 YAML 头部（仅保留正文）
+            _, body = parse_skill_markdown(content)
+            self.prompt_content = body
+            skill_cache.set(self.id, self.file_path, body)
+            return body
+        except Exception as e:
+            print(f"读取技能文件失败 {self.id}: {e}")
+            return ""
+
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "enabled": self.enabled,
             "is_global": self.is_global,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "short_description": self.short_description,
         }
+
 
 async def create_skill(
     skill_id: str,
@@ -56,7 +67,7 @@ async def create_skill(
     file_path: str = "",
     metadata: dict = None,
     is_global: bool = False
-) -> SkillRecord:
+) -> Optional[SkillRecord]:
     """创建或更新技能（Upsert）"""
     db = await get_db()
     try:
@@ -77,6 +88,7 @@ async def create_skill(
     finally:
         await db.close()
 
+
 async def get_skill_by_id(skill_id: str) -> Optional[SkillRecord]:
     db = await get_db()
     try:
@@ -86,9 +98,9 @@ async def get_skill_by_id(skill_id: str) -> Optional[SkillRecord]:
     finally:
         await db.close()
 
+
 async def link_skill_to_profile(profile_id: int, skill_id: str, config_overrides: dict = None):
     """将技能与角色关联，若已关联则忽略"""
-    print(f"关联技能 {skill_id} 到角色 {profile_id}，配置: {config_overrides}")
     db = await get_db()
     try:
         config_json = json.dumps(config_overrides or {}, ensure_ascii=False)
@@ -103,10 +115,12 @@ async def link_skill_to_profile(profile_id: int, skill_id: str, config_overrides
     finally:
         await db.close()
 
+
 async def get_skills_by_profile(profile_id: int) -> List[SkillRecord]:
     """
-    获取指定角色拥有的所有技能
-    关键：并发加载文件内容，避免 IO 阻塞主流程
+    获取指定角色拥有的所有技能（已启用且被选中）
+    注意：不再自动加载文件内容，仅返回元数据。
+    如需完整指令，调用方应通过 system_read_file 工具或 SkillRecord.load_full_content() 按需获取。
     """
     db = await get_db()
     try:
@@ -119,14 +133,11 @@ async def get_skills_by_profile(profile_id: int) -> List[SkillRecord]:
         )
         rows = await cursor.fetchall()
         skills = [SkillRecord(row) for row in rows]
-        
-        # 并发加载所有技能的文件内容
-        if skills:
-            await asyncio.gather(*[s.load_content() for s in skills])
-        
+        # 不加载文件内容，只返回元数据
         return skills
     finally:
         await db.close()
+
 
 async def list_all_skills() -> List[SkillRecord]:
     db = await get_db()
@@ -137,6 +148,7 @@ async def list_all_skills() -> List[SkillRecord]:
     finally:
         await db.close()
 
+
 async def replace_profile_skills(profile_id: int, skill_ids: List[str]) -> None:
     """
     全量替换角色的技能关联：先删除旧记录，再批量插入新记录。
@@ -145,9 +157,7 @@ async def replace_profile_skills(profile_id: int, skill_ids: List[str]) -> None:
     db = await get_db()
     try:
         await db.execute("BEGIN TRANSACTION")
-        # 1. 删除旧关联
         await db.execute("DELETE FROM profile_skills WHERE profile_id = ?", (profile_id,))
-        # 2. 插入新关联（去重）
         for skill_id in set(skill_ids):
             await db.execute(
                 "INSERT INTO profile_skills (profile_id, skill_id, config_overrides) VALUES (?, ?, ?)",
@@ -160,6 +170,7 @@ async def replace_profile_skills(profile_id: int, skill_ids: List[str]) -> None:
     finally:
         await db.close()
 
+
 async def batch_set_selected_skills(profile_id: int, selected_skill_ids: List[str]) -> None:
     """
     批量设置指定角色下技能的选中状态。
@@ -169,12 +180,10 @@ async def batch_set_selected_skills(profile_id: int, selected_skill_ids: List[st
     db = await get_db()
     try:
         await db.execute("BEGIN TRANSACTION")
-        # 重置全部为非选中
         await db.execute(
             "UPDATE profile_skills SET is_selected = 0 WHERE profile_id = ?",
             (profile_id,)
         )
-        # 将列表中的技能设为选中（UPSERT 确保关联存在）
         for skill_id in selected_skill_ids:
             await db.execute(
                 """INSERT INTO profile_skills (profile_id, skill_id, is_selected, config_overrides)
@@ -189,6 +198,7 @@ async def batch_set_selected_skills(profile_id: int, selected_skill_ids: List[st
         raise
     finally:
         await db.close()
+
 
 async def get_available_skills_for_profile(profile_id: int) -> List[SkillRecord]:
     """
