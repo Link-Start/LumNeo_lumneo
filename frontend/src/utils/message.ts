@@ -164,7 +164,7 @@ export function normalizeFileRef(ref: any): UploadedFile[] {
  * - 图片文件：转换为 base64 并嵌入多模态 content 数组
  * - 非图片文件：在消息文本末尾附加工具调用提示
  */
-export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[] }[]> {
+export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[]; tool_calls?: any[]; tool_call_id?: string }[]> {
   const promises = msgs.map(async (msg) => {
     const fileRefs = normalizeFileRef(msg.file_ref)
 
@@ -221,7 +221,14 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       contentForModel = text
     }
 
-    return { role: msg.role, content: contentForModel }
+    const base = { role: msg.role }
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      return { ...base, content: msg.content || null, tool_calls: msg.tool_calls }
+    }
+    if (msg.role === 'tool') {
+      return { ...base, content: msg.content, tool_call_id: msg.tool_call_id }
+    }
+    return { ...base, content: msg.content }
   })
 
   return Promise.all(promises)

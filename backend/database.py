@@ -28,6 +28,8 @@ async def init_db():
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             file_ref TEXT DEFAULT NULL,
+            tool_calls TEXT DEFAULT NULL,
+            tool_call_id TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )

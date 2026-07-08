@@ -51,7 +51,7 @@
                     <div class="message-content user-content" v-text="msg.content.trim()"></div>
                   </template>
                   <!-- 助手消息 Markdown -->
-                  <template v-else>
+                  <template v-else-if="msg.role === 'assistant'">
                     <div class="message-content" :data-theme="isDark">
                       <MarkdownRender
                         :key="'msg-' + chatId + '-' + msg.id + '-' + index"

@@ -3,9 +3,11 @@ import { ref, computed } from 'vue'
 
 export interface Message {
   id?: number
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: any
   file_ref?: any
+  tool_calls?: any
+  tool_call_id?: any
 }
 
 export interface Chat {

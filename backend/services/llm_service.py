@@ -7,6 +7,7 @@ from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
+from backend.db.chats import add_message
 
 
 class LLMService:
@@ -32,6 +33,7 @@ class LLMService:
         mcp_manager=None,
         params: Dict = None,
         message_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
 
@@ -173,6 +175,7 @@ class LLMService:
             first_token_time = None
             tool_preview_active = {}
             tool_calls_started = False
+            final_answer_content = ""
 
             async for chunk in response:
                 if request and await request.is_disconnected():
@@ -289,12 +292,8 @@ class LLMService:
                             target["function"]["arguments"] += arg_delta
 
                 elif delta_content:
+                    final_answer_content += delta_content
                     yield delta_content
-
-            # 记录本步骤生成时间
-            if first_token_time is not None:
-                step_generation_time = time.time() - first_token_time
-                last_step_generation_time = step_generation_time
 
             if in_reasoning:
                 reasoning_time = time.time() - reasoning_start_time
@@ -303,14 +302,17 @@ class LLMService:
             if step_usage_record:
                 last_step_usage = step_usage_record
 
+            # 记录本步骤生成时间
+            if first_token_time is not None:
+                step_generation_time = time.time() - first_token_time
+                last_step_generation_time = step_generation_time
+
             # ---------- 构建工具调用字典 (用于 assistant_msg) ----------
             tool_calls = {}
             for idx, tc in tool_calls_by_index.items():
-                if tc.get("id"):
-                    tool_calls[tc["id"]] = tc
-                else:
-                    print(f"[ERROR] 工具 {tc['function']['name']} 缺失 ID，可能流式解析异常，跳过")
-                    continue
+                if not tc.get("id"):
+                    tc["id"] = f"call_{uuid.uuid4().hex}"
+                tool_calls[tc["id"]] = tc
 
             if tool_calls and request and await request.is_disconnected():
                 break
@@ -321,7 +323,7 @@ class LLMService:
             # ---------- 构建 valid_calls (用于执行工具，保留 idx) ----------
             valid_calls = {}
             for idx, tc in tool_calls_by_index.items():
-                if tc.get("id") and tc["function"]["name"].strip():
+                if tc["function"]["name"].strip():
                     valid_calls[idx] = tc
                 else:
                     yield "\n⚠️ 检测到无效工具调用（名称空白），已忽略。\n"
@@ -398,7 +400,25 @@ class LLMService:
                     result = f"工具执行出错: {error_msg}"
                     failed = True
 
+                final_id_for_context = real_tool_call_id if real_tool_call_id else local_call_id
                 exec_time_ms = int((time.time() - start_time) * 1000)
+
+                # 统一格式化 tool 返回的内容
+                if isinstance(result, dict):
+                    # 如果是字典，转为标准 JSON 字符串 (ensure_ascii=False 保证中文正常显示)
+                    tool_content = json.dumps(result, ensure_ascii=False)
+                else:
+                    # 如果已经是字符串或其他类型，直接转字符串即可，不要再次 json.dumps
+                    tool_content = str(result)
+
+                if chat_id and message_id:
+                    await add_message(
+                        chat_id=chat_id,
+                        role='tool',
+                        content=tool_content, 
+                        tool_call_id=final_id_for_context,
+                        file_ref=None
+                    )
 
                 # 更新结果和状态 (存入数据库)
                 if message_id:
@@ -424,17 +444,6 @@ class LLMService:
 
                 yield f"<!--tool_preview:end:{local_call_id}-->"
                 del tool_preview_active[idx]
-
-                # 使用 real_tool_call_id 关联上下文
-                # 如果 real_tool_call_id 为空（理论上不应该，除非流式解析异常），则使用 local_call_id 兜底
-                final_id_for_context = real_tool_call_id if real_tool_call_id else local_call_id
-
-                if isinstance(result, dict):
-                    # 如果是字典，转为标准 JSON 字符串 (ensure_ascii=False 保证中文正常显示)
-                    tool_content = json.dumps(result, ensure_ascii=False)
-                else:
-                    # 如果已经是字符串或其他类型，直接转字符串即可，不要再次 json.dumps
-                    tool_content = str(result)
 
                 current_messages.append({
                     "role": "tool",

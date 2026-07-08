@@ -121,6 +121,7 @@ export function useChat() {
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         message_id: assistantMessageId,
+        chat_id: chatStore.activeChatId,
       })
 
       setTimeout(() => scrollToBottom(), 160)
@@ -221,6 +222,7 @@ export function useChat() {
 				},
 				profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
 				message_id: messageId,
+        chat_id: chatStore.activeChatId,
 			})
 
       const response = await fetch('/api/chat', {
@@ -306,6 +308,7 @@ export function useChat() {
 				},
 				profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         message_id: messageId,
+        chat_id: chatStore.activeChatId,
 			})
 
       const response = await fetch('/api/chat', {

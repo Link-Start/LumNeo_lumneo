@@ -26,6 +26,8 @@ class MessageRecord:
         self.role = row['role']
         self.content = self._parse_content(row['content'])
         self.file_ref = self._parse_json(row['file_ref'])
+        self.tool_calls = self._parse_json(row['tool_calls']) if row['tool_calls'] else None
+        self.tool_call_id = row['tool_call_id']
 
     def _parse_json(self, val):
         if val is None:
@@ -51,7 +53,9 @@ class MessageRecord:
             'id': self.id,
             'role': self.role,
             'content': self.content,
-            'file_ref': self.file_ref
+            'file_ref': self.file_ref,
+            'tool_calls': self.tool_calls,
+            'tool_call_id': self.tool_call_id
         }
 
 # --- Chat CRUD ---
@@ -109,7 +113,7 @@ async def get_messages(chat_id: str) -> List[MessageRecord]:
     db = await get_db()
     try:
         cursor = await db.execute(
-            "SELECT id, chat_id, role, content, file_ref FROM messages WHERE chat_id = ? ORDER BY id",
+            "SELECT id, chat_id, role, content, file_ref, tool_calls, tool_call_id FROM messages WHERE chat_id = ? ORDER BY id",
             (chat_id,)
         )
         rows = await cursor.fetchall()
@@ -117,7 +121,14 @@ async def get_messages(chat_id: str) -> List[MessageRecord]:
     finally:
         await db.close()
 
-async def add_message(chat_id: str, role: str, content: Any, file_ref: Optional[dict] = None) -> MessageRecord:
+async def add_message(
+    chat_id: str, 
+    role: str, 
+    content: Any, 
+    file_ref: Optional[dict] = None,
+    tool_calls: Optional[List[Dict]] = None,
+    tool_call_id: Optional[str] = None
+) -> MessageRecord:
     """添加一条消息"""
     db = await get_db()
     try:
@@ -125,13 +136,13 @@ async def add_message(chat_id: str, role: str, content: Any, file_ref: Optional[
         file_ref_json = json.dumps(file_ref) if file_ref else None
         
         # 处理 content：如果是 dict/list 需要转成 json 字符串存入
-        content_str = content
-        if isinstance(content, (dict, list)):
-            content_str = json.dumps(content, ensure_ascii=False)
+        content_str = json.dumps(content, ensure_ascii=False) if isinstance(content, (dict, list)) else content
+        file_ref_json = json.dumps(file_ref) if file_ref else None
+        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
 
         cursor = await db.execute(
-            "INSERT INTO messages (chat_id, role, content, file_ref) VALUES (?, ?, ?, ?)",
-            (chat_id, role, content_str, file_ref_json)
+            "INSERT INTO messages (chat_id, role, content, file_ref, tool_calls, tool_call_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (chat_id, role, content_str, file_ref_json, tool_calls_json, tool_call_id)
         )
         await db.commit()
         msg_id = cursor.lastrowid

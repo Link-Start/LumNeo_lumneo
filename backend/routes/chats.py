@@ -25,6 +25,8 @@ class MessageResponse(BaseModel):
     role: str
     content: Any
     file_ref: Optional[Union[dict, list]] = None
+    tool_calls: Optional[Any] = None
+    tool_call_id: Optional[str] = None
 
 class AddMessageRequest(BaseModel):
     role: str

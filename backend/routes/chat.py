@@ -40,6 +40,7 @@ class ChatRequest(BaseModel):
     llm_config: Optional[ModelConfig] = None
     profile_id: Optional[int] = None
     message_id: Optional[int] = None
+    chat_id: Optional[str] = None
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
@@ -163,6 +164,14 @@ async def chat(
                         text = REASONING_BLOCK.sub('', text)
                         text = MISC_MARKERS.sub('', text)
                         part["text"] = text
+            else:
+                if msg.get("role") == "tool":
+                    # 将对象转为 JSON 字符串
+                    msg["content"] = json.dumps(content, ensure_ascii=False)
+                else:
+                    # 对于其他角色，如果出现意料外的类型，也转为字符串（或根据情况处理）
+                    # 但通常 user/assistant 不应出现 dict，若出现也转为字符串避免出错
+                    msg["content"] = json.dumps(content, ensure_ascii=False) if content is not None else ""
 
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
@@ -182,7 +191,8 @@ async def chat(
                     'frequency_penalty': profile.frequency_penalty,
                     'presence_penalty': profile.presence_penalty,
                 } if profile else {},
-                message_id=request.message_id
+                message_id=request.message_id,
+                chat_id=request.chat_id
             ),
             media_type="text/event-stream"
         )
