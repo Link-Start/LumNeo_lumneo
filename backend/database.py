@@ -7,6 +7,7 @@ from config_loader import config
 async def get_db():
     db = await aiosqlite.connect(f"{config.data_dir}/data/lumneo.db")
     db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA foreign_keys = ON")
     return db
 
 async def init_db():
@@ -26,7 +27,7 @@ async def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chat_id TEXT NOT NULL,
             role TEXT NOT NULL,
-            content TEXT NOT NULL,
+            content TEXT DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
             tool_calls TEXT DEFAULT NULL,
             tool_call_id TEXT DEFAULT NULL,

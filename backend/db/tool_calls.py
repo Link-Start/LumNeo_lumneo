@@ -166,27 +166,6 @@ async def update_tool_call_arguments(call_id: str, arguments: Dict):
     finally:
         await db.close()
 
-async def delete_tool_call(call_id: str) -> bool:
-    """根据 call_id 删除单条工具调用记录
-    
-    Args:
-        call_id: 工具调用唯一标识
-        
-    Returns:
-        bool: 是否删除成功（True 表示有记录被删除，False 表示记录不存在）
-    """
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "DELETE FROM tool_calls WHERE call_id = ?",
-            (call_id,)
-        )
-        await db.commit()
-        return cursor.rowcount > 0
-    finally:
-        await db.close()
-
-
 async def delete_tool_calls_by_message(message_id: int) -> int:
     """根据 message_id 批量删除该消息关联的所有工具调用记录
     
@@ -199,31 +178,25 @@ async def delete_tool_calls_by_message(message_id: int) -> int:
     db = await get_db()
     try:
         cursor = await db.execute(
-            "DELETE FROM tool_calls WHERE message_id = ?",
+            "SELECT call_id FROM tool_calls WHERE message_id = ?", 
+            (message_id,)
+        )
+        rows = await cursor.fetchall()
+        if rows:
+            call_ids = [row['call_id'] for row in rows]
+            placeholders = ','.join(['?'] * len(call_ids))
+            await db.execute(
+                f"DELETE FROM messages WHERE tool_call_id IN ({placeholders})", 
+                call_ids
+            )
+        await db.execute(
+            "DELETE FROM tool_calls WHERE message_id = ?", 
             (message_id,)
         )
         await db.commit()
         return cursor.rowcount
-    finally:
-        await db.close()
-
-
-async def delete_tool_call_by_id(tool_call_id: int) -> bool:
-    """根据主键 id 删除单条工具调用记录
-    
-    Args:
-        tool_call_id: tool_calls 表的主键 id
-        
-    Returns:
-        bool: 是否删除成功
-    """
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "DELETE FROM tool_calls WHERE id = ?",
-            (tool_call_id,)
-        )
-        await db.commit()
-        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"删除工具调用及消息失败: {e}")
+        await db.rollback()
     finally:
         await db.close()

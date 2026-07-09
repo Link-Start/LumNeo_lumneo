@@ -154,7 +154,7 @@ async def add_message(
     finally:
         await db.close()
 
-async def update_message(message_id: int, chat_id: str, content: Any, file_ref: Optional[dict] = None) -> bool:
+async def update_message(message_id: int, chat_id: str, content: Any, file_ref: Optional[dict] = None, tool_calls: Optional[List[Dict]] = None) -> bool:
     """更新消息内容"""
     db = await get_db()
     try:
@@ -163,10 +163,11 @@ async def update_message(message_id: int, chat_id: str, content: Any, file_ref: 
             content_str = json.dumps(content, ensure_ascii=False)
             
         file_ref_json = json.dumps(file_ref) if file_ref else None
+        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
         
         await db.execute(
-            "UPDATE messages SET content = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
-            (content_str, file_ref_json, message_id, chat_id)
+            "UPDATE messages SET content = ?, tool_calls = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
+            (content_str, tool_calls_json, file_ref_json, message_id, chat_id)
         )
         await db.commit()
         # 返回是否有行被更新

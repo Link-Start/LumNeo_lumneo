@@ -51,7 +51,7 @@
                     <div class="message-content user-content" v-text="msg.content.trim()"></div>
                   </template>
                   <!-- 助手消息 Markdown -->
-                  <template v-else-if="msg.role === 'assistant'">
+                  <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
                     <div class="message-content" :data-theme="isDark">
                       <MarkdownRender
                         :key="'msg-' + chatId + '-' + msg.id + '-' + index"
@@ -60,7 +60,7 @@
                         :themes="['vitesse-light', 'vitesse-dark']"
                         code-block-dark-theme="vitesse-dark"
                         code-block-light-theme="vitesse-light"
-                        :content="processMessageContent(msg.content.trim(), false)"
+                        :content="processMessageContent(msg.content?.trim(), false)"
                         :final="true"
                         :fade="false"
                         :typewriter="false"
