@@ -8,6 +8,12 @@ async def get_db():
     db = await aiosqlite.connect(f"{config.data_dir}/data/lumneo.db")
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")
+    # 1. 开启 WAL 模式，实现读写并发，避免报错 "database is locked"
+    await db.execute("PRAGMA journal_mode = WAL")
+    # 2. 调大缓存大小（单位是页，1页通常为 4KB，调大能极大减少磁盘 IO）
+    await db.execute("PRAGMA cache_size = -20000")  # 约 80MB 内存缓存
+    # 3. 同步模式设为 NORMAL（兼顾写入速度与安全性）
+    await db.execute("PRAGMA synchronous = NORMAL")
     return db
 
 async def init_db():
@@ -102,6 +108,9 @@ async def init_db():
             FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
         )
     """)
+
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_time ON messages (chat_id, created_at DESC)")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_message_id ON tool_calls (message_id)")
 
     await db.commit()
     await db.close()

@@ -16,7 +16,7 @@ tools:
     function_name: get_weather
 
   - name: system_use_skill
-    title: 使用技能
+    title: 装载技能
     description: 当用户意图匹配可用技能时，调用此工具获取该技能的详细执行手册。必须调用此工具后才能执行技能任务。
     parameters:
       type: object
@@ -29,7 +29,7 @@ tools:
     function_name: use_skill
 
   - name: system_execute_script
-    title: 执行脚本
+    title: 施放技能
     description: 执行技能指定的脚本文件，并返回执行结果。
     parameters:
       type: object

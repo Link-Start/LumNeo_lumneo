@@ -229,8 +229,6 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
 
       contentForModel = contentArray
     } else {
-      console.log(nonImageFiles);
-      
       // --- 纯文本 + 文档提示 ---
       let text = typeof msg.content === 'string' ? extractFinalContent(msg.content) : ''
       if (nonImageFiles.length > 0) {

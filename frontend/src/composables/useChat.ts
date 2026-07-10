@@ -100,15 +100,8 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
       }
       
       // 3. 提取最终回答，作为新消息保存
-      // 建议在这里把 fullText 里的注释标记清理掉，只保留纯文本
       let finalContent = fullText
-      // 简单清理标记（如果没有 extractFinalContent 函数的话）
-      // finalContent = finalContent.replace(/<!--tool_calls:start-->[\s\S]*?(?:<!--tool_calls:end-->|$)/g, '')
-      // finalContent = finalContent.replace(/<!--tool_data:[^:]+:[\s\S]*?-->/g, '')
-      // finalContent = finalContent.replace(/<!--token_usage:.*?-->/g, '')
-      // finalContent = finalContent.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
-      // finalContent = finalContent.replace(/<!--tool_status:[^>]+-->/g, '')
-      // finalContent = finalContent.trim()
+      finalContent = finalContent.replace(/<!--tool_data:[^:]+:[\s\S]*?-->/g, '')
 
       if (finalContent) {
         const finalMsg: Message = { id: Date.now() + 1000, role: 'assistant', content: finalContent }
@@ -198,6 +191,8 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
     try {
       const allMessages = chatStore.getActiveMessages()
       const apiMessages = await cleanMessages(allMessages)
+      // 删除最后一条消息
+      apiMessages.pop()
       const body = JSON.stringify({
         messages: apiMessages,
         enable_tools: chatStore.enableProfile,

@@ -409,7 +409,7 @@ class LLMService:
                 # 更新结果和状态 (存入数据库)
                 if message_id:
                     try:
-                        result_str = str(result)[:20000]
+                        result_str = str(result)[:50000]
                         await update_tool_call(
                             call_id=local_call_id,
                             result=result_str,
