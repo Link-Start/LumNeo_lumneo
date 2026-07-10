@@ -164,6 +164,7 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
 
     const chatId = chatStore.activeChatId
     const displayContent = currentInput.value.trim()
+    currentInput.value = ''
     const userMsg: Message = {
       id: Date.now(),
       role: 'user',
@@ -181,7 +182,6 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
     const assistantMessageId = assistantMsg.id
     isLoading.value = true
     streamingContent.value = ''
-    currentInput.value = ''
 
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
