@@ -159,23 +159,41 @@ export function normalizeFileRef(ref: any): UploadedFile[] {
   return Array.isArray(ref) ? ref : [ref]
 }
 
+
+  /**
+   * 辅助函数：从流式文本中提取最终回答内容
+   * 去除思考过程、工具调用标记和 token 统计标记
+   */
+  function extractFinalContent(text: string): string {
+    let content = text
+    content = content.replace(/<!--tool_data:[^:]+:[\s\S]*?-->/g, '') // 清理工具数据标记
+    // 如果存在工具调用，截取最后一个 <!--tool_calls:end--> 之后的内容
+    const parts = content.split('<!--tool_calls:end-->')
+    if (parts.length > 1) {
+      content = parts[parts.length - 1]
+    }
+    // 清理所有 HTML 注释标记
+    content = content.replace(/<!--reasoning:start-->([\s\S]*?)<!--reasoning:end:(.*?)-->/g, '')
+    content = content.replace(/<!--token_usage:.*?-->/g, '')
+    content = content.replace(/<!--tool_calls:start-->[\s\S]*?(?:<!--tool_calls:end-->|$)/g, '')
+    content = content.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
+    content = content.replace(/<!--tool_status:[^>]+-->/g, '')
+    return content.trim()
+  }
+
 /**
  * 将包含文件引用的消息列表转换为适合发送给模型的消息格式
  * - 图片文件：转换为 base64 并嵌入多模态 content 数组
  * - 非图片文件：在消息文本末尾附加工具调用提示
  */
-export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[] }[]> {
+export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[]; tool_calls?: any[]; tool_call_id?: string }[]> {
+  
   const promises = msgs.map(async (msg) => {
     const fileRefs = normalizeFileRef(msg.file_ref)
 
     // 分离图片和非图片文件
     const imageFiles = fileRefs.filter(f => f.type?.startsWith('image/'))
     const nonImageFiles = fileRefs.filter(f => !f.type?.startsWith('image/'))
-
-    // 如果没有文件，直接返回原内容
-    if (imageFiles.length === 0 && nonImageFiles.length === 0) {
-      return { role: msg.role, content: msg.content }
-    }
 
     // 获取本地 IP 地址
     const urlhost = window.location.host.replace(/\b(?:localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, localIP.value)
@@ -212,7 +230,7 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       contentForModel = contentArray
     } else {
       // --- 纯文本 + 文档提示 ---
-      let text = typeof msg.content === 'string' ? msg.content : ''
+      let text = typeof msg.content === 'string' ? extractFinalContent(msg.content) : ''
       if (nonImageFiles.length > 0) {
         const fileTips = nonImageFiles.map(f => f.url.replace('/files/uploads', uploadDir.value)).join('\n')
         const mcp_fileTips = nonImageFiles.map(f => f.url.replace('/files/', `http://${urlhost}/files/`)).join('\n')
@@ -220,8 +238,32 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       }
       contentForModel = text
     }
-
-    return { role: msg.role, content: contentForModel }
+    
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      return {
+        role: 'assistant',
+        content: msg.content || null, // OpenAI 标准建议如果只有工具调用，content 可以为 null
+        tool_calls: msg.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          type: tc.type || 'function', // 默认为 function
+          function: {
+            name: tc.function?.name,
+            arguments: tc.function?.arguments
+          }
+        }))
+      }
+    }
+    if (msg.role === 'tool') {
+      return {
+        role: 'tool',
+        tool_call_id: msg.tool_call_id,
+        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      }
+    }
+    return {
+      role: msg.role,
+      content: contentForModel
+    }
   })
 
   return Promise.all(promises)

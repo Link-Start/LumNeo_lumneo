@@ -1,0 +1,246 @@
+<svg class="fx" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 能量核心渐变 -->
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff"/>
+      <stop offset="20%" stop-color="#fff0b8"/>
+      <stop offset="50%" stop-color="#ffaa00"/>
+      <stop offset="85%" stop-color="#ff4400"/>
+      <stop offset="100%" stop-color="#aa1100"/>
+    </radialGradient>
+    <!-- 地面光池 -->
+    <radialGradient id="pool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ff8a2a" stop-opacity="0.4"/>
+      <stop offset="60%" stop-color="#ff4400" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ff4400" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 人物剪影 -->
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#1a2235"/>
+      <stop offset="100%" stop-color="#0a0e18"/>
+    </linearGradient>
+    <!-- 气柱渐变 -->
+    <linearGradient id="pillar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%"  stop-color="#ff8a2a" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#ffaa00" stop-opacity="0.25"/>
+      <stop offset="70%" stop-color="#ffd700" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bigGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <!-- 文字发光滤镜 -->
+    <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ============ 地面能量池 ============ -->
+  <ellipse cx="200" cy="340" rx="120" ry="24" fill="url(#pool)">
+    <animate attributeName="rx" values="110;130;110" dur="3.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="3.2s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- ============ 最外层阵法（大圆，顺时针极慢） ============ -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate"
+      from="0 200 200" to="360 200 200" dur="40s" repeatCount="indefinite"/>
+    <!-- 大圆 -->
+    <circle cx="200" cy="200" r="180" fill="none"
+            stroke="#ffd89b" stroke-width="0.8" opacity="0.2"
+            stroke-dasharray="2 12"/>
+    <!-- 阵法符文点（8个） -->
+    <circle cx="200" cy="20"  r="2" fill="#ffc04d" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="327" cy="73"  r="1.5" fill="#ffc04d" opacity="0.4" filter="url(#glow)"/>
+    <circle cx="380" cy="200" r="2" fill="#ffc04d" opacity="0.5" filter="url(#glow)"/>
+    <circle cx="327" cy="327" r="1.5" fill="#ffc04d" opacity="0.4" filter="url(#glow)"/>
+    <circle cx="200" cy="380" r="2" fill="#ffc04d" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="73"  cy="327" r="1.5" fill="#ffc04d" opacity="0.4" filter="url(#glow)"/>
+    <circle cx="20"  cy="200" r="2" fill="#ffc04d" opacity="0.5" filter="url(#glow)"/>
+    <circle cx="73"  cy="73"  r="1.5" fill="#ffc04d" opacity="0.4" filter="url(#glow)"/>
+    <!-- 连接弧线 -->
+    <path d="M 200 20 A 180 180 0 0 1 380 200" stroke="#ff8a2a" stroke-width="0.8"
+          fill="none" opacity="0.15" stroke-dasharray="40 8"/>
+    <path d="M 20 200 A 180 180 0 0 1 200 380" stroke="#ff8a2a" stroke-width="0.8"
+          fill="none" opacity="0.15" stroke-dasharray="40 8"/>
+  </g>
+
+  <!-- ============ 中层阵法（逆时针） ============ -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate"
+      from="360 200 200" to="0 200 200" dur="20s" repeatCount="indefinite"/>
+    <circle cx="200" cy="200" r="140" fill="none"
+            stroke="#3fe0ff" stroke-width="0.6" opacity="0.25"
+            stroke-dasharray="6 4"/>
+    <!-- 六芒星 -->
+    <path d="M 200 70 L 312 265 L 88 265 Z" fill="none"
+          stroke="#3fe0ff" stroke-width="0.5" opacity="0.12"/>
+    <path d="M 200 330 L 88 135 L 312 135 Z" fill="none"
+          stroke="#3fe0ff" stroke-width="0.5" opacity="0.12"/>
+    <!-- 6个节点 -->
+    <circle cx="200" cy="60"  r="3" fill="#3fe0ff" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="312" cy="265" r="3" fill="#3fe0ff" opacity="0.5" filter="url(#glow)"/>
+    <circle cx="88"  cy="265" r="3" fill="#3fe0ff" opacity="0.5" filter="url(#glow)"/>
+    <circle cx="200" cy="340" r="3" fill="#3fe0ff" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="88"  cy="135" r="3" fill="#3fe0ff" opacity="0.5" filter="url(#glow)"/>
+    <circle cx="312" cy="135" r="3" fill="#3fe0ff" opacity="0.5" filter="url(#glow)"/>
+  </g>
+
+  <!-- ============ 内层阵法（顺时针快） ============ -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate"
+      from="0 200 200" to="360 200 200" dur="12s" repeatCount="indefinite"/>
+    <circle cx="200" cy="200" r="100" fill="none"
+            stroke="#ffd700" stroke-width="0.6" opacity="0.3"
+            stroke-dasharray="3 8"/>
+    <!-- 弧段 -->
+    <path d="M 200 100 A 100 100 0 0 1 285 250"
+          stroke="#ffaa00" stroke-width="1.2" fill="none"
+          stroke-linecap="round" opacity="0.5" filter="url(#glow)"/>
+    <path d="M 115 150 A 100 100 0 0 1 200 100"
+          stroke="#ffaa00" stroke-width="1" fill="none"
+          stroke-linecap="round" opacity="0.35" filter="url(#glow)"/>
+    <path d="M 200 300 A 100 100 0 0 1 115 250"
+          stroke="#3fe0ff" stroke-width="1" fill="none"
+          stroke-linecap="round" opacity="0.3" filter="url(#glow)"/>
+    <!-- 节点 -->
+    <circle cx="200" cy="100" r="2.5" fill="#fff" filter="url(#glow)"/>
+    <circle cx="285" cy="250" r="2" fill="#ffd700" filter="url(#glow)"/>
+    <circle cx="115" cy="250" r="2" fill="#3fe0ff" filter="url(#glow)"/>
+  </g>
+
+  <!-- ============ 上升气柱（背后） ============ -->
+  <ellipse cx="200" cy="280" rx="18" ry="100" fill="url(#pillar)" opacity="0.7">
+    <animate attributeName="ry" values="90;110;90" dur="3.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0.85;0.5" dur="3.2s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- ============ 冥想人物剪影 ============ -->
+  <g transform="translate(200 200)">
+    <!-- 头 -->
+    <circle cx="0" cy="-56" r="13" fill="url(#body)"/>
+    <!-- 身体（盘腿打坐） -->
+    <path d="M -34 20 Q -30 -10 -18 -22 L -8 -28 L 8 -28 L 18 -22 Q 30 -10 34 20
+              Q 34 28 26 30 L -26 30 Q -34 28 -34 20 Z" fill="url(#body)"/>
+    <!-- 手臂（结印） -->
+    <path d="M -16 -8 Q -8 -4 0 0 Q 8 -4 16 -8 L 14 4 Q 8 8 0 8 Q -8 8 -14 4 Z"
+          fill="url(#body)" opacity="0.9"/>
+    <!-- 盘腿 -->
+    <ellipse cx="0" cy="28" rx="40" ry="12" fill="url(#body)"/>
+  </g>
+
+  <!-- ============ 丹田能量核 ============ -->
+  <circle cx="200" cy="198" r="10" fill="url(#core)" filter="url(#glow)">
+    <animate attributeName="r" values="8;13;8" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- 核心光晕 -->
+  <circle cx="200" cy="198" r="20" fill="#ffaa00" opacity="0.35" filter="url(#bigGlow)">
+    <animate attributeName="r" values="16;28;16" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- 核心闪点 -->
+  <circle cx="200" cy="198" r="2" fill="#fff">
+    <animate attributeName="r" values="1.5;3;1.5" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ============ 身体周围光晕 ============ -->
+  <ellipse cx="200" cy="180" rx="50" ry="80" fill="#ff8a2a" opacity="0.12" filter="url(#bigGlow)">
+    <animate attributeName="opacity" values="0.08;0.2;0.08" dur="3.2s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- ============ 扩散波纹（3层错开） ============ -->
+  <circle cx="200" cy="200" r="40" fill="none" stroke="#ffaa00" stroke-width="1.5" opacity="0">
+    <animate attributeName="r" values="40;160" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-width" values="2;0.3" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="200" cy="200" r="40" fill="none" stroke="#3fe0ff" stroke-width="1.5" opacity="0">
+    <animate attributeName="r" values="40;160" dur="3s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0" dur="3s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-width" values="1.5;0.3" dur="3s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="200" cy="200" r="40" fill="none" stroke="#ffd700" stroke-width="1.5" opacity="0">
+    <animate attributeName="r" values="40;160" dur="3s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0" dur="3s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-width" values="2;0.3" dur="3s" begin="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ============ 灵气粒子上升（8颗错开） ============ -->
+  <circle cx="175" cy="320" r="1.8" fill="#ffd700">
+    <animate attributeName="cy" values="320;100" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="175;168;180;170" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="1;2.5;1.5;0.5" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="200" cy="320" r="1.5" fill="#fff5d6">
+    <animate attributeName="cy" values="320;90" dur="3s" begin="0.4s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="200;194;206;198" dur="3s" begin="0.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="3s" begin="0.4s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="1;2;1;0.5" dur="3s" begin="0.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="225" cy="320" r="2" fill="#ffaa00">
+    <animate attributeName="cy" values="320;100" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="225;232;218;228" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="1;2.5;1;0.3" dur="4s" begin="0.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="160" cy="320" r="1.5" fill="#3fe0ff">
+    <animate attributeName="cy" values="320;110" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="160;152;165;155" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.8;0.8;0" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="0.5;1.8;1;0.3" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="240" cy="320" r="1.5" fill="#7dffb6">
+    <animate attributeName="cy" values="320;110" dur="3.3s" begin="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="240;248;235;245" dur="3.3s" begin="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.8;0.8;0" dur="3.3s" begin="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="0.5;1.5;0.8;0.3" dur="3.3s" begin="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="190" cy="320" r="1.2" fill="#ffd700">
+    <animate attributeName="cy" values="320;95" dur="3.6s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="190;185;195;188" dur="3.6s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="3.6s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="0.5;1.5;1;0.3" dur="3.6s" begin="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="210" cy="320" r="1.2" fill="#fff5d6">
+    <animate attributeName="cy" values="320;95" dur="3.1s" begin="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="210;215;205;212" dur="3.1s" begin="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="3.1s" begin="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="0.5;1.5;0.8;0.3" dur="3.1s" begin="2.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="148" cy="320" r="1" fill="#ffaa00">
+    <animate attributeName="cy" values="320;120" dur="3.7s" begin="2.8s" repeatCount="indefinite"/>
+    <animate attributeName="cx" values="148;142;152;145" dur="3.7s" begin="2.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.7;0.7;0" dur="3.7s" begin="2.8s" repeatCount="indefinite"/>
+    <animate attributeName="r" values="0.5;1.2;0.6;0.2" dur="3.7s" begin="2.8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- ============ 顶部能量汇聚光锥 ============ -->
+  <path d="M 180 180 L 200 40 L 220 180 Z" fill="url(#pillar)" opacity="0.3">
+    <animate attributeName="opacity" values="0.15;0.4;0.15" dur="3.2s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- ============ 两侧能量丝带 ============ -->
+  <path d="M 130 280 Q 100 200 130 120 Q 140 90 200 80"
+        stroke="#ffaa00" stroke-width="1" fill="none" opacity="0.3"
+        stroke-linecap="round" filter="url(#softGlow)">
+    <animate attributeName="opacity" values="0.15;0.45;0.15" dur="4s" repeatCount="indefinite"/>
+  </path>
+  <path d="M 270 280 Q 300 200 270 120 Q 260 90 200 80"
+        stroke="#3fe0ff" stroke-width="1" fill="none" opacity="0.25"
+        stroke-linecap="round" filter="url(#softGlow)">
+    <animate attributeName="opacity" values="0.1;0.35;0.1" dur="4s" begin="1s" repeatCount="indefinite"/>
+  </path>
+</svg>

@@ -1,3 +1,4 @@
+// stores/profiles.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
@@ -20,16 +21,17 @@ export const useProfileStore = defineStore('profile', () => {
   async function loadProfiles() {
     const res = await fetch('/api/profiles/')
     let data = await res.json()
-    // 确保每个角色都有生成参数默认值（后端可能尚未返回这些字段）
     data = data.map((p: any) => ({
       ...p,
       temperature: p.temperature ?? 1,
-      top_p: p.top_p ?? 1,
+      top_p: p.top_p ?? 0.95,
       top_k: p.top_k ?? 40,
       frequency_penalty: p.frequency_penalty ?? 0,
       presence_penalty: p.presence_penalty ?? 0,
     }))
     profiles.value = data
+    
+    // 自动选中逻辑
     if (!activeProfileId.value || !profiles.value.find(p => p.id === activeProfileId.value)) {
       if (profiles.value.length > 0) {
         const pid = localStorage.getItem('activeProfileId')
@@ -43,22 +45,30 @@ export const useProfileStore = defineStore('profile', () => {
     tools: string[] = [],
     profile_prompt: string = '',
     temperature: number = 1,
-    top_p: number = 1,
+    top_p: number = 0.95,
     top_k: number = 40,
     frequency_penalty: number = 0,
-    presence_penalty: number = 0
+    presence_penalty: number = 0,
   ) {
     const res = await fetch('/api/profiles/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, tools, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty })
+      body: JSON.stringify({ 
+        name, 
+        tools, 
+        profile_prompt, 
+        temperature, 
+        top_p, 
+        top_k, 
+        frequency_penalty, 
+        presence_penalty 
+      })
     })
     const newProfile = await res.json()
-    // 补全默认值（以防后端未完整返回）
     const completeProfile: Profile = {
       ...newProfile,
       temperature: newProfile.temperature ?? 1,
-      top_p: newProfile.top_p ?? 1,
+      top_p: newProfile.top_p ?? 0.95,
       top_k: newProfile.top_k ?? 40,
       frequency_penalty: newProfile.frequency_penalty ?? 0,
       presence_penalty: newProfile.presence_penalty ?? 0,
@@ -77,13 +87,25 @@ export const useProfileStore = defineStore('profile', () => {
     top_p?: number,
     top_k?: number,
     frequency_penalty?: number,
-    presence_penalty?: number
+    presence_penalty?: number,
   ) {
+    // 发送更新请求
     await fetch(`/api/profiles/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, tools, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty })
+      body: JSON.stringify({ 
+        name, 
+        tools, 
+        profile_prompt, 
+        temperature, 
+        top_p, 
+        top_k, 
+        frequency_penalty, 
+        presence_penalty 
+      })
     })
+    
+    // 更新本地状态
     const profile = profiles.value.find(p => p.id === id)
     if (profile) {
       profile.name = name
@@ -113,5 +135,19 @@ export const useProfileStore = defineStore('profile', () => {
     return p ? new Set(p.tools) : new Set<string>()
   })
 
-  return { profiles, activeProfileId, activeProfile, activeToolsSet, loadProfiles, createProfile, updateProfile, deleteProfile }
+  const getProfile = (id: number) => {
+    return profiles.value.find(p => p.id === id)
+  }
+
+  return { 
+    profiles, 
+    activeProfileId, 
+    activeProfile, 
+    activeToolsSet, 
+    loadProfiles, 
+    getProfile, 
+    createProfile, 
+    updateProfile, 
+    deleteProfile 
+  }
 })

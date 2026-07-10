@@ -7,6 +7,7 @@ from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
+from backend.db.chats import add_message, update_message
 
 
 class LLMService:
@@ -32,6 +33,7 @@ class LLMService:
         mcp_manager=None,
         params: Dict = None,
         message_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
 
@@ -173,6 +175,7 @@ class LLMService:
             first_token_time = None
             tool_preview_active = {}
             tool_calls_started = False
+            final_answer_content = ""
 
             async for chunk in response:
                 if request and await request.is_disconnected():
@@ -242,7 +245,7 @@ class LLMService:
                             idx = tc_delta.id if tc_delta.id else str(uuid.uuid4())
 
                         if idx not in tool_preview_active and tc_delta.function and tc_delta.function.name:
-                            call_id = str(uuid.uuid4())
+                            call_id = getattr(tc_delta, 'id', str(uuid.uuid4()))
                             func_name = tc_delta.function.name
                             tool_preview_active[idx] = {
                                 'call_id': call_id,
@@ -250,13 +253,6 @@ class LLMService:
                                 'db_created': False,
                                 'preview_sent': True
                             }
-                            if idx in tool_calls_by_index:
-                                tool_calls_by_index[idx]['call_id'] = call_id
-                            else:
-                                tool_calls_by_index[idx] = {
-                                    "id": None, "type": "function", "function": {"name": "", "arguments": ""},
-                                    "call_id": call_id
-                                }
 
                             yield f"<!--tool_preview:start:{call_id}:{func_name}-->"
 
@@ -277,7 +273,6 @@ class LLMService:
                                 "id": getattr(tc_delta, 'id', None),
                                 "type": "function",
                                 "function": {"name": "", "arguments": ""},
-                                "call_id": None
                             }
                         target = tool_calls_by_index[idx]
                         if tc_delta.id:
@@ -289,12 +284,8 @@ class LLMService:
                             target["function"]["arguments"] += arg_delta
 
                 elif delta_content:
+                    final_answer_content += delta_content
                     yield delta_content
-
-            # 记录本步骤生成时间
-            if first_token_time is not None:
-                step_generation_time = time.time() - first_token_time
-                last_step_generation_time = step_generation_time
 
             if in_reasoning:
                 reasoning_time = time.time() - reasoning_start_time
@@ -303,14 +294,15 @@ class LLMService:
             if step_usage_record:
                 last_step_usage = step_usage_record
 
+            # 记录本步骤生成时间
+            if first_token_time is not None:
+                step_generation_time = time.time() - first_token_time
+                last_step_generation_time = step_generation_time
+
             # ---------- 构建工具调用字典 (用于 assistant_msg) ----------
             tool_calls = {}
             for idx, tc in tool_calls_by_index.items():
-                if tc.get("id"):
-                    tool_calls[tc["id"]] = tc
-                else:
-                    print(f"[ERROR] 工具 {tc['function']['name']} 缺失 ID，可能流式解析异常，跳过")
-                    continue
+                tool_calls[tc["id"]] = tc
 
             if tool_calls and request and await request.is_disconnected():
                 break
@@ -321,7 +313,7 @@ class LLMService:
             # ---------- 构建 valid_calls (用于执行工具，保留 idx) ----------
             valid_calls = {}
             for idx, tc in tool_calls_by_index.items():
-                if tc.get("id") and tc["function"]["name"].strip():
+                if tc["function"]["name"].strip():
                     valid_calls[idx] = tc
                 else:
                     yield "\n⚠️ 检测到无效工具调用（名称空白），已忽略。\n"
@@ -339,6 +331,12 @@ class LLMService:
             }
             current_messages.append(assistant_msg)
 
+            if message_id and chat_id:
+                try:
+                    await update_message(message_id, chat_id, None, None, list(tool_calls.values()))
+                except Exception as e:
+                    print(f"[DB] Failed to update assistant tool_calls: {e}")
+
             # ---------- 执行工具 ----------
             for idx, tc in valid_calls.items():
                 if idx not in tool_preview_active:
@@ -347,15 +345,10 @@ class LLMService:
 
                 local_call_id = tool_preview_active[idx]['call_id']
 
-                # 获取 Assistant 消息中使用的真实 ID
-                # OpenAI 要求 Tool 消息的 tool_call_id 必须与 Assistant 消息中的 id 严格一致
-                real_tool_call_id = tc.get("id")
-
                 func_name = tc["function"]["name"] or "未知工具"
                 raw_args = tc["function"]["arguments"]
 
                 if not tool_preview_active[idx].get('preview_sent', False):
-                    # 如果上面的流式阶段没有发（可能是非流式或者异常情况），在这里补发
                     yield f"<!--tool_preview:start:{local_call_id}:{func_name}-->"
                     tool_preview_active[idx]['preview_sent'] = True
 
@@ -379,17 +372,14 @@ class LLMService:
                 try:
                     result = await execute_tool(func_name, args, mcp_manager)
                     if isinstance(result, str):
-                        # 尝试解析 JSON 字符串
                         try:
                             result_obj = json.loads(result)
                             if isinstance(result_obj, dict) and result_obj.get("success") is False:
                                 failed = True
                         except json.JSONDecodeError:
-                            # 非 JSON 字符串，检查是否为旧版错误提示
                             if result.startswith("工具执行出错:"):
                                 failed = True
                     elif isinstance(result, dict) and result.get("success") is False:
-                        # 如果直接返回的是字典对象
                         failed = True
                 except Exception as e:
                     error_msg = str(e)
@@ -400,10 +390,26 @@ class LLMService:
 
                 exec_time_ms = int((time.time() - start_time) * 1000)
 
+                # 统一格式化 tool 返回的内容
+                if isinstance(result, dict):
+                    tool_content = json.dumps(result, ensure_ascii=False)
+                else:
+                    tool_content = str(result)
+
+                if chat_id and message_id:
+                    await add_message(
+                        chat_id=chat_id,
+                        role='tool',
+                        content=tool_content,
+                        tool_calls=None,  # tool 消息不需要这个字段
+                        tool_call_id=local_call_id,
+                        file_ref=None
+                    )
+
                 # 更新结果和状态 (存入数据库)
                 if message_id:
                     try:
-                        result_str = str(result)[:20000]
+                        result_str = str(result)[:50000]
                         await update_tool_call(
                             call_id=local_call_id,
                             result=result_str,
@@ -414,6 +420,15 @@ class LLMService:
                     except Exception as e:
                         print(f"[DB] Failed to update result: {e}")
 
+                tool_info = {
+                    "call_id": local_call_id,
+                    "name": func_name,
+                    "arguments": raw_args,
+                    # 限制 result 长度，防止流式数据过大导致前端卡顿
+                    "result": tool_content[:8000] 
+                }
+                yield f"<!--tool_data:{local_call_id}:{json.dumps(tool_info, ensure_ascii=False)}-->"
+                
                 # 更新连续失败计数
                 if failed:
                     consecutive_failures += 1
@@ -425,20 +440,9 @@ class LLMService:
                 yield f"<!--tool_preview:end:{local_call_id}-->"
                 del tool_preview_active[idx]
 
-                # 使用 real_tool_call_id 关联上下文
-                # 如果 real_tool_call_id 为空（理论上不应该，除非流式解析异常），则使用 local_call_id 兜底
-                final_id_for_context = real_tool_call_id if real_tool_call_id else local_call_id
-
-                if isinstance(result, dict):
-                    # 如果是字典，转为标准 JSON 字符串 (ensure_ascii=False 保证中文正常显示)
-                    tool_content = json.dumps(result, ensure_ascii=False)
-                else:
-                    # 如果已经是字符串或其他类型，直接转字符串即可，不要再次 json.dumps
-                    tool_content = str(result)
-
                 current_messages.append({
                     "role": "tool",
-                    "tool_call_id": final_id_for_context,
+                    "tool_call_id": local_call_id,
                     "content": tool_content
                 })
 

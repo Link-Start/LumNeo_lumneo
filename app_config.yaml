@@ -11,6 +11,7 @@ uploads_dir: "data/uploads"
 generate_dir: "data/generate"
 logs_dir: "logs"
 temp_dir: "temp"
+skills_dir: "skills_library"
 
 # 配置文件（mcp_config.json）存放路径
 # 支持绝对路径或相对于 data_dir

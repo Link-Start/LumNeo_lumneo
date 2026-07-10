@@ -40,3 +40,7 @@ export const copyToClipboard = (text: string) => {
         console.error('Could not copy text: ', err)
     })
 }
+
+export const formatDuration = (ms: number) => {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms` 
+}

@@ -15,6 +15,35 @@ tools:
     module: backend.system_tools.weather
     function_name: get_weather
 
+  - name: system_use_skill
+    title: 装载技能
+    description: 当用户意图匹配可用技能时，调用此工具获取该技能的详细执行手册。必须调用此工具后才能执行技能任务。
+    parameters:
+      type: object
+      properties:
+        skill_id:
+          type: string
+          description: 要使用的技能ID。
+      required: ["skill_id"]
+    module: backend.system_tools.skills
+    function_name: use_skill
+
+  - name: system_execute_script
+    title: 施放技能
+    description: 执行技能指定的脚本文件，并返回执行结果。
+    parameters:
+      type: object
+      properties:
+        script_path:
+          type: string
+          description: 脚本文件的绝对路径（由系统根据技能根目录拼接后提供）
+        args:
+          type: string
+          description: 传递给脚本的命令行参数，如 '--date 2026-05-20'
+      required: ["script_path"]
+    module: backend.system_tools.executor
+    function_name: execute_script
+
   - name: system_read_file
     title: 读取文件
     description: >
@@ -109,7 +138,7 @@ tools:
           type: string
           description: 项目创建的根路径（相对或绝对路径）。
       required: ["tree", "path"]
-    module: backend.system_tools.project_creator
+    module: backend.system_tools.creator
     function_name: create_project_tree
 
   - name: system_read_file_list
@@ -142,5 +171,5 @@ tools:
           type: boolean
           description: 是否返回文件大小和修改时间。默认为 false（仅返回相对路径以节省 Token）；若为 true，返回格式为 "相对路径 | 大小 | 修改时间"。
       required: ["path"]
-    module: backend.system_tools.file_lister
+    module: backend.system_tools.lister
     function_name: read_file_list

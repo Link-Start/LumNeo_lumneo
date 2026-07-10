@@ -2,10 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export interface Message {
-  id?: number
-  role: 'user' | 'assistant' | 'system'
+  id: number
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: any
   file_ref?: any
+  tool_calls?: any
+  tool_call_id?: any
 }
 
 export interface Chat {
@@ -79,7 +81,6 @@ export const useChatStore = defineStore('chat', () => {
     if (!chat) return
     const res = await fetch(`/api/chats/${chatId}/messages`)
     const msgs = await res.json()
-    
     chat.messages = msgs    
   }
 
@@ -147,12 +148,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 原有的 addMessageToActive 现在只是组合调用
-  async function addMessageToActive(msg: Message) {
-    addMessageToLocal(msg)
-    await saveMessageToBackend(msg)
-  }
-
   // 编辑消息内容（本地 + 后端）
   async function editMessage(messageId: number, newContent: string) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
@@ -210,7 +205,6 @@ export const useChatStore = defineStore('chat', () => {
     deleteChat,
     loadMessages,
     getActiveMessages,
-    addMessageToActive,
     addMessageToLocal,
     saveMessageToBackend,
     editMessage,
