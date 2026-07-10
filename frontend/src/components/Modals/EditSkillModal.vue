@@ -314,7 +314,7 @@ function finishUpload() {
   finishTimer = window.setTimeout(() => {
     uploadPhase.value = 'idle'
     finishTimer = null
-  }, 3000)
+  }, 1000)
 }
 
 function addFileToQueue(
