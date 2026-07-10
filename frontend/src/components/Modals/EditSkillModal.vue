@@ -425,7 +425,7 @@ const flushQueue = async () => {
         setTimeout(() => {
             message.success(`技能 [${newSkill.name}] 修炼成功！`)
             addSkillModalShow.value = false
-        }, 3000)
+        }, 1000)
       } else {
         message.error(result.message || '上传失败')
         tasks.forEach((t) => t.onError())
