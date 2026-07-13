@@ -1,6 +1,5 @@
 import json
 import os
-import asyncio
 import aiosqlite
 from typing import List, Optional, Dict, Any
 from backend.database import get_db
@@ -11,12 +10,13 @@ class SkillRecord:
     def __init__(self, row: aiosqlite.Row):
         self.id = row['id']
         self.name = row['name']
+        self.description = row['description'] or ''
         self.file_path = row['file_path']
         self.enabled = bool(row['enabled'])
         self.is_global = bool(row['is_global'])
         self.metadata = json.loads(row['metadata'])
         # 从 metadata 中提取简短描述（用于轻量注入 System Prompt）
-        self.short_description = self.metadata.get('description', '')
+        self.short_description = self.description or self.metadata.get('description', '')
         # prompt_content 保留但默认不加载（懒加载）
         self.prompt_content = ""
 
@@ -54,12 +54,12 @@ class SkillRecord:
         return {
             "id": self.id,
             "name": self.name,
+            "description": self.short_description,
             "enabled": self.enabled,
             "is_global": self.is_global,
             "metadata": self.metadata,
             "short_description": self.short_description,
         }
-
 
 async def create_skill(
     skill_id: str,
@@ -85,6 +85,53 @@ async def create_skill(
         )
         await db.commit()
         return await get_skill_by_id(skill_id)
+    finally:
+        await db.close()
+
+async def update_skill(
+    skill_id: str,
+    name: str = None,
+    description: str = None,
+    is_global: bool = None
+) -> Optional[SkillRecord]:
+    """更新技能信息"""
+    db = await get_db()
+    try:
+        # 构建动态更新
+        fields = []
+        params = []
+        if name is not None:
+            fields.append("name = ?")
+            params.append(name)
+        if description is not None:
+            fields.append("description = ?")
+            params.append(description)
+        if is_global is not None:
+            fields.append("is_global = ?")
+            params.append(1 if is_global else 0)
+        if not fields:
+            return await get_skill_by_id(skill_id)
+        fields.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(skill_id)
+        await db.execute(
+            f"UPDATE skills SET {', '.join(fields)} WHERE id = ?",
+            params
+        )
+        await db.commit()
+        return await get_skill_by_id(skill_id)
+    finally:
+        await db.close()
+
+async def delete_skill(skill_id: str) -> bool:
+    """删除技能（级联删除关联记录）"""
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM skills WHERE id = ?", (skill_id,))
+        await db.commit()
+        return True
+    except Exception as e:
+        print(f"删除技能失败: {e}")
+        return False
     finally:
         await db.close()
 
@@ -138,6 +185,19 @@ async def get_skills_by_profile(profile_id: int) -> List[SkillRecord]:
     finally:
         await db.close()
 
+async def get_profiles_using_skill(skill_id: str) -> list:
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT p.id, p.name FROM profiles p
+               INNER JOIN profile_skills ps ON p.id = ps.profile_id
+               WHERE ps.skill_id = ?""",
+            (skill_id,)
+        )
+        rows = await cursor.fetchall()
+        return [{"id": row[0], "name": row[1]} for row in rows]
+    finally:
+        await db.close()
 
 async def list_all_skills() -> List[SkillRecord]:
     db = await get_db()

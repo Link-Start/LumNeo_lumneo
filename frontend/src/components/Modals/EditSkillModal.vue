@@ -9,7 +9,7 @@
     style="max-width: 520px; width: 96%"
     title="习得技能"
     positive-text="确认"
-    negative-text="关闭"
+    negative-text="取消"
     @update:show="negativeClick"
     @positive-click="saveSkill"
     @negative-click="negativeClick"
@@ -35,7 +35,7 @@
                 {{ getSkillNameById(skillId) }}
               </n-tag>
             </n-flex>
-            <span v-else style="color: var(--text-secondary)">未习得任何技能</span>
+            <span v-else style="color: var(--text-secondary)">未装备任何技能</span>
           </n-form-item>
         </n-form>
       </div>
@@ -80,7 +80,7 @@
                     <!-- 全局标签：只要技能是全局的就显示 -->
                     <n-tag 
                       v-if="skill.isGlobal" 
-                      size="tiny" 
+                      size="small" 
                       type="success" 
                       :bordered="false" 
                       style="margin-left: 8px; transform: scale(0.9);"
@@ -106,6 +106,8 @@
     title="修炼新技能"
     :mask-closable="false"
     :loading="adding"
+    positive-text="开始修炼"
+    negative-text="关闭"
     @positive-click="addSkill"
     @negative-click="cancelAdd"
   >
@@ -146,7 +148,8 @@
                 />
               </div>
               <n-text v-if="newSkillName.trim()" style="font-size: 16px; opacity: 0.45">
-                <span v-if="uploadPhase === 'idle'">点击或拖动技能文件夹到该区域</span>
+                <span v-if="pendingFiles.length > 0 && uploadPhase === 'idle'">技能已准备就绪，点击“开始修炼”</span>
+                <span v-else-if="uploadPhase === 'idle'">点击或拖动技能文件夹到该区域</span>
                 <span v-else-if="uploadPhase === 'progress'">修炼中...</span>
                 <span v-else-if="uploadPhase === 'finish'">习得成功！</span>
               </n-text>
@@ -233,6 +236,7 @@ watch(
   () => props.show,
   async (val) => {
     if (val && props.profileId != null) {
+      selectedSkills.value = []
       // 加载所有可用技能
       await loadAllSkills()
       const p = profileStore.getProfile(props.profileId)
@@ -299,6 +303,7 @@ interface UploadTask {
 const uploadQueue = ref<UploadTask[]>([])
 let uploadTimer: number | null = null
 const activeUploads = ref(0)
+const pendingFiles = ref<{ file: File; relativePath: string }[]>([])
 
 function startUpload() {
   if (finishTimer) {
@@ -310,6 +315,7 @@ function startUpload() {
 
 function finishUpload() {
   uploadPhase.value = 'finish'
+  adding.value = false
   if (finishTimer) clearTimeout(finishTimer)
   finishTimer = window.setTimeout(() => {
     uploadPhase.value = 'idle'
@@ -367,8 +373,8 @@ const customRequest = async ({ file, onFinish, onError }: UploadCustomRequestOpt
     return
   }
 
-  startUpload()
-  addFileToQueue(rawFile, relativePath, onFinish, onError)
+  pendingFiles.value.push({ file: rawFile, relativePath })
+  onFinish()
 }
 
 const flushQueue = async () => {
@@ -480,8 +486,6 @@ async function onDrop(e: DragEvent) {
   const items = e.dataTransfer?.items
   if (!items || items.length === 0) return
 
-  startUpload()
-
   const allFiles: { file: File; relativePath: string }[] = []
   let topFolder: string | null = null
 
@@ -514,16 +518,14 @@ async function onDrop(e: DragEvent) {
     uploadPhase.value = 'idle'
     return
   }
-
-  allFiles.forEach(({ file, relativePath }) => {
-    addFileToQueue(file, relativePath)
-  })
+  pendingFiles.value = allFiles
 }
 
 const openAddSkillModal = () => {
   newSkillName.value = ''
   newSkillGlobal.value = false
   uploadPhase.value = 'idle'
+  pendingFiles.value = []
   addSkillModalShow.value = true
 }
 
@@ -541,19 +543,24 @@ const addSkill = async () => {
     message.warning('技能名称已存在')
     return false
   }
-  if (uploadQueue.value.length === 0 && activeUploads.value === 0) {
+  if (pendingFiles.value.length === 0) {
     message.warning('请通过拖拽或点击选择技能文件夹')
     return false
   }
   if (uploadPhase.value === 'progress') {
-    message.info('正在上传，请稍后...')
+    message.info('正在修炼中...')
     return false
   }
-  if (uploadPhase.value === 'finish') {
-    addSkillModalShow.value = false
-    return true
-  }
-  message.warning('请先选择文件夹上传')
+  // 开始上传
+  startUpload()
+  adding.value = true
+
+  // 将暂存的文件全部加入上传队列
+  pendingFiles.value.forEach(({ file, relativePath }) => {
+    addFileToQueue(file, relativePath, undefined, undefined)
+  })
+  pendingFiles.value = []
+
   return false
 }
 

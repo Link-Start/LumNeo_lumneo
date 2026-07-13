@@ -88,6 +88,7 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS skills (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            description TEXT DEFAULT NULL,
             file_path TEXT NOT NULL,
             enabled INTEGER DEFAULT 1,
             is_global INTEGER DEFAULT 0,

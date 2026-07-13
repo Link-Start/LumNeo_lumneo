@@ -5,7 +5,17 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import List, Optional
 from config_loader import config
-from backend.db.skills import create_skill, link_skill_to_profile, list_all_skills, get_available_skills_for_profile, batch_set_selected_skills
+from backend.db.skills import (
+    create_skill,
+    link_skill_to_profile,
+    list_all_skills,
+    get_skill_by_id,
+    get_available_skills_for_profile,
+    batch_set_selected_skills,
+    get_profiles_using_skill,
+    update_skill as update_skill_record,
+    delete_skill as delete_skill_record
+)
 from backend.utils.skill_parser import parse_skill_markdown
 from backend.utils.skill_cache import skill_cache
 
@@ -16,13 +26,18 @@ class BatchSelectRequest(BaseModel):
     profile_id: int
     selected_skill_ids: list[str]
 
-# 1. 获取技能列表接口
+class UpdateSkillRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_global: Optional[bool] = None
+
+# 获取技能列表接口
 @router.get("/list")
-async def list_skills(profile_id: Optional[int] = None):
+async def list_skills(profile_id: Optional[int] = None, include_profiles: bool = False):
     """
     返回技能列表。
-    若提供 profile_id，则返回该角色可见的技能（全局+已关联）；
-    否则返回全部技能（兼容旧管理场景）。
+    - 若提供 profile_id，则返回该角色可见的技能（全局+已关联）；
+    - 若 include_profiles=True，则额外返回每个技能被哪些角色习得（仅管理端用）。
     """
     if profile_id is not None:
         records = await get_available_skills_for_profile(profile_id)
@@ -31,21 +46,63 @@ async def list_skills(profile_id: Optional[int] = None):
 
     result_list = []
     for record in records:
-        result_list.append({
+        item = {
             "id": record.id,
             "name": record.name,
-            "description": record.metadata.get("description", ""),
+            "description": record.short_description,   # 优先数据库 description，否则 metadata
             "is_global": record.is_global
-        })
+        }
+        # 如果需要返回使用该技能的角色
+        if include_profiles:
+            profiles = await get_profiles_using_skill(record.id)   # 需实现
+            item["used_by_profiles"] = profiles
+        result_list.append(item)
     return result_list
 
-# 2. 上传技能
+# 更新技能
+@router.put("/{skill_id}")
+async def update_skill(skill_id: str, req: UpdateSkillRequest):
+    record = await update_skill_record(skill_id, name=req.name, description=req.description, is_global=req.is_global)
+    if not record:
+        raise HTTPException(status_code=404, detail="技能不存在")
+    skill_cache.invalidate(skill_id)
+    return {"success": True, "id": record.id, "name": record.name, "description": record.short_description, "is_global": record.is_global}
+
+# 删除技能
+@router.delete("/{skill_id}")
+async def delete_skill(skill_id: str):
+    # 先查询技能，获取 file_path
+    skill = await get_skill_by_id(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="技能不存在")
+    
+    file_path = skill.file_path
+    
+    # 删除数据库记录（级联删除关联）
+    success = await delete_skill_record(skill_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="删除失败")
+    
+    # 删除文件夹
+    if file_path and os.path.exists(file_path):
+        try:
+            shutil.rmtree(file_path)
+        except Exception as e:
+            print(f"删除技能文件夹失败 {file_path}: {e}")
+            # 可记录日志，但不影响接口成功返回
+    
+    # 清除缓存
+    skill_cache.invalidate(skill_id)
+    
+    return {"success": True, "message": "技能已删除"}
+
+# 上传技能
 @router.post("/upload")
 async def upload_skill_folder(
     files: List[UploadFile] = File(...), 
     skillName: str = Form(None),
     is_global: bool = Form(False),  
-    profile_id: Optional[int] = Form(None) 
+    profile_id: Optional[int] = Form(None)
 ):
     if not files:
         raise HTTPException(status_code=400, detail="没有接收到文件")

@@ -47,7 +47,7 @@
 
         </n-tab-pane>
 
-        <!-- 其他设置 -->
+        <!-- 功能设置 -->
         <n-tab-pane name="function" tab="功能设置">
           <n-form label-placement="left" label-width="80">
             <n-form-item label="启用角色">
@@ -98,6 +98,13 @@
             </div>
           </div>
         </n-tab-pane>
+
+        <!-- 技能管理 -->
+        <n-tab-pane v-if="chatStore.enableProfile" name="skills" tab="技能管理">
+          <div style="overflow:auto;height:80vh;">
+            <SkillManager />
+          </div>
+        </n-tab-pane>
       </n-tabs>
       <div style="font-size:.6rem;color:#666;width:100%;text-align:center;position: absolute;left:0;right:10px;bottom: 6px">版本：{{ version }}</div>
     </n-drawer-content>
@@ -121,6 +128,7 @@ import {
   NTabs, NTabPane, NList, NListItem, NPopconfirm, NTag, NAlert, 
   NSelect, NText, useMessage
 } from 'naive-ui'
+import SkillManager from '@/components/SkillManager.vue'
 import EditProfileModal from '@/components/Modals/EditProfileModal.vue'
 import EditModelModal from '@/components/Modals/EditModelModal.vue'
 import EditSkillModal from '@/components/Modals/EditSkillModal.vue'
