@@ -35,12 +35,16 @@ async def init_db():
             role TEXT NOT NULL,
             content TEXT DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
-            tool_calls TEXT DEFAULT NULL,
-            tool_call_id TEXT DEFAULT NULL,
+            turn_index INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )
     """)
+
+    # 复合唯一索引（防止并发或重试导致轮次错乱）
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_turn ON messages (chat_id, turn_index, role)")
+    # 拉取顺序索引
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_time ON messages (chat_id, created_at ASC)")
 
     await db.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
@@ -70,19 +74,24 @@ async def init_db():
     await db.execute("""
         CREATE TABLE IF NOT EXISTS tool_calls (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message_id INTEGER NOT NULL,
-            call_id TEXT NOT NULL,
+            call_id TEXT NOT NULL UNIQUE,
+            chat_id TEXT NOT NULL,
             tool_name TEXT NOT NULL,
             arguments TEXT DEFAULT NULL,
             result TEXT DEFAULT NULL,
+            meta_data TEXT DEFAULT '{}',
             status TEXT DEFAULT 'calling',
             execution_time INTEGER DEFAULT NULL,
             error_message TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+            FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )
     """)
+
+    # 飞快的索引：用于大模型发送时，根据 call_id 列表一次性补全数据
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_call_id ON tool_calls (call_id)")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_chat_id ON tool_calls (chat_id)")
 
     await db.execute("""
         CREATE TABLE IF NOT EXISTS skills (
@@ -109,9 +118,6 @@ async def init_db():
             FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
         )
     """)
-
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_time ON messages (chat_id, created_at DESC)")
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_tool_calls_message_id ON tool_calls (message_id)")
 
     await db.commit()
     await db.close()

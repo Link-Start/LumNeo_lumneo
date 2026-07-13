@@ -6,7 +6,9 @@ from backend.db.chats import (
     create_chat,
     update_chat_title,
     list_chats,
-    delete_chat,
+    delete_chat
+)
+from backend.db.messages import (
     get_messages,
     add_message,
     update_message as update_message_db,

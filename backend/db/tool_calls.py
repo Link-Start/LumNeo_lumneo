@@ -1,4 +1,3 @@
-# backend/db/tool_calls.py
 import json
 import aiosqlite
 from typing import List, Optional, Dict, Any
@@ -9,11 +8,12 @@ class ToolCallRecord:
     def __init__(self, row: aiosqlite.Row = None, **kwargs):
         if row:
             self.id = row['id']
-            self.message_id = row['message_id']
+            self.chat_id = row['chat_id']
             self.call_id = row['call_id']
             self.tool_name = row['tool_name']
             self.arguments = self._parse_json(row['arguments'])
             self.result = row['result']
+            self.meta_data = self._parse_json(row['meta_data'])
             self.status = row['status']
             self.execution_time = row['execution_time']
             self.error_message = row['error_message']
@@ -34,11 +34,12 @@ class ToolCallRecord:
     def to_dict(self) -> Dict[str, Any]:
         return {
             'id': self.id,
-            'message_id': self.message_id,
+            'chat_id': self.chat_id,
             'call_id': self.call_id,
             'tool_name': self.tool_name,
             'arguments': self.arguments,
             'result': self.result,
+            'meta_data': self.meta_data,
             'status': self.status,
             'execution_time': self.execution_time,
             'error_message': self.error_message,
@@ -48,7 +49,7 @@ class ToolCallRecord:
 
 
 async def create_tool_call(
-    message_id: int,
+    chat_id: str,
     call_id: str,
     tool_name: str,
     arguments: Optional[Dict] = None
@@ -58,9 +59,9 @@ async def create_tool_call(
     try:
         args_json = json.dumps(arguments, ensure_ascii=False) if arguments else None
         cursor = await db.execute(
-            """INSERT INTO tool_calls (message_id, call_id, tool_name, arguments, status)
+            """INSERT INTO tool_calls (chat_id, call_id, tool_name, arguments, status)
                VALUES (?, ?, ?, ?, 'calling')""",
-            (message_id, call_id, tool_name, args_json)
+            (chat_id, call_id, tool_name, args_json)
         )
         await db.commit()
         
@@ -81,12 +82,12 @@ async def update_tool_call(
     status: Optional[str] = None,
     execution_time: Optional[int] = None,
     error_message: Optional[str] = None,
-    arguments: Optional[Dict] = None
+    arguments: Optional[Dict] = None,
+    meta_data: Optional[Dict] = None
 ) -> Optional[ToolCallRecord]:
-    """更新工具调用结果"""
+    """更新工具调用结果、状态、元数据"""
     db = await get_db()
     try:
-        # 构建动态更新
         updates = []
         params = []
         
@@ -105,6 +106,9 @@ async def update_tool_call(
         if arguments is not None:
             updates.append("arguments = ?")
             params.append(json.dumps(arguments, ensure_ascii=False))
+        if meta_data is not None:
+            updates.append("meta_data = ?")
+            params.append(json.dumps(meta_data, ensure_ascii=False))
         
         if not updates:
             return None
@@ -127,7 +131,7 @@ async def update_tool_call(
 
 
 async def get_tool_call_by_id(call_id: str) -> Optional[ToolCallRecord]:
-    """根据 call_id 获取工具调用详情"""
+    """根据 call_id 获取单条工具调用详情"""
     db = await get_db()
     try:
         cursor = await db.execute(
@@ -140,13 +144,13 @@ async def get_tool_call_by_id(call_id: str) -> Optional[ToolCallRecord]:
         await db.close()
 
 
-async def get_tool_calls_by_message(message_id: int) -> List[ToolCallRecord]:
-    """获取消息关联的所有工具调用"""
+async def get_tool_calls_by_chat_id(chat_id: str) -> List[ToolCallRecord]:
+    """获取整个 chat_id 关联的所有工具调用 (替换原来的 get_tool_calls_by_message)"""
     db = await get_db()
     try:
         cursor = await db.execute(
-            "SELECT * FROM tool_calls WHERE message_id = ? ORDER BY created_at",
-            (message_id,)
+            "SELECT * FROM tool_calls WHERE chat_id = ? ORDER BY created_at",
+            (chat_id,)
         )
         rows = await cursor.fetchall()
         return [ToolCallRecord(row) for row in rows]
@@ -166,37 +170,33 @@ async def update_tool_call_arguments(call_id: str, arguments: Dict):
     finally:
         await db.close()
 
-async def delete_tool_calls_by_message(message_id: int) -> int:
-    """根据 message_id 批量删除该消息关联的所有工具调用记录
-    
-    Args:
-        message_id: 消息 ID
-        
-    Returns:
-        int: 被删除的记录数
-    """
+
+async def delete_tool_calls_by_call_ids(call_ids: List[str]) -> int:
+    """根据 call_id 列表批量删除工具调用记录 (配合对话截断编辑时清理孤立数据)"""
+    if not call_ids:
+        return 0
     db = await get_db()
     try:
+        placeholders = ','.join(['?'] * len(call_ids))
         cursor = await db.execute(
-            "SELECT call_id FROM tool_calls WHERE message_id = ?", 
-            (message_id,)
-        )
-        rows = await cursor.fetchall()
-        if rows:
-            call_ids = [row['call_id'] for row in rows]
-            placeholders = ','.join(['?'] * len(call_ids))
-            await db.execute(
-                f"DELETE FROM messages WHERE tool_call_id IN ({placeholders})", 
-                call_ids
-            )
-        await db.execute(
-            "DELETE FROM tool_calls WHERE message_id = ?", 
-            (message_id,)
+            f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})", 
+            call_ids
         )
         await db.commit()
         return cursor.rowcount
-    except Exception as e:
-        print(f"删除工具调用及消息失败: {e}")
-        await db.rollback()
+    finally:
+        await db.close()
+
+
+async def delete_tool_calls_by_chat_id(chat_id: str) -> int:
+    """根据 chat_id 批量删除该对话下的所有工具调用 (删除整个对话时清理数据)"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "DELETE FROM tool_calls WHERE chat_id = ?", 
+            (chat_id,)
+        )
+        await db.commit()
+        return cursor.rowcount
     finally:
         await db.close()

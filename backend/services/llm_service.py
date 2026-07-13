@@ -260,7 +260,7 @@ class LLMService:
                             if message_id:
                                 try:
                                     await create_tool_call(
-                                        message_id=message_id,
+                                        call_id=call_id,
                                         call_id=call_id,
                                         tool_name=func_name
                                     )
