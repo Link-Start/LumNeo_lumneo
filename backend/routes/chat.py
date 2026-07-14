@@ -41,6 +41,7 @@ class ChatRequest(BaseModel):
     profile_id: Optional[int] = None
     message_id: Optional[int] = None
     chat_id: Optional[str] = None
+    turn_index: Optional[int] = None
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
@@ -191,8 +192,8 @@ async def chat(
                     'frequency_penalty': profile.frequency_penalty,
                     'presence_penalty': profile.presence_penalty,
                 } if profile else {},
-                message_id=request.message_id,
-                chat_id=request.chat_id
+                chat_id=request.chat_id,
+                turn_index=request.turn_index
             ),
             media_type="text/event-stream"
         )

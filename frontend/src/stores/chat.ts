@@ -1,13 +1,13 @@
+// src/stores/chat.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export interface Message {
   id: number
-  role: 'user' | 'assistant' | 'system' | 'tool'
+  role: 'user' | 'assistant' | 'system'
   content: any
   file_ref?: any
-  tool_calls?: any
-  tool_call_id?: any
+  turn_index: number
 }
 
 export interface Chat {
@@ -29,10 +29,6 @@ export const useChatStore = defineStore('chat', () => {
       chats.value = data.map((c: any) => ({ id: c.id, title: c.title, messages: [] }))
     } catch (e) {
       console.error('加载对话列表失败', e)
-      // 降级：本地创建一个临时对话
-      // const id = Date.now().toString()
-      // chats.value = [{ id, title: '新对话', messages: [] }]
-      // activeChatId.value = id
     }
   }
 
@@ -50,9 +46,7 @@ export const useChatStore = defineStore('chat', () => {
   async function renameChat(chatId: string, newTitle: string) {
     const chat = chats.value.find(c => c.id === chatId)
     if (!chat) return
-    // 本地更新
     chat.title = newTitle
-    // 调用后端 PATCH API
     await fetch(`/api/chats/${chatId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -67,7 +61,6 @@ export const useChatStore = defineStore('chat', () => {
     if (activeChatId.value === chatId && chats.value.length > 0) {
       activeChatId.value = chats.value[0].id
     } else if (chats.value.length === 0) {
-      // 如果所有对话都被删除，自动创建一个新对话
       await addChat()
     }
   }
@@ -81,34 +74,46 @@ export const useChatStore = defineStore('chat', () => {
     if (!chat) return
     const res = await fetch(`/api/chats/${chatId}/messages`)
     const msgs = await res.json()
+    // 后端返回的 assistant.content 已经是完整的 JSON 字符串，直接存储
     chat.messages = msgs    
   }
 
   // 当前对话的消息（过滤 system）
   const currentChatMessages = computed(() => {
     const chat = chats.value.find(c => c.id === activeChatId.value)
-    
     return chat ? chat.messages.filter(m => m.role !== 'system') : []
   })
 
-  // 获取完整消息（含 system）
+  // 获取完整消息
   function getActiveMessages(): Message[] {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     return chat ? [...chat.messages] : []
   }
 
+  // 【新增】自动计算当前对话的下一轮次
+  function getNextTurnIndex(): number {
+    const chat = chats.value.find(c => c.id === activeChatId.value)
+    if (!chat || chat.messages.length === 0) return 1
+    // 取当前对话最大的 turn_index 加 1
+    const maxTurn = Math.max(...chat.messages.map(m => m.turn_index), 0)
+    return maxTurn + 1
+  }
+
   // ---------- 立即添加到本地（不等待后端） ----------
-  async function addMessageToLocal(msg: Message) {
+  async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     if (!chat) return
-    if (msg.id == null) {
-      msg.id = Date.now()
+    const newMsg: Message = {
+      ...msg,
+      id: Date.now(),
+      turn_index: getNextTurnIndex() // 自动注入轮次
     }
-    chat.messages.push(msg)
-    // 自动更新标题
+    chat.messages.push(newMsg)
+    
+    // 自动更新标题（取第一条用户消息）
     if (msg.role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {
-      chat.title = msg.content.substring(0, 15) + (msg.content.length > 15 ? '...' : '')
-      // 可选：告知后端更新标题（异步，不阻塞）
+      const contentText = typeof msg.content === 'string' ? msg.content : ''
+      chat.title = contentText.substring(0, 15) + (contentText.length > 15 ? '...' : '')
       fetch(`/api/chats/${chat.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -117,39 +122,46 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // ---------- 新增：异步保存到后端 ----------
+  // ---------- 异步保存到后端 ----------
   async function saveMessageToBackend(msg: Message) {
     if (!activeChatId.value) return
+    // 【注意】参数中不再包含 tool_calls 和 tool_call_id
     const res = await fetch(`/api/chats/${activeChatId.value}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         role: msg.role, 
         content: msg.content,
-        file_ref:  Array.isArray(msg.file_ref) 
-        ? msg.file_ref.map(f => ({
-            filename: f.filename,
-            type: f.type,
-            url: f.url
-          })) 
-        : msg.file_ref 
-          ? {
-              filename: msg.file_ref.filename,
-              type: msg.file_ref.type,
-              url: msg.file_ref.url
-            }
-          : null
+        file_ref: Array.isArray(msg.file_ref) 
+          ? msg.file_ref.map(f => ({ filename: f.filename, type: f.type, url: f.url })) 
+          : msg.file_ref 
+            ? { filename: msg.file_ref.filename, type: msg.file_ref.type, url: msg.file_ref.url }
+            : null,
+        turn_index: msg.turn_index // 【新增】将轮次传给后端
       })
     })
     const data = await res.json()
-    // 将后端返回的真实 ID 赋给本地消息对象
     if (data.id != null) {
       msg.id = data.id
     }
   }
 
-  // 编辑消息内容（本地 + 后端）
-  async function editMessage(messageId: number, newContent: string) {
+  // ---------- 【新增】截断编辑：重新生成 / 重试 ----------
+  async function truncateAtTurn(turnIndex: number) {
+    const chat = chats.value.find(c => c.id === activeChatId.value)
+    if (!chat) return
+
+    // 1. 调用后端截断接口 (按 turn_index 删除该轮次及之后所有消息)
+    await fetch(`/api/chats/${activeChatId.value}/messages/${turnIndex}`, {
+      method: 'DELETE'
+    }).catch(e => console.warn('截断失败', e))
+
+    // 2. 更新本地状态：移除该轮次及后续所有消息
+    chat.messages = chat.messages.filter(m => m.turn_index < turnIndex)
+  }
+
+  // ---------- 精确更新某一条消息（修改文本/内容，不触发截断） ----------
+  async function editMessage(messageId: number, newContent: any) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     if (!chat) return
     const msg = chat.messages.find(m => m.id === messageId)
@@ -158,40 +170,19 @@ export const useChatStore = defineStore('chat', () => {
       await fetch(`/api/chats/${activeChatId.value}/messages/${messageId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: msg.role, content: newContent })
+        body: JSON.stringify({ content: newContent })
       }).catch(e => console.warn('更新消息失败', e))
     }
   }
 
-  // 删除消息（本地移除 + 后端删除）
+  // ---------- 删除消息（重构为截断逻辑） ----------
   async function deleteMessage(messageId: number) {
-    if (!activeChatId.value) return
-
-    // 1. 先尝试删除主消息
-    const msgRes = await fetch(`/api/chats/${activeChatId.value}/messages/${messageId}?cascade=false`, {
-      method: 'DELETE'
-    }).catch(e => {
-      console.warn('删除消息请求失败', e)
-      return null
-    })
-
-    // 2. 判断主消息是否真的被删除成功
-    // fetch 只有在网络错误时才会抛异常，所以要检查 ok 状态
-    if (!msgRes || !msgRes.ok) {
-      console.warn('主消息删除失败，取消后续操作')
-      return
-    }
-
-    // 3. 主消息删除成功后，再删除关联的工具调用记录
-    await fetch(`/api/tool-calls/message/${messageId}`, {
-      method: 'DELETE'
-    }).catch(e => console.warn('删除关联工具调用记录失败', e))
-
-    // 4. 更新本地状态：从列表中移除该条消息
     const chat = chats.value.find(c => c.id === activeChatId.value)
-    if (chat) {
-      chat.messages = chat.messages.filter(m => m.id !== messageId)
-    }
+    if (!chat) return
+    const msg = chat.messages.find(m => m.id === messageId)
+    if (!msg) return
+    // 找到这一条的轮次后，直接调用截断删除
+    await truncateAtTurn(msg.turn_index)
   }
 
   return {
@@ -205,9 +196,11 @@ export const useChatStore = defineStore('chat', () => {
     deleteChat,
     loadMessages,
     getActiveMessages,
+    getNextTurnIndex,
     addMessageToLocal,
     saveMessageToBackend,
     editMessage,
-    deleteMessage
+    deleteMessage,
+    truncateAtTurn
   }
 })
