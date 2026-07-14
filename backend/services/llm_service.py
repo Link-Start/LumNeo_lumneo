@@ -1,4 +1,5 @@
 # backend/services/llm_service.py
+import os
 import uuid
 import json
 import time
@@ -8,6 +9,7 @@ from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
 from backend.db.messages import add_message
+from config_loader import config
 
 
 class LLMService:
@@ -415,20 +417,48 @@ class LLMService:
 
                 # 统一格式化工具返回内容
                 if isinstance(result, dict):
-                    tool_content = json.dumps(result, ensure_ascii=False)
+                    result_str = json.dumps(result, ensure_ascii=False)
                 else:
-                    tool_content = str(result)
+                    result_str = str(result)
 
-                # 更新 tool_calls 表的结果和状态（使用 chat_id 和 call_id）
+                # ===== 新增：大文件落盘逻辑 =====
+                MAX_DB_LEN = 20000  # 设定一个阈值，比如超过2万字符就落盘
+                meta_data = {}
+                final_db_result = ""
+
+                if len(result_str) > MAX_DB_LEN:
+                    # 1. 落盘写入文件
+                    file_dir = f"{config.data_dir}/tool_outputs/{chat_id}"
+                    os.makedirs(file_dir, exist_ok=True)
+                    file_path = f"{file_dir}/{local_call_id}.txt"
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(result_str)
+
+                    # 2. 准备元数据（存入数据库的 meta_data 字段）
+                    meta_data = {
+                        "storage_type": "file",
+                        "file_path": file_path,
+                        "size": len(result_str),
+                        "preview": result_str[:1000]  # 截取前1000字用于前端展示摘要
+                    }
+                    # 3. 数据库实际的 result 字段只存一个简短提示，不存巨大文本
+                    final_db_result = f"[数据量过大(共{len(result_str)}字)，完整内容已保存至本地文件]"
+                else:
+                    # 小数据直接存
+                    final_db_result = result_str
+                # ===================================
+
+                # 更新结果和状态 (存入数据库，同时带上 meta_data)
                 if chat_id:
                     try:
-                        result_str = str(result)[:50000]  # 截断防止超大
                         await update_tool_call(
                             call_id=local_call_id,
-                            result=result_str,
+                            arguments=args,
+                            result=final_db_result,    # 存入截断提示/小数据
                             status="error" if failed else "success",
                             execution_time=exec_time_ms,
-                            error_message=result if failed else None
+                            error_message=result if failed else None,
+                            meta_data=meta_data        # 🟢 关键：存入文件路径和预览
                         )
                     except Exception as e:
                         print(f"[DB] Failed to update result: {e}")
@@ -460,7 +490,7 @@ class LLMService:
                 current_messages.append({
                     "role": "tool",
                     "tool_call_id": local_call_id,
-                    "content": tool_content
+                    "content": result_str
                 })
 
             yield "<!--tool_calls:end-->"

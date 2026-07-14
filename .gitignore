@@ -13,6 +13,7 @@ temp
 data
 workspace
 skills_library
+tool_outputs
 
 backend/__pycache__
 backend/core/__pycache__
