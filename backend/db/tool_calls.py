@@ -157,6 +157,22 @@ async def get_tool_calls_by_chat_id(chat_id: str) -> List[ToolCallRecord]:
         return [ToolCallRecord(row) for row in rows]
     finally:
         await db.close()
+    
+async def get_tool_calls_by_call_ids(call_ids: List[str]) -> List[ToolCallRecord]:
+    """根据 call_id 列表一次性批量获取多条工具调用记录"""
+    if not call_ids:
+        return []
+    db = await get_db()
+    try:
+        placeholders = ','.join(['?'] * len(call_ids))
+        cursor = await db.execute(
+            f"SELECT * FROM tool_calls WHERE call_id IN ({placeholders})",
+            call_ids
+        )
+        rows = await cursor.fetchall()
+        return [ToolCallRecord(row) for row in rows]
+    finally:
+        await db.close()
 
 
 async def update_tool_call_arguments(call_id: str, arguments: Dict):

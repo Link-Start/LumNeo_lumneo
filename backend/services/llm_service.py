@@ -114,6 +114,7 @@ class LLMService:
         force_final = False
 
         for step in range(MAX_STEPS):
+            final_answer_content = ""   # 强制在每次循环开始前声明
             if request and await request.is_disconnected():
                 break
 
@@ -239,7 +240,7 @@ class LLMService:
                     segments.append({
                         "type": "reasoning",
                         "content": reasoning_buffer,
-                        "duration": reasoning_time
+                        "duration": f"{reasoning_time:.2f}"
                     })
                     reasoning_buffer = ""
                     in_reasoning = False
@@ -282,8 +283,10 @@ class LLMService:
                             # 添加轻量工具调用片段到 segments
                             segments.append({
                                 "type": "tool_call",
-                                "id": call_id,
-                                "name": func_name
+                                "content": {
+                                    "id": call_id,
+                                    "name": func_name
+                                },
                             })
 
                         if idx not in tool_calls_by_index:
@@ -313,7 +316,7 @@ class LLMService:
                 segments.append({
                     "type": "reasoning",
                     "content": reasoning_buffer,
-                    "duration": reasoning_time
+                    "duration": f"{reasoning_time:.2f}"
                 })
                 reasoning_buffer = ""
                 in_reasoning = False
@@ -430,14 +433,17 @@ class LLMService:
                     except Exception as e:
                         print(f"[DB] Failed to update result: {e}")
 
-                # 流式输出工具预览数据（用于前端显示）
-                tool_info = {
-                    "call_id": local_call_id,
-                    "name": func_name,
-                    "arguments": raw_args,
-                    "result": tool_content[:8000]  # 前端预览限制长度
-                }
-                yield f"<!--tool_data:{local_call_id}:{json.dumps(tool_info, ensure_ascii=False)}-->"
+                # ===== 将状态同步写入到 segments 列表中 =====
+                status_val = "error" if failed else "success"
+                err_msg = result if failed else None
+                
+                # 遍历已经记录在 segments 里的 tool_call 片段，把状态填进去
+                for seg in segments:
+                    if seg.get('type') == 'tool_call' and seg.get('content', {}).get('id') == local_call_id:
+                        seg['content']['status'] = status_val
+                        if err_msg:
+                            seg['content']['error_message'] = err_msg  # 把失败信息也带上前端渲染
+                        break
 
                 # 更新连续失败计数
                 if failed:
@@ -462,6 +468,25 @@ class LLMService:
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 force_final = True
 
+        # ---------- 最后，将所有文本内容加入 segments ----------
+        if final_answer_content:
+            try:
+                # 尝试解析，如果是一个以 [ 开头的 JSON 数组，说明是错误的数据，不要作为 text 落盘
+                parsed = json.loads(final_answer_content)
+                if isinstance(parsed, list):
+                    print("[WARN] 检测到异常的数据结构序列化，跳过 type:text 落盘")
+                    final_answer_content = None  # 置空，防止将中间状态当成文本写入
+            except Exception:
+                # 说明不是 JSON，是正常纯文本，保留
+                pass
+
+            # 正常追加文本
+            if final_answer_content:
+                segments.append({
+                    "type": "text",
+                    "content": final_answer_content
+                })
+
         # ---------- 最终 token 统计 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:
             tokens = last_step_usage["completion_tokens"]
@@ -484,20 +509,14 @@ class LLMService:
                 "content": token_info
             })
 
-        # ---------- 最后，将所有文本内容加入 segments ----------
-        if final_answer_content:
-            segments.append({
-                "type": "text",
-                "content": final_answer_content
-            })
-
         # ---------- 将结构化内容写入数据库 ----------
         if chat_id and turn_index is not None:
-            structured_json = json.dumps(segments, ensure_ascii=False)
+            segments_json = json.dumps(segments, ensure_ascii=False)
             await add_message(
                 chat_id=chat_id,
                 role="assistant",
-                content=structured_json,          # 整个 JSON 数组作为 content
+                content=segments_json,
                 file_ref=None,
                 turn_index=turn_index
             )
+            yield f"<!--segments_complete:{segments_json}-->"

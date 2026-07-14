@@ -12,6 +12,7 @@ from backend.db.messages import (
     get_messages,
     add_message,
     update_message as update_message_db,
+    truncate_messages as truncate_messages_db,
     delete_message as delete_message_db
 )
 
@@ -109,5 +110,6 @@ async def update_message_route(chat_id: str, message_id: int, req: UpdateMessage
 # 注意：URL 参数已从 message_id 改为 turn_index
 @router.delete("/{chat_id}/messages/{turn_index}")
 async def delete_message_route(chat_id: str, turn_index: int):
-    await delete_message_db(chat_id=chat_id, turn_index=turn_index)
-    return {"status": "ok"}
+    # 内部会执行事务，自动清理 tool_calls
+    deleted_count = await truncate_messages_db(chat_id=chat_id, from_turn_index=turn_index)
+    return {"status": "ok", "deleted_count": deleted_count}

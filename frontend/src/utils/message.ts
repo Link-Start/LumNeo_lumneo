@@ -120,47 +120,83 @@ export function processMessageContent(text: string, isStreaming = false): string
 // 第二部分：历史记录渲染（新增，根据 JSON 数组转标签）
 // ============================================================
 /**
- * 渲染历史记录中的结构化 JSON 内容（替代流式正则，直接遍历数组）
+ * 解析后端返回的结构化 JSON 数组，并转换为 markstream-vue 自定义标签字符串
+ * @param input - 后端返回的 JSON 字符串或已解析的数组 (例如: [{"type": "reasoning", ...}, {"type": "text", ...}])
+ * @returns 渲染好的 HTML 标签字符串
  */
-export function renderStructuredContent(content: string): string {
-  try {
-    const data = JSON.parse(content)
-    if (!data.segments || !Array.isArray(data.segments)) {
-      return content // 兼容旧数据，若不是新结构则原样返回
+export function renderStructuredContent(input: string | any[]): string {
+  let segments: any[] = []
+
+  // 1. 如果传入的是字符串，尝试 JSON.parse
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input)
+      if (Array.isArray(parsed)) {
+        segments = parsed
+      } else {
+        // 如果是对象但不是数组（比如有可能是之前单个对象的遗留数据），按纯文本返回
+        return input 
+      }
+    } catch (e) {
+      // JSON解析失败，说明是旧版的纯文本标签或普通文本，直接原样返回给前端渲染
+      return input
     }
+  } 
+  // 2. 如果传入的本身就是数组
+  else if (Array.isArray(input)) {
+    segments = input
+  } 
+  // 3. 其它情况（null/undefined/非数组对象）
+  else {
+    return String(input || '')
+  }
+
+  // 4. 遍历 segments 生成标签
+  let resultHtml = ''
+  for (const seg of segments) {
     
-    let html = ''
-    for (const seg of data.segments) {
-      if (seg.type === 'reasoning') {
-        html += `\n\n<reasoning time="${seg.duration || 0}">${seg.content}</reasoning>\n\n`
-      } else if (seg.type === 'tool_call') {
-        // 构造轻量工具调用标签（只包含 ID 和状态，前端组件通过 ID 去请求真正的结果）
-        const tagContent = JSON.stringify({
+    const { type, content, duration } = seg
+
+    switch (type) {
+      case 'reasoning':
+        resultHtml += `\n\n<reasoning time="${duration || 0}">${content}</reasoning>\n\n`
+        break
+
+      case 'tool_call':
+        const toolTagContent = JSON.stringify({
           tools: [{
-            call_id: seg.id,
-            name: seg.name,
+            call_id: content?.id,
+            name: content?.name,
             streaming: false,
-            status: 'success'
+            status: content?.status || 'success',
+            error_message: content?.error_message || null
           }],
           count: 1,
           loading: false
         })
-        html += `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
-      } else if (seg.type === 'text') {
-        html += seg.content
-      } else if (seg.type === 'token_usage') {
-        const usage = seg.content
-        const tagContent = JSON.stringify({
-          speed: usage.speed || '0 token/s',
-          completion_tokens: usage.final_answer_usage?.completion_tokens ?? 0
+        resultHtml += `\n\n<toolcalls>${toolTagContent}</toolcalls>\n\n`
+        break
+
+      case 'text':
+        resultHtml += content
+        break
+
+      case 'token_usage':
+        const tokenTagContent = JSON.stringify({
+          speed: content.speed || '0 token/s',
+          completion_tokens: content.final_answer_usage?.completion_tokens ?? 0
         })
-        html += `\n\n<tokenusage>${tagContent}</tokenusage>\n\n`
-      }
+        resultHtml += `\n\n<tokenusage>${tokenTagContent}</tokenusage>\n\n`
+        break
+
+      default:
+        resultHtml += content || ''
+        break
     }
-    return html.trim()
-  } catch (e) {
-    return content // JSON 解析失败则返回原文本
   }
+
+  // 清理多余换行
+  return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
 }
 
 // ============================================================
@@ -185,7 +221,6 @@ export function normalizeFileRef(ref: any): UploadedFile[] {
 // 兼容旧数据的提取工具函数（仅在历史记录不是新 JSON 时兜底使用）
 function extractFinalContent(text: string): string {
   let content = text
-  content = content.replace(/<!--tool_data:[^:]+:[\s\S]*?-->/g, '')
   const parts = content.split('<!--tool_calls:end-->')
   if (parts.length > 1) { content = parts[parts.length - 1] }
   content = content.replace(/<!--reasoning:start-->([\s\S]*?)<!--reasoning:end:(.*?)-->/g, '')
@@ -196,29 +231,94 @@ function extractFinalContent(text: string): string {
   return content.trim()
 }
 
+
 // ============================================================
-// 第四部分：发送前上下文补全（彻底重构 cleanMessages）
+// 第四部分：发送前上下文补全
 // ============================================================
+
+// 内存缓存（页面不刷新时永久有效）
+const toolCallCache = new Map<string, { arguments: any; result: any }>()
+// 并发请求控制：防止同一时间多个 `cleanMessages` 重复请求同一个缺失的 call_id
+const pendingFetchPromises = new Map<string, Promise<any>>()
 
 /**
  * 根据 call_id 列表从后端一次性获取完整的 arguments 和 result
  */
 async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arguments: any; result: any }>> {
   if (callIds.length === 0) return {}
-  try {
-    const resp = await fetch('/api/tool-calls/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ call_ids: callIds })
-    })
-    if (!resp.ok) return {}
-    const data = await resp.json()
-    // 假设后端返回结构为 { "call_xxx": { arguments: "...", result: "..." } }
-    return data || {}
-  } catch (e) {
-    console.error('获取工具详情失败:', e)
-    return {}
+
+  // 1. 剔除已经在缓存中的 ID，只获取缺失的
+  const missingIds = callIds.filter(id => !toolCallCache.has(id))
+  
+  // 2. 构建最终返回结果（缓存中已有的直接拿）
+  const finalResult: Record<string, { arguments: any; result: any }> = {}
+  for (const id of callIds) {
+    if (toolCallCache.has(id)) {
+      finalResult[id] = toolCallCache.get(id)!
+    }
   }
+
+  // 3. 如果全部命中缓存，无需请求后端，直接返回
+  if (missingIds.length === 0) {
+    return finalResult
+  }
+
+  // 4. 并发去重：生成一个唯一 key（用缺失的 ID 排序后拼接），防止短时间内重复触发
+  const requestKey = missingIds.sort().join(',')
+  
+  // 如果当前正在请求这批数据，直接复用同一个 Promise，等待它完成
+  if (pendingFetchPromises.has(requestKey)) {
+    await pendingFetchPromises.get(requestKey)
+    // 等待完成后，重新从缓存中拿这批数据
+    for (const id of missingIds) {
+      if (toolCallCache.has(id)) {
+        finalResult[id] = toolCallCache.get(id)!
+      }
+    }
+    return finalResult
+  }
+
+  // 5. 发起真正的网络请求（并在 Promise 中自动管理缓存）
+  const fetchPromise = (async () => {
+    try {
+      const resp = await fetch('/api/tool-calls/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_ids: missingIds })
+      })
+      const data = await resp.json()
+      
+      // 将后端返回的数据写入缓存
+      // 兼容后端返回数组或对象
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          const idKey = item.call_id || item.id || item.callId
+          if (idKey) {
+            toolCallCache.set(idKey, { arguments: item.arguments, result: item.result })
+            finalResult[idKey] = toolCallCache.get(idKey)!
+          }
+        }
+      } else if (typeof data === 'object') {
+        for (const [key, val] of Object.entries(data)) {
+          toolCallCache.set(key, val as any)
+          finalResult[key] = val as any
+        }
+      }
+    } catch (e) {
+      console.error('获取工具详情失败', e)
+    } finally {
+      // 无论成功或失败，都从 pending 映射中移除请求标记
+      pendingFetchPromises.delete(requestKey)
+    }
+  })()
+
+  // 将当前请求存入 pending 映射中
+  pendingFetchPromises.set(requestKey, fetchPromise)
+  
+  // 等待请求完成（或者如果已经失败，跑出了异常，上层可以捕获）
+  await fetchPromise
+
+  return finalResult
 }
 
 /**
@@ -277,8 +377,8 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       let isStructured = false
       try {
         const parsed = JSON.parse(typeof msg.content === 'string' ? msg.content : '{}')
-        if (parsed.segments && Array.isArray(parsed.segments)) {
-          segments = parsed.segments
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
+          segments = parsed
           isStructured = true
         }
       } catch (e) { /* 不是新格式，走下面的兜底逻辑 */ }
@@ -297,7 +397,7 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
 
       // 提取工具调用片段
       const toolSegments = segments.filter((s: any) => s.type === 'tool_call')
-
+      
       // 如果没有工具调用，直接作为文本发送
       if (toolSegments.length === 0) {
         finalMessages.push({ role: 'assistant', content: fullText || null })
@@ -305,19 +405,29 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       }
 
       // 收集所有 call_id，去数据库补全真正的参数和结果
-      const callIds = toolSegments.map((s: any) => s.id)
-      const toolDetails = await fetchToolDetails(callIds)
+      const callIds = toolSegments.map((s: any) => s.content?.id).filter(Boolean)
+      let toolDetails: Record<string, { arguments: any; result: any }> = {}
+
+      try {
+        if (callIds.length > 0) {
+          toolDetails = await fetchToolDetails(callIds)
+        }
+      } catch (e) {
+        console.warn('获取工具详情失败，降级为仅发文本', e)
+        finalMessages.push({ role: 'assistant', content: fullText || null })
+        continue
+      }
 
       // 步骤 A：标准 OpenAI 必须的第一条 assistant 消息（带上参数）
       finalMessages.push({
         role: 'assistant',
         content: null, // 标准协议规定：有 tool_calls 时，content 可以为 null
         tool_calls: toolSegments.map((s: any) => ({
-          id: s.id,
+          id: s.content.id,
           type: 'function',
           function: {
-            name: s.name,
-            arguments: toolDetails[s.id]?.arguments || '{}'
+            name: s.content.name,
+            arguments: toolDetails[s.content.id]?.arguments || '{}'
           }
         }))
       })
@@ -326,8 +436,8 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       for (const s of toolSegments) {
         finalMessages.push({
           role: 'tool',
-          tool_call_id: s.id,
-          content: toolDetails[s.id]?.result || ''
+          tool_call_id: s.content.id,
+          content: toolDetails[s.content.id]?.result || ''
         })
       }
 

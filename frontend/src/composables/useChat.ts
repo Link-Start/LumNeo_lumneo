@@ -30,19 +30,32 @@ export function useChat() {
 
   const onStreamEnd = ref<((fullText: string) => void) | null>(null)
 
-  async function readStream(response: Response): Promise<string> {
-    if (!response.ok || !response.body) throw new Error('网络响应失败')
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullText = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      fullText += decoder.decode(value, { stream: true })
-      streamingContent.value = fullText
+async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
+  if (!response.ok || !response.body) throw new Error('网络响应失败')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let finalSegments: any[] | undefined = undefined
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value, { stream: true })
+    fullText += chunk
+    streamingContent.value = fullText
+
+    // 尝试从流中提取最终的结构化 JSON
+    const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
+    if (match) {
+      try {
+        finalSegments = JSON.parse(match[1])
+      } catch (e) {
+        console.error('解析最终结构化数据失败', e)
+      }
     }
-    return fullText
   }
+  return { finalSegments }
+}
 
   /**
    * 流式正常结束后，直接重载对话列表，保证本地数据与后端 JSON 结构严格一致
@@ -52,18 +65,42 @@ export function useChat() {
     streamingContent.value = ''
   }
 
-  /**
-   * 流式中断时的保存逻辑
+/**
+   * 保存被中断的消息到本地和后端
    */
-  async function handleAbort(chatId: string, turnIndex: number) {
+  async function saveAbortedMessage(chatId: string, turnIndex: number, streamingText: string) {
     const chat = chatStore.chats.find(c => c.id === chatId)
     if (!chat) return
-    const placeholder = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
-    if (placeholder) {
-      const partialContent = (streamingContent.value.trim() ? streamingContent.value.trim() + '\n\n' : '') + '[已停止]'
-      placeholder.content = partialContent
+
+    // 1. 获取当前轮次的占位消息（它必然存在于 Store 中，因为我们一开始就插入了空占位）
+    let targetMsg = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
+    
+    // 极端兜底：如果还没插入，手动补一个（极少数情况）
+    if (!targetMsg) {
+      targetMsg = {
+        id: Date.now(),
+        role: 'assistant',
+        content: '',
+        turn_index: turnIndex
+      }
+      chatStore.addMessageToLocal(targetMsg)
     }
-    streamingContent.value = ''
+
+    // 2. 构造最终显示的文本（追加停止标记）
+    const suffix = '\n\n[用户停止了生成]'
+    let displayContent = streamingText.trim()
+    if (displayContent) {
+      displayContent += suffix
+    } else {
+      displayContent = '用户停止了生成'
+    }
+
+    // 3. 将纯文本封装成合法的结构化 JSON 数组落盘
+    const finalSegments = [{ type: "text", content: displayContent }]
+    targetMsg.content = JSON.stringify(finalSegments)
+
+    // 4. 调用后端接口，将当前轮次的消息真正保存到数据库！
+    await chatStore.saveMessageToBackend(targetMsg)
   }
 
   /**
@@ -103,7 +140,6 @@ export function useChat() {
       content: '',
       turn_index: assistantTurnIndex
     }
-    // 注意：此处不调用 saveMessageToBackend，而是让后端流式结束时通过 turn_index 精准落盘并覆盖
     chatStore.addMessageToLocal(assistantMsg)
 
     isLoading.value = true
@@ -131,7 +167,7 @@ export function useChat() {
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
-        turn_index: assistantTurnIndex // 【核心】将助手的轮次索引传给后端，作为存储依据
+        turn_index: assistantTurnIndex
       })
 
       setTimeout(() => scrollToBottom(), 160)
@@ -142,15 +178,24 @@ export function useChat() {
         signal: controller.signal
       })
       
-      const fullText = await readStream(response)
+      const { finalSegments } = await readStream(response)
 
       if (chatStore.activeChatId === chatId) {
-        await finalizeAssistantMessage(chatId)
+        if (finalSegments) {
+          const chat = chatStore.chats.find(c => c.id === chatId)
+          if (chat) {
+            const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+            if (targetMsg) {
+              targetMsg.content = JSON.stringify(finalSegments) 
+            }
+          }
+        }
+        streamingContent.value = ''
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         if (chatStore.activeChatId === chatId) {
-          await handleAbort(chatId, assistantTurnIndex)
+          await saveAbortedMessage(chatId, assistantTurnIndex, streamingContent.value)
         }
         return
       }
@@ -196,7 +241,6 @@ export function useChat() {
 
     try {
       const allMessages = chatStore.getActiveMessages()
-      // 同样，去掉我们刚加的占位符
       allMessages.pop()
 
       const body = JSON.stringify({
@@ -215,11 +259,18 @@ export function useChat() {
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      await readStream(response)
-      await finalizeAssistantMessage(chatId)
+      const { finalSegments } = await readStream(response)
+      if (chatStore.activeChatId === chatId && finalSegments) {
+        const chat = chatStore.chats.find(c => c.id === chatId)
+        if (chat) {
+          const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+          if (targetMsg) targetMsg.content = JSON.stringify(finalSegments)
+        }
+        streamingContent.value = ''
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        await handleAbort(chatId, assistantTurnIndex)
+        await saveAbortedMessage(chatId, assistantTurnIndex, streamingContent.value)
         return
       }
       const errContent = `**错误：** ${error.message}`
@@ -228,6 +279,7 @@ export function useChat() {
     } finally {
       abortController.value = null
       isLoading.value = false
+      streamingContent.value = ''
     }
   }
 
@@ -245,13 +297,13 @@ export function useChat() {
     // 1. 截断该条助手消息及之后的所有消息
     await chatStore.truncateAtTurn(assistantMsg.turn_index)
 
-    // 2. 开始一个新的流式生成 (复用助手该轮次)
+    // 2. 开始一个新的流式生成 (复用原本的轮次 turn_index)
     isLoading.value = true
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
 
-    // 3. 由于截断后，原助手消息已被删除，重新放入占位
+    // 3. 插入新的占位消息
     const newMsg: Message = {
       id: Date.now() + 1,
       role: 'assistant',
@@ -262,7 +314,8 @@ export function useChat() {
 
     try {
       const allMessages = chatStore.getActiveMessages()
-      allMessages.pop() // 去掉刚加的占位符
+      // 注意：这里要去掉我们刚加的占位符，因为发请求时不需要它
+      allMessages.pop()
 
       const body = JSON.stringify({
         messages: await cleanMessages(allMessages),
@@ -280,22 +333,40 @@ export function useChat() {
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      await readStream(response)
-      await finalizeAssistantMessage(chatId)
+      // ✅ 流式读取，解构出 finalSegments
+      const { finalSegments } = await readStream(response)
+
+      if (chatStore.activeChatId === chatId) {
+        if (finalSegments) {
+          // ✅ 精准更新本地占位消息
+          const chat = chatStore.chats.find(c => c.id === chatId)
+          if (chat) {
+            const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
+            if (targetMsg) {
+              targetMsg.content = JSON.stringify(finalSegments)
+            }
+          }
+        }
+        streamingContent.value = ''
+      }
 
       if (onStreamEnd.value) onStreamEnd.value('')
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        await handleAbort(chatId, assistantMsg.turn_index)
+        await saveAbortedMessage(chatId, assistantMsg.turn_index, streamingContent.value)
         return
       }
       const errContent = `**错误：** ${error.message}`
-      const localMsg = chatStore.currentChatMessages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
-      if (localMsg) localMsg.content = errContent
+      const chat = chatStore.chats.find(c => c.id === chatId)
+      if (chat) {
+        const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
+        if (targetMsg) targetMsg.content = errContent
+      }
     } finally {
       abortController.value = null
       regeneratingMsg.value = null
       isLoading.value = false
+      streamingContent.value = ''
     }
   }
 

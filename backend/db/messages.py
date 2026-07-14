@@ -117,32 +117,115 @@ async def update_message(
         await db.close()
 
 
-async def delete_message(chat_id: str, turn_index: int) -> bool:
-    """删除单条消息（按轮次精确删除）"""
+async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
+    """
+    截断消息：删除 from_turn_index 及之后的所有消息，
+    并自动清理 tool_calls 表中对应的孤立工具调用记录（原子操作）
+    """
     db = await get_db()
     try:
-        await db.execute(
-            "DELETE FROM messages WHERE chat_id = ? AND turn_index = ?",
-            (chat_id, turn_index)
+        # 开启事务，保证删除动作要么全成功，要么全回滚
+        await db.execute("BEGIN TRANSACTION")
+        
+        # 1. 先查出来要被删掉的记录（主要用于提取 call_id）
+        cursor = await db.execute(
+            "SELECT role, content FROM messages WHERE chat_id = ? AND turn_index >= ?",
+            (chat_id, from_turn_index)
         )
+        rows = await cursor.fetchall()
+        
+        # 2. 遍历提取所有 tool_call 的 call_id
+        call_ids_to_delete = []
+        for row in rows:
+            if row['role'] == 'assistant' and row['content']:
+                try:
+                    segments = json.loads(row['content'])
+                    if isinstance(segments, list):
+                        for seg in segments:
+                            if seg.get('type') == 'tool_call':
+                                # 兼容你的各种结构提取 call_id
+                                c_id = (
+                                    seg.get('id') or 
+                                    seg.get('call_id') or 
+                                    seg.get('content', {}).get('id') or 
+                                    seg.get('content', {}).get('call_id')
+                                )
+                                if c_id:
+                                    call_ids_to_delete.append(c_id)
+                except:
+                    pass  # 非 JSON 数据忽略（例如 user 消息）
+        
+        # 3. 删除 messages 表中的记录
+        await db.execute(
+            "DELETE FROM messages WHERE chat_id = ? AND turn_index >= ?",
+            (chat_id, from_turn_index)
+        )
+        
+        # 4. 如果提取到了 call_id，同步删除 tool_calls 表中的孤立数据
+        if call_ids_to_delete:
+            # 去除重复的 ID
+            unique_call_ids = list(set(call_ids_to_delete))
+            placeholders = ','.join(['?'] * len(unique_call_ids))
+            await db.execute(
+                f"DELETE FROM tool_calls WHERE chat_id = ? AND call_id IN ({placeholders})",
+                (chat_id, *unique_call_ids)
+            )
+        
         await db.commit()
-        return True
+        return len(rows)  # 返回实际删除的消息行数
+    except Exception as e:
+        await db.rollback()
+        raise e
     finally:
         await db.close()
 
 
-async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
+async def delete_message(chat_id: str, turn_index: int) -> bool:
     """
-    截断消息：删除 from_turn_index 及之后的所有消息
-    用于用户点击“重新生成”或“编辑”时的快速回滚
+    单轮精准删除（仅删除一个轮次）。如果删的是 assistant，对应的 tool 也会被清除。
     """
     db = await get_db()
     try:
+        await db.execute("BEGIN TRANSACTION")
+        
+        # 1. 取出这一条 assistant 消息的内容，提取 call_id
         cursor = await db.execute(
-            "DELETE FROM messages WHERE chat_id = ? AND turn_index >= ?",
-            (chat_id, from_turn_index)
+            "SELECT role, content FROM messages WHERE chat_id = ? AND turn_index = ?",
+            (chat_id, turn_index)
         )
+        row = await cursor.fetchone()
+        call_ids_to_delete = []
+        if row and row['role'] == 'assistant' and row['content']:
+            try:
+                segments = json.loads(row['content'])
+                if isinstance(segments, list):
+                    for seg in segments:
+                        if seg.get('type') == 'tool_call':
+                            c_id = seg.get('id') or seg.get('call_id') or seg.get('content', {}).get('id') or seg.get('content', {}).get('call_id')
+                            if c_id:
+                                call_ids_to_delete.append(c_id)
+            except:
+                pass
+        
+        # 2. 删除消息
+        await db.execute(
+            "DELETE FROM messages WHERE chat_id = ? AND turn_index = ?",
+            (chat_id, turn_index)
+        )
+        
+        # 3. 删除工具
+        if call_ids_to_delete:
+            unique_call_ids = list(set(call_ids_to_delete))
+            placeholders = ','.join(['?'] * len(unique_call_ids))
+            await db.execute(
+                f"DELETE FROM tool_calls WHERE chat_id = ? AND call_id IN ({placeholders})",
+                (chat_id, *unique_call_ids)
+            )
+            
         await db.commit()
-        return cursor.rowcount
+        return True
+    except Exception as e:
+        await db.rollback()
+        raise e
     finally:
         await db.close()
