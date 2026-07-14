@@ -428,7 +428,7 @@ class LLMService:
 
                 if len(result_str) > MAX_DB_LEN:
                     # 1. 落盘写入文件
-                    file_dir = f"{config.data_dir}/tool_outputs/{chat_id}"
+                    file_dir = f"{config.data_dir}/data/tool_outputs/{chat_id}"
                     os.makedirs(file_dir, exist_ok=True)
                     file_path = f"{file_dir}/{local_call_id}.txt"
                     with open(file_path, "w", encoding="utf-8") as f:
