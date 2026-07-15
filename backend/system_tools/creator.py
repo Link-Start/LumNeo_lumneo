@@ -2,15 +2,15 @@
 """
 从目录结构文本创建项目目录
 """
-from backend.bootstrap import logger
 import os
 import re
 import asyncio
 from pathlib import Path
 from collections import Counter
 from config_loader import config
-from backend.utils.validators import validate_path
 import backend
+from backend.utils.validators import validate_path
+from backend.bootstrap import logger
 
 
 class TreeParser:

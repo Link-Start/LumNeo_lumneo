@@ -9,6 +9,7 @@ data_dir: "C:\\ProgramData\\.LumNeo"
 # 子目录（相对于 data_dir）
 uploads_dir: "data/uploads"
 generate_dir: "data/generate"
+cache_dir: "data/cache"
 logs_dir: "logs"
 temp_dir: "temp"
 skills_dir: "skills_library"

@@ -19,6 +19,7 @@ from backend.db.skills import (
 )
 from backend.utils.skill_parser import parse_skill_markdown
 from backend.utils.skill_cache import skill_cache
+from backend.bootstrap import logger
 
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
@@ -89,7 +90,7 @@ async def delete_skill(skill_id: str):
         try:
             shutil.rmtree(file_path)
         except Exception as e:
-            print(f"删除技能文件夹失败 {file_path}: {e}")
+            logger.error(f"删除技能文件夹失败 {file_path}: {e}")
             # 可记录日志，但不影响接口成功返回
     
     # 清除缓存
@@ -144,7 +145,7 @@ async def upload_skill_folder(
             with open(target_file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
         except Exception as e:
-            print(f"保存文件失败: {e}")
+            logger.error(f"保存文件失败: {e}")
         finally:
             await file.close()
 
@@ -180,7 +181,7 @@ async def upload_skill_folder(
                 # 合并 YAML 头部信息到 metadata
                 metadata.update(fm)
         except Exception as e:
-            print(f"解析 SKILL.md 失败: {e}")
+            logger.error(f"解析 SKILL.md 失败: {e}")
 
     # 4. 存入数据库
     try:

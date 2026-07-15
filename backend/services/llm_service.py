@@ -1,5 +1,4 @@
 # backend/services/llm_service.py
-import os
 import uuid
 import json
 import time
@@ -10,6 +9,7 @@ from backend.services.tools import get_all_tools, execute_tool
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
 from backend.db.messages import add_message
 from config_loader import config
+from backend.bootstrap import logger
 
 
 class LLMService:
@@ -280,7 +280,7 @@ class LLMService:
                                     )
                                     tool_preview_active[idx]['db_created'] = True
                                 except Exception as e:
-                                    print(f"[DB] Failed to create tool call record: {e}")
+                                    logger.error(f"[数据库] 创建工具调用记录失败： {e}")
 
                             # 添加轻量工具调用片段到 segments
                             segments.append({
@@ -366,7 +366,7 @@ class LLMService:
             # ---------- 执行工具 ----------
             for idx, tc in valid_calls.items():
                 if idx not in tool_preview_active:
-                    print(f"[WARN] 跳过工具 {tc['function']['name']}，因为未找到预览状态")
+                    logger.warning(f"跳过工具 {tc['function']['name']}，因为未找到预览状态")
                     continue
 
                 local_call_id = tool_preview_active[idx]['call_id']
@@ -389,7 +389,7 @@ class LLMService:
                     try:
                         await update_tool_call_arguments(local_call_id, args)
                     except Exception as e:
-                        print(f"[DB] Failed to update arguments: {e}")
+                        logger.error(f"[数据库] 更新参数失败：{e}")
 
                 # 执行工具
                 start_time = time.time()
@@ -428,16 +428,15 @@ class LLMService:
 
                 if len(result_str) > MAX_DB_LEN:
                     # 1. 落盘写入文件
-                    file_dir = f"{config.data_dir}/data/tool_outputs/{chat_id}"
-                    os.makedirs(file_dir, exist_ok=True)
-                    file_path = f"{file_dir}/{local_call_id}.txt"
+                    file_dir = f"{chat_id}/{local_call_id}.txt"
+                    file_path = f"{config.cache_dir}/{file_dir}"
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(result_str)
 
                     # 2. 准备元数据（存入数据库的 meta_data 字段）
                     meta_data = {
                         "storage_type": "file",
-                        "file_path": file_path,
+                        "file_path": file_dir,
                         "size": len(result_str),
                         "preview": result_str[:1000]  # 截取前1000字用于前端展示摘要
                     }
@@ -461,7 +460,7 @@ class LLMService:
                             meta_data=meta_data        # 🟢 关键：存入文件路径和预览
                         )
                     except Exception as e:
-                        print(f"[DB] Failed to update result: {e}")
+                        logger.error(f"[数据库] 更新结果失败：{e}")
 
                 # ===== 将状态同步写入到 segments 列表中 =====
                 status_val = "error" if failed else "success"
@@ -504,7 +503,7 @@ class LLMService:
                 # 尝试解析，如果是一个以 [ 开头的 JSON 数组，说明是错误的数据，不要作为 text 落盘
                 parsed = json.loads(final_answer_content)
                 if isinstance(parsed, list):
-                    print("[WARN] 检测到异常的数据结构序列化，跳过 type:text 落盘")
+                    logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
                     final_answer_content = None  # 置空，防止将中间状态当成文本写入
             except Exception:
                 # 说明不是 JSON，是正常纯文本，保留

@@ -12,8 +12,7 @@ from backend.db.messages import (
     get_messages,
     add_message,
     update_message as update_message_db,
-    truncate_messages as truncate_messages_db,
-    delete_message as delete_message_db
+    truncate_messages as truncate_messages_db
 )
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])

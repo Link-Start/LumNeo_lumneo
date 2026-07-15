@@ -7,6 +7,7 @@ Stdio 安全重定向、全局日志配置
 import os
 import sys
 import logging
+import datetime
 from config_loader import config
 
 
@@ -46,8 +47,10 @@ def setup_logging() -> logging.Logger:
     if is_frozen or is_gui_mode:
         log_dir = config.logs_dir
         os.makedirs(log_dir, exist_ok=True)
+        now = datetime.datetime.now()
+        log_filename = f"lumneo_{now.strftime('%Y-%m')}.log" # 按月份分日志文件
         file_handler = logging.FileHandler(
-            os.path.join(log_dir, "lumneo.log"), encoding="utf-8"
+            os.path.join(log_dir, log_filename), encoding="utf-8"
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

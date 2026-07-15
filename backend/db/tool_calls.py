@@ -4,6 +4,7 @@ import os
 import aiosqlite
 from typing import List, Optional, Dict, Any
 from backend.database import get_db
+from backend.bootstrap import logger
 
 
 class ToolCallRecord:
@@ -189,9 +190,9 @@ async def delete_tool_calls_by_call_ids(call_ids: List[str]) -> int:
         for file_path in files_to_delete:
             try:
                 os.remove(file_path)
-                print(f"[INFO] 成功删除工具输出文件: {file_path}")
+                logger.info(f"成功删除工具输出文件: {file_path}")
             except Exception as e:
-                print(f"[ERROR] 删除工具输出文件失败 {file_path}: {e}")
+                logger.error(f"删除工具输出文件失败 {file_path}: {e}")
 
         return cursor.rowcount
     finally:
@@ -227,9 +228,9 @@ async def delete_tool_calls_by_chat_id(chat_id: str) -> int:
         for file_path in files_to_delete:
             try:
                 os.remove(file_path)
-                print(f"[INFO] 成功删除工具输出文件: {file_path}")
+                logger.info(f"成功删除工具输出文件: {file_path}")
             except Exception as e:
-                print(f"[ERROR] 删除工具输出文件失败 {file_path}: {e}")
+                logger.error(f"删除工具输出文件失败 {file_path}: {e}")
                 
         return cursor.rowcount
     finally:

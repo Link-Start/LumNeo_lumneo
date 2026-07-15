@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from backend.database import get_db
 from backend.utils.skill_parser import parse_skill_markdown
 from backend.utils.skill_cache import skill_cache
+from backend.bootstrap import logger
 
 class SkillRecord:
     def __init__(self, row: aiosqlite.Row):
@@ -48,7 +49,7 @@ class SkillRecord:
             skill_cache.set(self.id, self.file_path, body)
             return body
         except Exception as e:
-            print(f"读取技能文件失败 {self.id}: {e}")
+            logger.error(f"读取技能文件失败 {self.id}: {e}")
             return ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -131,7 +132,7 @@ async def delete_skill(skill_id: str) -> bool:
         await db.commit()
         return True
     except Exception as e:
-        print(f"删除技能失败: {e}")
+        logger.error(f"删除技能失败: {e}")
         return False
     finally:
         await db.close()
@@ -159,7 +160,7 @@ async def link_skill_to_profile(profile_id: int, skill_id: str, config_overrides
         )
         await db.commit()
     except Exception as e:
-        print(f"关联技能失败(可能已存在): {e}")
+        logger.error(f"关联技能失败(可能已存在): {e}")
     finally:
         await db.close()
 

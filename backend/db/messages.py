@@ -1,8 +1,12 @@
 # backend/db/messages.py
+import os
 import json
+import asyncio
 import aiosqlite
 from typing import List, Optional, Dict, Any
 from backend.database import get_db
+from config_loader import config
+from backend.bootstrap import logger
 
 
 class MessageRecord:
@@ -120,14 +124,13 @@ async def update_message(
 async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
     """
     截断消息：删除 from_turn_index 及之后的所有消息，
-    并自动清理 tool_calls 表中对应的孤立工具调用记录（原子操作）
+    并自动清理 tool_calls 表中对应的孤立工具记录及磁盘文件
     """
     db = await get_db()
     try:
-        # 开启事务，保证删除动作要么全成功，要么全回滚
         await db.execute("BEGIN TRANSACTION")
         
-        # 1. 先查出来要被删掉的记录（主要用于提取 call_id）
+        # 1. 先查出来要被删掉的消息记录
         cursor = await db.execute(
             "SELECT role, content FROM messages WHERE chat_id = ? AND turn_index >= ?",
             (chat_id, from_turn_index)
@@ -143,7 +146,6 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
                     if isinstance(segments, list):
                         for seg in segments:
                             if seg.get('type') == 'tool_call':
-                                # 兼容你的各种结构提取 call_id
                                 c_id = (
                                     seg.get('id') or 
                                     seg.get('call_id') or 
@@ -153,26 +155,70 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
                                 if c_id:
                                     call_ids_to_delete.append(c_id)
                 except:
-                    pass  # 非 JSON 数据忽略（例如 user 消息）
+                    pass
         
-        # 3. 删除 messages 表中的记录
+        # 3. 去重 call_ids
+        unique_call_ids = list(set(call_ids_to_delete))
+        files_to_delete = []
+
+        # 4. 如果有关联工具，先读取它们的 meta_data 以获取磁盘文件路径
+        if unique_call_ids:
+            placeholders = ','.join(['?'] * len(unique_call_ids))
+            cursor = await db.execute(
+                f"SELECT meta_data FROM tool_calls WHERE call_id IN ({placeholders})",
+                unique_call_ids
+            )
+            tool_rows = await cursor.fetchall()
+            for tool_row in tool_rows:
+                meta = tool_row['meta_data']
+                if meta:
+                    try:
+                        meta_data = json.loads(meta)
+                        if meta_data.get('storage_type') == 'file':
+                            file_path = meta_data.get('file_path')
+                            if file_path:
+                                file_path = f"{config.cache_dir}/{file_path}"
+                                abs_path = os.path.abspath(file_path)
+                                if os.path.exists(abs_path):
+                                    files_to_delete.append(abs_path)
+                    except:
+                        pass
+
+        # 5. 删除 messages 表中的记录
         await db.execute(
             "DELETE FROM messages WHERE chat_id = ? AND turn_index >= ?",
             (chat_id, from_turn_index)
         )
         
-        # 4. 如果提取到了 call_id，同步删除 tool_calls 表中的孤立数据
-        if call_ids_to_delete:
-            # 去除重复的 ID
-            unique_call_ids = list(set(call_ids_to_delete))
-            placeholders = ','.join(['?'] * len(unique_call_ids))
+        # 6. 删除 tool_calls 表中的孤立数据
+        if unique_call_ids:
             await db.execute(
-                f"DELETE FROM tool_calls WHERE chat_id = ? AND call_id IN ({placeholders})",
-                (chat_id, *unique_call_ids)
+                f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
+                unique_call_ids
             )
         
         await db.commit()
-        return len(rows)  # 返回实际删除的消息行数
+
+        # 7. 删除磁盘上的大文件
+        for file_path in files_to_delete:
+            await asyncio.sleep(0.5)  # 让出控制权，避免 Windows 文件占用
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"成功删除工具输出文件: {file_path}")
+                    break
+                except PermissionError as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"[WARN] 文件被占用，第 {attempt+1} 次重试...")
+                        await asyncio.sleep(0.5)
+                    else:
+                        logger.error(f"文件被占用无法删除 (重试 {max_retries} 次失败) {file_path}: {e}")
+                except Exception as e:
+                    logger.error(f"删除工具输出文件失败 {file_path}: {e}")
+                    break
+
+        return len(rows)
     except Exception as e:
         await db.rollback()
         raise e
@@ -182,7 +228,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
 
 async def delete_message(chat_id: str, turn_index: int) -> bool:
     """
-    单轮精准删除（仅删除一个轮次）。如果删的是 assistant，对应的 tool 也会被清除。
+    单轮精准删除。如果删的是 assistant，对应的 tool 和磁盘文件也会被清除。
     """
     db = await get_db()
     try:
@@ -194,6 +240,7 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             (chat_id, turn_index)
         )
         row = await cursor.fetchone()
+        
         call_ids_to_delete = []
         if row and row['role'] == 'assistant' and row['content']:
             try:
@@ -201,28 +248,75 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
                 if isinstance(segments, list):
                     for seg in segments:
                         if seg.get('type') == 'tool_call':
-                            c_id = seg.get('id') or seg.get('call_id') or seg.get('content', {}).get('id') or seg.get('content', {}).get('call_id')
+                            c_id = (
+                                seg.get('id') or seg.get('call_id') or 
+                                seg.get('content', {}).get('id') or seg.get('content', {}).get('call_id')
+                            )
                             if c_id:
                                 call_ids_to_delete.append(c_id)
             except:
                 pass
         
-        # 2. 删除消息
+        unique_call_ids = list(set(call_ids_to_delete))
+        files_to_delete = []
+
+        # 2. 获取对应的工具表记录，提取磁盘文件路径
+        if unique_call_ids:
+            placeholders = ','.join(['?'] * len(unique_call_ids))
+            cursor = await db.execute(
+                f"SELECT meta_data FROM tool_calls WHERE call_id IN ({placeholders})",
+                unique_call_ids
+            )
+            tool_rows = await cursor.fetchall()
+            for tool_row in tool_rows:
+                meta = tool_row['meta_data']
+                if meta:
+                    try:
+                        meta_data = json.loads(meta)
+                        if meta_data.get('storage_type') == 'file':
+                            file_path = meta_data.get('file_path')
+                            if file_path:
+                                file_path = f"{config.cache_dir}/{file_path}"
+                                abs_path = os.path.abspath(file_path)
+                                if os.path.exists(abs_path):
+                                    files_to_delete.append(abs_path)
+                    except:
+                        pass
+        
+        # 3. 删除消息
         await db.execute(
             "DELETE FROM messages WHERE chat_id = ? AND turn_index = ?",
             (chat_id, turn_index)
         )
         
-        # 3. 删除工具
-        if call_ids_to_delete:
-            unique_call_ids = list(set(call_ids_to_delete))
-            placeholders = ','.join(['?'] * len(unique_call_ids))
+        # 4. 删除工具
+        if unique_call_ids:
             await db.execute(
-                f"DELETE FROM tool_calls WHERE chat_id = ? AND call_id IN ({placeholders})",
-                (chat_id, *unique_call_ids)
+                f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
+                unique_call_ids
             )
             
         await db.commit()
+
+        # 5. 删除磁盘文件（带重试）
+        for file_path in files_to_delete:
+            await asyncio.sleep(0.5)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"成功删除工具输出文件: {file_path}")
+                    break
+                except PermissionError as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"[WARN] 文件被占用，第 {attempt+1} 次重试...")
+                        await asyncio.sleep(0.5)
+                    else:
+                        logger.error(f"文件被占用无法删除 (重试 {max_retries} 次失败) {file_path}: {e}")
+                except Exception as e:
+                    logger.error(f"删除工具输出文件失败 {file_path}: {e}")
+                    break
+
         return True
     except Exception as e:
         await db.rollback()
