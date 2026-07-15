@@ -1,4 +1,5 @@
 # backend/services/llm_service.py
+import os
 import uuid
 import json
 import time
@@ -7,7 +8,9 @@ from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
-from backend.db.chats import add_message, update_message
+from backend.db.messages import add_message
+from config_loader import config
+from backend.bootstrap import logger
 
 
 class LLMService:
@@ -32,12 +35,12 @@ class LLMService:
         request: Optional[Request] = None,
         mcp_manager=None,
         params: Dict = None,
-        message_id: Optional[int] = None,
         chat_id: Optional[str] = None,
+        turn_index: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
 
-        # ---------- 图像生成分支 ----------
+        # ---------- 图像生成分支（不变） ----------
         if "image" in self.model_name.lower():
             prompt = ""
             for msg in reversed(messages):
@@ -84,15 +87,19 @@ class LLMService:
                 yield f"❌ 图像生成失败：{str(e)}"
             return
 
-        # ---------- 原有文本生成 + 工具调用分支 ----------
+        # ---------- 文本生成 + 工具调用分支 ----------
         current_messages = messages.copy()
 
         if tools is None and enable_tools:
             tools = await get_all_tools(mcp_manager)
 
+        # 用于记录整轮的结构化片段（按出现顺序）
+        segments = []
+        reasoning_buffer = ""
         reasoning_start_time = None
+        in_reasoning = False
 
-        # 全步骤累计 token（计费总量）
+        # 全步骤累计 token
         total_usage_all_steps = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -100,7 +107,7 @@ class LLMService:
             "completion_tokens_details": {}
         }
 
-        # 最后一步的 token 和生成耗时（用于展示最终回答速度）
+        # 最后一步 token 和生成耗时
         last_step_usage = None
         last_step_generation_time = 0.0
 
@@ -110,13 +117,11 @@ class LLMService:
         force_final = False
 
         for step in range(MAX_STEPS):
+            final_answer_content = ""   # 强制在每次循环开始前声明
             if request and await request.is_disconnected():
                 break
 
             tool_calls_by_index = {}
-            reasoning_buffer = ""
-            in_reasoning = False
-
             step_usage_record = None
             step_generation_time = 0.0
 
@@ -146,7 +151,7 @@ class LLMService:
 
             kwargs["extra_body"] = extra_body
 
-            # 连续失败上限或达到最大步数，都强制让模型直接总结
+            # 强制总结逻辑
             if force_final or step == MAX_STEPS - 1:
                 if force_final:
                     yield "\n⚠️ 工具连续调用失败次数过多，正在基于已收集信息生成最终总结...\n"
@@ -220,6 +225,7 @@ class LLMService:
                 tool_calls_data = getattr(delta, 'tool_calls', None)
                 delta_content = getattr(delta, 'content', None)
 
+                # ---------- 推理处理 ----------
                 if reasoning:
                     if not in_reasoning:
                         in_reasoning = True
@@ -229,11 +235,20 @@ class LLMService:
                     yield reasoning
                     continue
 
+                # 推理结束（遇到 content 或 tool_calls）
                 if in_reasoning and (delta_content or tool_calls_data):
                     reasoning_time = time.time() - reasoning_start_time
                     yield f"<!--reasoning:end:{reasoning_time:.2f}-->"
+                    # 将推理片段加入 segments
+                    segments.append({
+                        "type": "reasoning",
+                        "content": reasoning_buffer,
+                        "duration": f"{reasoning_time:.2f}"
+                    })
+                    reasoning_buffer = ""
                     in_reasoning = False
 
+                # ---------- 工具调用处理 ----------
                 if tool_calls_data:
                     if not tool_calls_started:
                         tool_calls_started = True
@@ -256,17 +271,26 @@ class LLMService:
 
                             yield f"<!--tool_preview:start:{call_id}:{func_name}-->"
 
-                            # 创建数据库记录
-                            if message_id:
+                            # 创建数据库记录（使用 chat_id）
+                            if chat_id:
                                 try:
                                     await create_tool_call(
-                                        message_id=message_id,
+                                        chat_id=chat_id,
                                         call_id=call_id,
                                         tool_name=func_name
                                     )
                                     tool_preview_active[idx]['db_created'] = True
                                 except Exception as e:
-                                    print(f"[DB] Failed to create tool call record: {e}")
+                                    logger.error(f"[数据库] 创建工具调用记录失败： {e}")
+
+                            # 添加轻量工具调用片段到 segments
+                            segments.append({
+                                "type": "tool_call",
+                                "content": {
+                                    "id": call_id,
+                                    "name": func_name
+                                },
+                            })
 
                         if idx not in tool_calls_by_index:
                             tool_calls_by_index[idx] = {
@@ -283,23 +307,31 @@ class LLMService:
                             arg_delta = tc_delta.function.arguments or ""
                             target["function"]["arguments"] += arg_delta
 
+                # ---------- 普通文本内容 ----------
                 elif delta_content:
                     final_answer_content += delta_content
                     yield delta_content
 
+            # 如果推理还未结束（流结束时仍有未闭合的推理），强制结束
             if in_reasoning:
                 reasoning_time = time.time() - reasoning_start_time
                 yield f"<!--reasoning:end:{reasoning_time:.2f}-->"
+                segments.append({
+                    "type": "reasoning",
+                    "content": reasoning_buffer,
+                    "duration": f"{reasoning_time:.2f}"
+                })
+                reasoning_buffer = ""
+                in_reasoning = False
 
             if step_usage_record:
                 last_step_usage = step_usage_record
 
-            # 记录本步骤生成时间
             if first_token_time is not None:
                 step_generation_time = time.time() - first_token_time
                 last_step_generation_time = step_generation_time
 
-            # ---------- 构建工具调用字典 (用于 assistant_msg) ----------
+            # ---------- 构建工具调用列表（内存中） ----------
             tool_calls = {}
             for idx, tc in tool_calls_by_index.items():
                 tool_calls[tc["id"]] = tc
@@ -310,7 +342,7 @@ class LLMService:
             if not tool_calls:
                 break
 
-            # ---------- 构建 valid_calls (用于执行工具，保留 idx) ----------
+            # ---------- 验证并执行工具 ----------
             valid_calls = {}
             for idx, tc in tool_calls_by_index.items():
                 if tc["function"]["name"].strip():
@@ -324,6 +356,7 @@ class LLMService:
             if not tool_calls_started:
                 yield "\n<!--tool_calls:start-->"
 
+            # 将 assistant 消息加入内存（用于下一轮）
             assistant_msg = {
                 "role": "assistant",
                 "content": None,
@@ -331,20 +364,13 @@ class LLMService:
             }
             current_messages.append(assistant_msg)
 
-            if message_id and chat_id:
-                try:
-                    await update_message(message_id, chat_id, None, None, list(tool_calls.values()))
-                except Exception as e:
-                    print(f"[DB] Failed to update assistant tool_calls: {e}")
-
             # ---------- 执行工具 ----------
             for idx, tc in valid_calls.items():
                 if idx not in tool_preview_active:
-                    print(f"[WARN] 跳过工具 {tc['function']['name']}，因为未找到预览状态")
+                    logger.warning(f"跳过工具 {tc['function']['name']}，因为未找到预览状态")
                     continue
 
                 local_call_id = tool_preview_active[idx]['call_id']
-
                 func_name = tc["function"]["name"] or "未知工具"
                 raw_args = tc["function"]["arguments"]
 
@@ -360,11 +386,11 @@ class LLMService:
                     args = {"raw": raw_args, "parse_error": str(e)}
 
                 # 更新数据库中的参数
-                if message_id:
+                if chat_id:
                     try:
                         await update_tool_call_arguments(local_call_id, args)
                     except Exception as e:
-                        print(f"[DB] Failed to update arguments: {e}")
+                        logger.error(f"[数据库] 更新参数失败：{e}")
 
                 # 执行工具
                 start_time = time.time()
@@ -390,45 +416,66 @@ class LLMService:
 
                 exec_time_ms = int((time.time() - start_time) * 1000)
 
-                # 统一格式化 tool 返回的内容
+                # 统一格式化工具返回内容
                 if isinstance(result, dict):
-                    tool_content = json.dumps(result, ensure_ascii=False)
+                    result_str = json.dumps(result, ensure_ascii=False)
                 else:
-                    tool_content = str(result)
+                    result_str = str(result)
 
-                if chat_id and message_id:
-                    await add_message(
-                        chat_id=chat_id,
-                        role='tool',
-                        content=tool_content,
-                        tool_calls=None,  # tool 消息不需要这个字段
-                        tool_call_id=local_call_id,
-                        file_ref=None
-                    )
+                # ===== 新增：大文件落盘逻辑 =====
+                MAX_DB_LEN = 20000  # 设定一个阈值，比如超过2万字符就落盘
+                meta_data = {}
+                final_db_result = ""
 
-                # 更新结果和状态 (存入数据库)
-                if message_id:
+                if len(result_str) > MAX_DB_LEN:
+                    # 1. 落盘写入文件
+                    file_dir = f"{chat_id}/{local_call_id}.txt"
+                    file_path = f"{config.cache_dir}/{file_dir}"
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(result_str)
+
+                    # 2. 准备元数据（存入数据库的 meta_data 字段）
+                    meta_data = {
+                        "storage_type": "file",
+                        "file_path": file_dir,
+                        "size": len(result_str),
+                        "preview": result_str[:1000]  # 截取前1000字用于前端展示摘要
+                    }
+                    # 3. 数据库实际的 result 字段只存一个简短提示，不存巨大文本
+                    final_db_result = f"[数据量过大(共{len(result_str)}字)，完整内容已保存至本地文件]"
+                else:
+                    # 小数据直接存
+                    final_db_result = result_str
+                # ===================================
+
+                # 更新结果和状态 (存入数据库，同时带上 meta_data)
+                if chat_id:
                     try:
-                        result_str = str(result)[:50000]
                         await update_tool_call(
                             call_id=local_call_id,
-                            result=result_str,
+                            arguments=args,
+                            result=final_db_result,    # 存入截断提示/小数据
                             status="error" if failed else "success",
                             execution_time=exec_time_ms,
-                            error_message=result if failed else None
+                            error_message=result if failed else None,
+                            meta_data=meta_data        # 🟢 关键：存入文件路径和预览
                         )
                     except Exception as e:
-                        print(f"[DB] Failed to update result: {e}")
+                        logger.error(f"[数据库] 更新结果失败：{e}")
 
-                tool_info = {
-                    "call_id": local_call_id,
-                    "name": func_name,
-                    "arguments": raw_args,
-                    # 限制 result 长度，防止流式数据过大导致前端卡顿
-                    "result": tool_content[:8000] 
-                }
-                yield f"<!--tool_data:{local_call_id}:{json.dumps(tool_info, ensure_ascii=False)}-->"
+                # ===== 将状态同步写入到 segments 列表中 =====
+                status_val = "error" if failed else "success"
+                err_msg = result if failed else None
                 
+                # 遍历已经记录在 segments 里的 tool_call 片段，把状态填进去
+                for seg in segments:
+                    if seg.get('type') == 'tool_call' and seg.get('content', {}).get('id') == local_call_id:
+                        seg['content']['status'] = status_val
+                        if err_msg:
+                            seg['content']['error_message'] = err_msg  # 把失败信息也带上前端渲染
+                        break
+
                 # 更新连续失败计数
                 if failed:
                     consecutive_failures += 1
@@ -440,10 +487,11 @@ class LLMService:
                 yield f"<!--tool_preview:end:{local_call_id}-->"
                 del tool_preview_active[idx]
 
+                # 将工具结果加入内存（用于下一轮）
                 current_messages.append({
                     "role": "tool",
                     "tool_call_id": local_call_id,
-                    "content": tool_content
+                    "content": result_str
                 })
 
             yield "<!--tool_calls:end-->"
@@ -451,7 +499,26 @@ class LLMService:
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 force_final = True
 
-        # ---------- 最终 token 统计输出 ----------
+        # ---------- 最后，将所有文本内容加入 segments ----------
+        if final_answer_content:
+            try:
+                # 尝试解析，如果是一个以 [ 开头的 JSON 数组，说明是错误的数据，不要作为 text 落盘
+                parsed = json.loads(final_answer_content)
+                if isinstance(parsed, list):
+                    logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
+                    final_answer_content = None  # 置空，防止将中间状态当成文本写入
+            except Exception:
+                # 说明不是 JSON，是正常纯文本，保留
+                pass
+
+            # 正常追加文本
+            if final_answer_content:
+                segments.append({
+                    "type": "text",
+                    "content": final_answer_content
+                })
+
+        # ---------- 最终 token 统计 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:
             tokens = last_step_usage["completion_tokens"]
             gen_time = last_step_generation_time
@@ -466,3 +533,21 @@ class LLMService:
                 "speed": speed_str
             }
             yield f"\n<!--token_usage:{json.dumps(token_info)}-->"
+
+            # 将 token 统计加入 segments
+            segments.append({
+                "type": "token_usage",
+                "content": token_info
+            })
+
+        # ---------- 将结构化内容写入数据库 ----------
+        if chat_id and turn_index is not None:
+            segments_json = json.dumps(segments, ensure_ascii=False)
+            await add_message(
+                chat_id=chat_id,
+                role="assistant",
+                content=segments_json,
+                file_ref=None,
+                turn_index=turn_index
+            )
+            yield f"<!--segments_complete:{segments_json}-->"

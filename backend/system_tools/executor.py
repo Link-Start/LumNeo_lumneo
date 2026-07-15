@@ -11,16 +11,15 @@
 6. 超时与输出截断：防止死循环 / 日志爆炸
 7. 非阻塞：使用 asyncio.create_subprocess_exec 替代 subprocess.run
 """
-
 import asyncio
 import os
 import shlex
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
-
 from backend.bootstrap import logger
 from config_loader import config
+
 
 # ──────────────────────── 安全配置常量 ────────────────────────
 

@@ -1,3 +1,4 @@
+// src/stores/config.ts
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { getModels, createModel, updateModel, deleteModel } from '@/api/models'

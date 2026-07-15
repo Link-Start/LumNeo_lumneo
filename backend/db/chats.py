@@ -1,64 +1,28 @@
 # backend/db/chats.py
-import json
+import os
 import uuid
-from datetime import datetime
+import shutil
 import aiosqlite
-from typing import List, Optional, Dict, Any
+from datetime import datetime
 from backend.database import get_db
+from backend.utils.base import delete_uploaded_files
+from config_loader import config
+from backend.bootstrap import logger
+
 
 class ChatRecord:
     def __init__(self, row: aiosqlite.Row):
         self.id = row['id']
         self.title = row['title']
         self.created_at = row['created_at']
-
-    def to_dict(self) -> Dict[str, Any]:
+    
+    def to_dict(self):
         return {
             'id': self.id,
             'title': self.title,
-            'created_at': self.created_at
+            'created_at': self.created_at,
         }
 
-class MessageRecord:
-    def __init__(self, row: aiosqlite.Row):
-        self.id = row['id']
-        self.chat_id = row['chat_id']
-        self.role = row['role']
-        self.content = self._parse_content(row['content'])
-        self.file_ref = self._parse_json(row['file_ref'])
-        self.tool_calls = self._parse_json(row['tool_calls']) if row['tool_calls'] else None
-        self.tool_call_id = row['tool_call_id']
-
-    def _parse_json(self, val):
-        if val is None:
-            return None
-        try:
-            return json.loads(val)
-        except:
-            return val
-
-    def _parse_content(self, val):
-        # 如果是看起来像 JSON 的字符串则解析，否则原样返回
-        if isinstance(val, str):
-            if val.startswith('[') or val.startswith('{'):
-                try:
-                    return json.loads(val)
-                except:
-                    return val
-            return val
-        return val
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'id': self.id,
-            'role': self.role,
-            'content': self.content,
-            'file_ref': self.file_ref,
-            'tool_calls': self.tool_calls,
-            'tool_call_id': self.tool_call_id
-        }
-
-# --- Chat CRUD ---
 
 async def create_chat(title: str = "新对话") -> ChatRecord:
     """创建新对话"""
@@ -76,18 +40,20 @@ async def create_chat(title: str = "新对话") -> ChatRecord:
     finally:
         await db.close()
 
-async def update_chat_title(chat_id: str, title: str) -> bool:
-    """更新对话标题"""
+
+async def update_chat_title(chat_id: str, title: str):
     db = await get_db()
     try:
-        await db.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+        await db.execute(
+            "UPDATE chats SET title = ? WHERE id = ?",
+            (title, chat_id)
+        )
         await db.commit()
-        return True
     finally:
         await db.close()
 
-async def list_chats() -> List[ChatRecord]:
-    """获取所有对话列表"""
+
+async def list_chats() -> list[ChatRecord]:
     db = await get_db()
     try:
         cursor = await db.execute("SELECT id, title, created_at FROM chats ORDER BY created_at DESC")
@@ -96,100 +62,35 @@ async def list_chats() -> List[ChatRecord]:
     finally:
         await db.close()
 
-async def delete_chat(chat_id: str) -> bool:
-    """删除对话"""
+
+async def delete_chat(chat_id: str):
     db = await get_db()
     try:
-        await db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
-        await db.commit()
-        return True
-    finally:
-        await db.close()
-
-# --- Message CRUD ---
-
-async def get_messages(chat_id: str) -> List[MessageRecord]:
-    """获取对话的所有消息"""
-    db = await get_db()
-    try:
+        # 先删除对话关联的上传文件
         cursor = await db.execute(
-            "SELECT id, chat_id, role, content, file_ref, tool_calls, tool_call_id FROM messages WHERE chat_id = ? ORDER BY id",
+            "SELECT file_ref FROM messages WHERE chat_id = ?", 
             (chat_id,)
         )
-        rows = await cursor.fetchall()
-        return [MessageRecord(row) for row in rows]
-    finally:
-        await db.close()
+        msg_rows = await cursor.fetchall()
 
-async def add_message(
-    chat_id: str, 
-    role: str, 
-    content: Any, 
-    file_ref: Optional[dict] = None,
-    tool_calls: Optional[List[Dict]] = None,
-    tool_call_id: Optional[str] = None
-) -> MessageRecord:
-    """添加一条消息"""
-    db = await get_db()
-    try:
-        # 处理 file_ref 序列化
-        file_ref_json = json.dumps(file_ref) if file_ref else None
-        
-        # 处理 content：如果是 dict/list 需要转成 json 字符串存入
-        content_str = json.dumps(content, ensure_ascii=False) if isinstance(content, (dict, list)) else content
-        file_ref_json = json.dumps(file_ref) if file_ref else None
-        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
+        for row in msg_rows:
+            if row['file_ref']:
+                delete_uploaded_files(row['file_ref'])
 
-        cursor = await db.execute(
-            "INSERT INTO messages (chat_id, role, content, file_ref, tool_calls, tool_call_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (chat_id, role, content_str, file_ref_json, tool_calls_json, tool_call_id)
-        )
+        tool_dir = f"{config.cache_dir}/{chat_id}"
+        abs_tool_dir = os.path.abspath(tool_dir)
+
+        # 触发数据库级联删除（chats 表删除后，messages 和 tool_calls 会自动删除）
+        await db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         await db.commit()
-        msg_id = cursor.lastrowid
-        
-        # 查询刚插入的记录以返回完整对象
-        cursor = await db.execute("SELECT * FROM messages WHERE id = ?", (msg_id,))
-        row = await cursor.fetchone()
-        return MessageRecord(row)
-    finally:
-        await db.close()
 
-async def update_message(message_id: int, chat_id: str, content: Any, file_ref: Optional[dict] = None, tool_calls: Optional[List[Dict]] = None) -> bool:
-    """更新消息内容"""
-    db = await get_db()
-    try:
-        content_str = content
-        if isinstance(content, (dict, list)):
-            content_str = json.dumps(content, ensure_ascii=False)
-            
-        file_ref_json = json.dumps(file_ref) if file_ref else None
-        tool_calls_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
-        
-        await db.execute(
-            "UPDATE messages SET content = ?, tool_calls = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
-            (content_str, tool_calls_json, file_ref_json, message_id, chat_id)
-        )
-        await db.commit()
-        # 返回是否有行被更新
-        return db.total_changes > 0
-    finally:
-        await db.close()
-
-async def delete_message(message_id: int, chat_id: str, cascade: bool = False) -> bool:
-    """删除消息"""
-    db = await get_db()
-    try:
-        if cascade:
-            await db.execute(
-                "DELETE FROM messages WHERE chat_id = ? AND id >= ?",
-                (chat_id, message_id)
-            )
+        # 清理真实的磁盘文件
+        if os.path.exists(abs_tool_dir) and abs_tool_dir.startswith(os.path.abspath(config.cache_dir)):
+            try:
+                shutil.rmtree(abs_tool_dir)
+            except Exception as e:
+                logger.error(f"删除对话工具关联文件夹失败 {abs_tool_dir}: {e}")
         else:
-            await db.execute(
-                "DELETE FROM messages WHERE id = ? AND chat_id = ?",
-                (message_id, chat_id)
-            )
-        await db.commit()
-        return True
+            logger.warning(f"工具文件夹不存在或路径异常，跳过删除: {abs_tool_dir}")
     finally:
         await db.close()

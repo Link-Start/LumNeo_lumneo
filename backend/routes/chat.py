@@ -7,14 +7,15 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
-
+import backend
 from backend.services.llm_service import LLMService
 from backend.services.tools import get_local_tools, get_mcp_tools, get_all_tools
 from backend.db.profiles import get_profile_by_id
 from backend.db.skills import get_skills_by_profile
 from backend.utils.base import resource_path, get_current_time, get_local_ip
 from config_loader import config
-import backend
+from backend.bootstrap import logger
+
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -41,6 +42,7 @@ class ChatRequest(BaseModel):
     profile_id: Optional[int] = None
     message_id: Optional[int] = None
     chat_id: Optional[str] = None
+    turn_index: Optional[int] = None
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
@@ -191,13 +193,13 @@ async def chat(
                     'frequency_penalty': profile.frequency_penalty,
                     'presence_penalty': profile.presence_penalty,
                 } if profile else {},
-                message_id=request.message_id,
-                chat_id=request.chat_id
+                chat_id=request.chat_id,
+                turn_index=request.turn_index
             ),
             media_type="text/event-stream"
         )
     except Exception as e:
-        print(e)
+        logger.error(f"对话服务错误：{e}")
         error_trace = traceback.format_exc()
         raise HTTPException(
             status_code=500, detail=f"服务崩溃: {error_trace}"

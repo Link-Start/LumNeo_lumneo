@@ -1,3 +1,4 @@
+// src/composables/useChat.ts
 import { ref } from 'vue'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
@@ -29,125 +30,77 @@ export function useChat() {
 
   const onStreamEnd = ref<((fullText: string) => void) | null>(null)
 
-  async function readStream(response: Response): Promise<string> {
-    if (!response.ok || !response.body) throw new Error('网络响应失败')
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullText = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      fullText += decoder.decode(value, { stream: true })
-      streamingContent.value = fullText
-    }
-    return fullText
-  }
+async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
+  if (!response.ok || !response.body) throw new Error('网络响应失败')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let finalSegments: any[] | undefined = undefined
 
-/** 解析流式文本中的工具完整数据 */
-  function parseToolData(text: string) {
-    const regex = /<!--tool_data:([^:]+):([\s\S]*?)-->/g
-    const results = []
-    let match
-    while ((match = regex.exec(text)) !== null) {
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value, { stream: true })
+    fullText += chunk
+    streamingContent.value = fullText
+
+    // 尝试从流中提取最终的结构化 JSON
+    const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
+    if (match) {
       try {
-        results.push({ call_id: match[1], ...JSON.parse(match[2]) })
+        finalSegments = JSON.parse(match[1])
       } catch (e) {
-        console.error('解析 tool_data 失败', e)
+        console.error('解析最终结构化数据失败', e)
       }
-    }
-    return results
-  }
-  
-  /**
-   * 辅助函数：处理流式正常结束后的消息保存逻辑
-   */
-async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, fullText: string) {
-    const toolDataList = parseToolData(fullText)
-    
-    // ✅ 核心：获取底层的真实 chat 对象，而不是 computed 属性
-    const chat = chatStore.chats.find(c => c.id === chatId)
-    if (!chat) return
-
-    if (toolDataList.length > 0) {
-      // 1. 更新原占位 assistant 消息为带 tool_calls 的消息
-      const assistantToolMsg = chat.messages.find((m: any) => m.id === assistantMsgId)
-      if (assistantToolMsg) {
-        assistantToolMsg.tool_calls = toolDataList.map((d: any) => ({
-          id: d.call_id,
-          type: 'function',
-          function: { name: d.name, arguments: d.arguments || '{}' }
-        }))
-        assistantToolMsg.content = '' // 工具调用时 content 置空
-      }
-      
-      // 2. 插入 tool 消息到底层 messages 列表
-      const insertIndex = chat.messages.findIndex(m => m.id === assistantMsgId) + 1
-      let insertedCount = 0
-      
-      for (const d of toolDataList) {
-        const exist = chat.messages.find(m => m.role === 'tool' && m.tool_call_id === d.call_id)
-        if (!exist) {
-          const toolMsg: Message = {
-            id: Date.now() + insertedCount, // 临时 ID
-            role: 'tool',
-            tool_call_id: d.call_id,
-            content: d.result
-          }
-          // 向底层数组中插入
-          chat.messages.splice(insertIndex + insertedCount, 0, toolMsg)
-          insertedCount++
-        }
-      }
-      
-      // 3. 提取最终回答，作为新消息保存
-      let finalContent = fullText
-      finalContent = finalContent.replace(/<!--tool_data:[^:]+:[\s\S]*?-->/g, '')
-
-      if (finalContent) {
-        const finalMsg: Message = { id: Date.now() + 1000, role: 'assistant', content: finalContent }
-        // addMessageToLocal 会自动向 chat.messages push
-        chatStore.addMessageToLocal(finalMsg)
-        // 后端没有存这条最终回答，需要前端保存
-        await chatStore.saveMessageToBackend(finalMsg)
-      }
-    } else {
-      // 未触发工具调用：直接更新原预建的空消息
-      const localMsg = chat.messages.find((m: any) => m.id === assistantMsgId)
-      if (localMsg) localMsg.content = fullText
-      await chatStore.editMessage(<number>assistantMsgId, fullText).catch((e: any) =>
-        console.warn('更新助手消息失败', e)
-      )
     }
   }
+  return { finalSegments }
+}
 
   /**
-   * 辅助函数：处理流式中断后的消息保存逻辑
+   * 流式正常结束后，直接重载对话列表，保证本地数据与后端 JSON 结构严格一致
    */
-  async function handleAbort(chatId: string, assistantMsgId: number) {
-    const partialContent = (streamingContent.value.trim() ? streamingContent.value.trim() + '\n\n' : '') + '[已停止]'
-    const hasToolCalls = streamingContent.value.includes('<!--tool_calls:start-->')
-    
-    // ✅ 获取底层 chat 对象
-    const chat = chatStore.chats.find(c => c.id === chatId)
-    if (!chat) return
-
-    if (hasToolCalls) {
-      // 如果中断时已经发生了工具调用，不要覆盖原消息，新建消息保存截断内容
-      const finalMsg: Message = { id: Date.now(), role: 'assistant', content: partialContent }
-      chatStore.addMessageToLocal(finalMsg)
-      await chatStore.saveMessageToBackend(finalMsg)
-      
-      const localEmptyMsg = chat.messages.find((m: any) => m.id === assistantMsgId)
-      if (localEmptyMsg) localEmptyMsg.content = ''
-    } else {
-      // 未发生工具调用，直接更新原消息
-      const localMsg = chat.messages.find((m: any) => m.id === assistantMsgId)
-      if (localMsg) localMsg.content = partialContent
-      await chatStore.editMessage(<number>assistantMsgId, partialContent).catch((e) =>
-        console.warn('保存截断消息失败', e)
-      )
-    }
+  async function finalizeAssistantMessage(chatId: string) {
+    await chatStore.loadMessages(chatId)
     streamingContent.value = ''
+  }
+
+/**
+   * 保存被中断的消息到本地和后端
+   */
+  async function saveAbortedMessage(chatId: string, turnIndex: number, streamingText: string) {
+    const chat = chatStore.chats.find(c => c.id === chatId)
+    if (!chat) return
+
+    // 1. 获取当前轮次的占位消息（它必然存在于 Store 中，因为我们一开始就插入了空占位）
+    let targetMsg = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
+    
+    // 极端兜底：如果还没插入，手动补一个（极少数情况）
+    if (!targetMsg) {
+      targetMsg = {
+        id: Date.now(),
+        role: 'assistant',
+        content: '',
+        turn_index: turnIndex
+      }
+      chatStore.addMessageToLocal(targetMsg)
+    }
+
+    // 2. 构造最终显示的文本（追加停止标记）
+    const suffix = '\n\n[用户停止了生成]'
+    let displayContent = streamingText.trim()
+    if (displayContent) {
+      displayContent += suffix
+    } else {
+      displayContent = '用户停止了生成'
+    }
+
+    // 3. 将纯文本封装成合法的结构化 JSON 数组落盘
+    const finalSegments = [{ type: "text", content: displayContent }]
+    targetMsg.content = JSON.stringify(finalSegments)
+
+    // 4. 调用后端接口，将当前轮次的消息真正保存到数据库！
+    await chatStore.saveMessageToBackend(targetMsg)
   }
 
   /**
@@ -165,116 +118,164 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
     const chatId = chatStore.activeChatId
     const displayContent = currentInput.value.trim()
     currentInput.value = ''
+
+    // 1. 获取并计算当前对话的轮次索引（让后端严格按顺序落盘）
+    const userTurnIndex = chatStore.getNextTurnIndex()
     const userMsg: Message = {
       id: Date.now(),
       role: 'user',
       content: displayContent,
       file_ref: uploadedFiles.length > 0 ? uploadedFiles.map((f) => ({ filename: f.filename, type: f.type, url: f.url })) : null,
+      turn_index: userTurnIndex
     }
 
     chatStore.addMessageToLocal(userMsg)
     await chatStore.saveMessageToBackend(userMsg)
 
-    const assistantMsg: Message = { id: Date.now() + 1, role: 'assistant', content: '' }
+    // 2. 预先在本地插入一个空的助手占位符，用于展示流式输出
+    const assistantTurnIndex = chatStore.getNextTurnIndex()
+    const assistantMsg: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: '',
+      turn_index: assistantTurnIndex
+    }
     chatStore.addMessageToLocal(assistantMsg)
-    await chatStore.saveMessageToBackend(assistantMsg)
-    
-    const assistantMessageId = assistantMsg.id
+
     isLoading.value = true
     streamingContent.value = ''
 
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
-    let fullText = ''
 
     try {
       const allMessages = chatStore.getActiveMessages()
+      // 剔除最后一个我们刚加的助手占位符（因为实际发送给模型的上下文不需要这个空占位）
+      allMessages.pop()
+      
       const apiMessages = await cleanMessages(allMessages)
-      // 删除最后一条消息
-      apiMessages.pop()
       const body = JSON.stringify({
         messages: apiMessages,
         enable_tools: chatStore.enableProfile,
         llm_config: {
-          type: currentModel.type, model_name: currentModel.modelName, base_url: currentModel.baseUrl,
+          type: currentModel.type,
+          model_name: currentModel.modelName,
+          base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
           thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
-        message_id: assistantMessageId,
         chat_id: chatStore.activeChatId,
+        turn_index: assistantTurnIndex
       })
 
       setTimeout(() => scrollToBottom(), 160)
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      fullText = await readStream(response)
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: controller.signal
+      })
+      
+      const { finalSegments } = await readStream(response)
 
       if (chatStore.activeChatId === chatId) {
-        await finalizeAssistantMessage(chatId, assistantMsg.id, fullText)
+        if (finalSegments) {
+          const chat = chatStore.chats.find(c => c.id === chatId)
+          if (chat) {
+            const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+            if (targetMsg) {
+              targetMsg.content = JSON.stringify(finalSegments) 
+            }
+          }
+        }
+        streamingContent.value = ''
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         if (chatStore.activeChatId === chatId) {
-          await handleAbort(chatId, assistantMsg.id)
+          await saveAbortedMessage(chatId, assistantTurnIndex, streamingContent.value)
         }
         return
       }
       if (chatStore.activeChatId === chatId) {
         console.error('发送失败:', error)
         const errorContent = `**错误：** ${error.message}`
-        const localMsg = chatStore.currentChatMessages.find((m: any) => m.id === assistantMsg.id)
+        const localMsg = chatStore.currentChatMessages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
         if (localMsg) localMsg.content = errorContent
-        chatStore.editMessage(<number>assistantMsg.id, errorContent).catch((e: any) => console.warn('保存错误消息失败', e))
       }
     } finally {
       abortController.value = null
       isLoading.value = false
-      streamingContent.value = ''
-      if (onStreamEnd.value && fullText && chatStore.activeChatId === chatId) {
-        onStreamEnd.value(fullText)
+      if (onStreamEnd.value && chatStore.activeChatId === chatId) {
+        // 由于已经重载过数据，此处仅用于外部回调通知
+        onStreamEnd.value('')
       }
     }
   }
 
   /**
-   * 重新生成当前对话（通常用于编辑用户消息后）
+   * 强制重新生成当前对话的最后一条回答
    */
   async function regenerateFromCurrentHistory() {
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
     if (!currentModel) { message.error('请先选择一个模型'); return }
 
+    const chatId = chatStore.activeChatId
+    // 获取最新的占位轮次
+    const assistantTurnIndex = chatStore.getNextTurnIndex()
+    const assistantMsg: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: '',
+      turn_index: assistantTurnIndex
+    }
+    chatStore.addMessageToLocal(assistantMsg)
+
     isLoading.value = true
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
 
-    const assistantMsg: Message = { id: Date.now() + 1, role: 'assistant', content: '' }
-    chatStore.addMessageToLocal(assistantMsg)
-    await chatStore.saveMessageToBackend(assistantMsg)
     try {
+      const allMessages = chatStore.getActiveMessages()
+      allMessages.pop()
+
       const body = JSON.stringify({
-        messages: await cleanMessages(chatStore.getActiveMessages()),
+        messages: await cleanMessages(allMessages),
         enable_tools: chatStore.enableProfile,
-        llm_config: { type: currentModel.type, model_name: currentModel.modelName, base_url: currentModel.baseUrl, api_key: currentModel.apiKey, thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled' },
+        llm_config: {
+          type: currentModel.type,
+          model_name: currentModel.modelName,
+          base_url: currentModel.baseUrl,
+          api_key: currentModel.apiKey,
+          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
+        },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
-        message_id: assistantMsg.id,
         chat_id: chatStore.activeChatId,
+        turn_index: assistantTurnIndex
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const fullText = await readStream(response)
-      await finalizeAssistantMessage(chatStore.activeChatId, assistantMsg.id, fullText)
+      const { finalSegments } = await readStream(response)
+      if (chatStore.activeChatId === chatId && finalSegments) {
+        const chat = chatStore.chats.find(c => c.id === chatId)
+        if (chat) {
+          const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+          if (targetMsg) targetMsg.content = JSON.stringify(finalSegments)
+        }
+        streamingContent.value = ''
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        await handleAbort(chatStore.activeChatId, assistantMsg.id)
+        await saveAbortedMessage(chatId, assistantTurnIndex, streamingContent.value)
         return
       }
       const errContent = `**错误：** ${error.message}`
-      const localMsg = chatStore.currentChatMessages.find(m => m.id === assistantMsg.id)
+      const localMsg = chatStore.currentChatMessages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
       if (localMsg) localMsg.content = errContent
-      chatStore.editMessage(<number>assistantMsg.id, errContent).catch((e) => console.warn('保存错误消息失败', e))
     } finally {
       abortController.value = null
       isLoading.value = false
@@ -283,54 +284,83 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
   }
 
   /**
-   * 针对某条助手消息重新生成（使用该消息前的历史）
+   * 针对某条具体的助手消息进行重新生成（替换/截断后续内容）
    */
   async function regenerateResponse(assistantMsg: Message) {
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
     if (!currentModel) { message.error('请先选择一个模型'); return }
 
-    const allMessages = chatStore.getActiveMessages()
-    const idx = allMessages.indexOf(assistantMsg)
-    if (idx === -1) return
-
-    const history = allMessages.slice(0, idx)
+    const chatId = chatStore.activeChatId
     regeneratingMsg.value = assistantMsg
 
+    // 1. 截断该条助手消息及之后的所有消息
+    await chatStore.truncateAtTurn(assistantMsg.turn_index)
+
+    // 2. 开始一个新的流式生成 (复用原本的轮次 turn_index)
     isLoading.value = true
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
 
-    assistantMsg.content = ''
-    streamingContent.value = ''
+    // 3. 插入新的占位消息
+    const newMsg: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: '',
+      turn_index: assistantMsg.turn_index
+    }
+    chatStore.addMessageToLocal(newMsg)
 
     try {
+      const allMessages = chatStore.getActiveMessages()
+      // 注意：这里要去掉我们刚加的占位符，因为发请求时不需要它
+      allMessages.pop()
+
       const body = JSON.stringify({
-        messages: await cleanMessages(history),
+        messages: await cleanMessages(allMessages),
         enable_tools: chatStore.enableProfile,
-        llm_config: { type: currentModel.type, model_name: currentModel.modelName, base_url: currentModel.baseUrl, api_key: currentModel.apiKey, thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled' },
+        llm_config: {
+          type: currentModel.type,
+          model_name: currentModel.modelName,
+          base_url: currentModel.baseUrl,
+          api_key: currentModel.apiKey,
+          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
+        },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
-        message_id: assistantMsg.id,
         chat_id: chatStore.activeChatId,
+        turn_index: assistantMsg.turn_index
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const fullText = await readStream(response)
-      await finalizeAssistantMessage(chatStore.activeChatId, assistantMsg.id, fullText)
-      
-      if (onStreamEnd.value) onStreamEnd.value(fullText)
+      // ✅ 流式读取，解构出 finalSegments
+      const { finalSegments } = await readStream(response)
+
+      if (chatStore.activeChatId === chatId) {
+        if (finalSegments) {
+          // ✅ 精准更新本地占位消息
+          const chat = chatStore.chats.find(c => c.id === chatId)
+          if (chat) {
+            const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
+            if (targetMsg) {
+              targetMsg.content = JSON.stringify(finalSegments)
+            }
+          }
+        }
+        streamingContent.value = ''
+      }
+
+      if (onStreamEnd.value) onStreamEnd.value('')
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        await handleAbort(chatStore.activeChatId, assistantMsg.id)
+        await saveAbortedMessage(chatId, assistantMsg.turn_index, streamingContent.value)
         return
       }
       const errContent = `**错误：** ${error.message}`
-      assistantMsg.content = errContent
-      if (assistantMsg.id) {
-        fetch(`/api/chats/${chatStore.activeChatId}/messages/${assistantMsg.id}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: errContent }),
-        }).catch((e) => console.warn('更新错误消息失败', e))
+      const chat = chatStore.chats.find(c => c.id === chatId)
+      if (chat) {
+        const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
+        if (targetMsg) targetMsg.content = errContent
       }
     } finally {
       abortController.value = null
@@ -341,7 +371,14 @@ async function finalizeAssistantMessage(chatId: string, assistantMsgId: number, 
   }
 
   return {
-    currentInput, isLoading, streamingContent, regeneratingMsg, onStreamEnd,
-    sendMessage, regenerateResponse, regenerateFromCurrentHistory, stopGeneration,
+    currentInput,
+    isLoading,
+    streamingContent,
+    regeneratingMsg,
+    onStreamEnd,
+    sendMessage,
+    regenerateResponse,
+    regenerateFromCurrentHistory,
+    stopGeneration,
   }
 }

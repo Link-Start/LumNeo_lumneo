@@ -261,7 +261,6 @@ def start_gui():
                 filename = name or url.split('/')[-1].split('?')[0]
                 if not filename:
                     filename = "downloaded_file"
-                print(f"准备下载: {filename}")
 
                 result = webview.windows[0].create_file_dialog(
                     dialog_type=webview.SAVE_DIALOG,
@@ -286,7 +285,7 @@ def start_gui():
             
             except Exception as e:
                 # 打印出具体错误，避免下次再被 except 静默吃掉报错导致无法排查
-                print(f"下载文件时发生错误: {e}") 
+                logger.error(f"下载文件时发生错误: {e}") 
                 return {"success": False, "error": str(e)}
 
     # FastAPI 放在守护线程

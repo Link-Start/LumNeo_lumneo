@@ -151,7 +151,7 @@
                           <template #icon><n-icon :size="22"><m-svg name="del" /></n-icon></template>
                         </n-button>
                       </template>
-                      确定要删除这条消息吗？
+                      将删除此消息之后的所有后续对话，<br/>是否继续？
                     </n-popconfirm>
                   </div>
                 </div>

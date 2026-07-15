@@ -60,7 +60,7 @@
                         :themes="['vitesse-light', 'vitesse-dark']"
                         code-block-dark-theme="vitesse-dark"
                         code-block-light-theme="vitesse-light"
-                        :content="processMessageContent(msg.content?.trim(), false)"
+                        :content="renderStructuredContent(msg.content?.trim())"
                         :final="true"
                         :fade="false"
                         :typewriter="false"
@@ -101,7 +101,7 @@
                           <template #icon><n-icon :size="22"><m-svg name="del" /></n-icon></template>
                         </n-button>
                       </template>
-                      确定要删除这条消息吗？
+                      将删除此消息之后的所有后续对话，<br/>是否继续？
                     </n-popconfirm>
                   </div>
                 </div>
@@ -146,7 +146,7 @@ import { DocumentOutline } from '@vicons/ionicons5'
 import { MarkdownRender, setCustomComponents, removeCustomComponents, setInfographicLoader } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import type { Message } from '@/stores/chat'
-import { normalizeFileRef, processMessageContent } from '@/utils/message'
+import { normalizeFileRef, processMessageContent, renderStructuredContent } from '@/utils/message'
 import svgWelcomeDark from '@/components-svg/svgWelcomeDark.vue'
 import svgWelcomeLight from '@/components-svg/svgWelcomeLight.vue'
 import svgLoading from '@/components-svg/svgLoading.vue'
@@ -187,7 +187,18 @@ const currentMessages = computed(() => props.messages)
 
 const listItems = computed<any>(() => {
   const msgs = currentMessages.value as (Message | { __streaming: boolean })[]
-  return props.isLoading ? [...msgs, { __streaming: true }] : msgs
+  
+  // 若正在流式加载中，过滤掉 Store 中最后一条空的 assistant 占位消息
+  let displayMsgs = msgs
+  if (props.isLoading && displayMsgs.length > 0) {
+    const lastMsg = displayMsgs[displayMsgs.length - 1]
+    if ('role' in lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
+      displayMsgs = displayMsgs.slice(0, -1)
+    }
+  }
+
+  // 过滤完后，再按原逻辑附加流式占位符
+  return props.isLoading ? [...displayMsgs, { __streaming: true }] : displayMsgs
 })
 
 const showScrollBtn = ref(false)

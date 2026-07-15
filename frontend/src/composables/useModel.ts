@@ -1,3 +1,4 @@
+// src/composables/useModel.ts
 import { ref, computed } from 'vue'
 import { useConfigStore } from '@/stores/config'
 
