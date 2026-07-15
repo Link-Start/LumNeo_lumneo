@@ -190,7 +190,6 @@ async def delete_tool_calls_by_call_ids(call_ids: List[str]) -> int:
         for file_path in files_to_delete:
             try:
                 os.remove(file_path)
-                logger.info(f"成功删除工具输出文件: {file_path}")
             except Exception as e:
                 logger.error(f"删除工具输出文件失败 {file_path}: {e}")
 
@@ -228,7 +227,6 @@ async def delete_tool_calls_by_chat_id(chat_id: str) -> int:
         for file_path in files_to_delete:
             try:
                 os.remove(file_path)
-                logger.info(f"成功删除工具输出文件: {file_path}")
             except Exception as e:
                 logger.error(f"删除工具输出文件失败 {file_path}: {e}")
                 

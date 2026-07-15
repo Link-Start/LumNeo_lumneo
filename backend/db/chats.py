@@ -1,10 +1,11 @@
 # backend/db/chats.py
 import os
-import json
 import uuid
+import shutil
 import aiosqlite
 from datetime import datetime
 from backend.database import get_db
+from backend.utils.base import delete_uploaded_files
 from config_loader import config
 from backend.bootstrap import logger
 
@@ -65,38 +66,31 @@ async def list_chats() -> list[ChatRecord]:
 async def delete_chat(chat_id: str):
     db = await get_db()
     try:
-        # 1. 在级联删除前，先提取该对话下所有工具文件的路径
+        # 先删除对话关联的上传文件
         cursor = await db.execute(
-            "SELECT meta_data FROM tool_calls WHERE chat_id = ?", 
+            "SELECT file_ref FROM messages WHERE chat_id = ?", 
             (chat_id,)
         )
-        rows = await cursor.fetchall()
-        files_to_delete = []
-        for row in rows:
-            meta = row['meta_data']
-            if meta:
-                try:
-                    meta_data = json.loads(meta)
-                    if meta_data.get('storage_type') == 'file':
-                        file_path = meta_data.get('file_path')
-                        if file_path:
-                            file_path = f"{config.cache_dir}/{file_path}"
-                            abs_path = os.path.abspath(file_path)
-                            if os.path.exists(abs_path):
-                                files_to_delete.append(abs_path)
-                except:
-                    pass
+        msg_rows = await cursor.fetchall()
 
-        # 2. 触发数据库级联删除（chats 表删除后，messages 和 tool_calls 会自动删除）
+        for row in msg_rows:
+            if row['file_ref']:
+                delete_uploaded_files(row['file_ref'])
+
+        tool_dir = f"{config.cache_dir}/{chat_id}"
+        abs_tool_dir = os.path.abspath(tool_dir)
+
+        # 触发数据库级联删除（chats 表删除后，messages 和 tool_calls 会自动删除）
         await db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         await db.commit()
 
-        # 3. 清理真实的磁盘文件
-        for file_path in files_to_delete:
+        # 清理真实的磁盘文件
+        if os.path.exists(abs_tool_dir) and abs_tool_dir.startswith(os.path.abspath(config.cache_dir)):
             try:
-                os.remove(file_path)
-                logger.info(f"成功删除对话关联的工具文件: {file_path}")
+                shutil.rmtree(abs_tool_dir)
             except Exception as e:
-                logger.error(f"删除对话关联文件失败 {file_path}: {e}")
+                logger.error(f"删除对话工具关联文件夹失败 {abs_tool_dir}: {e}")
+        else:
+            logger.warning(f"工具文件夹不存在或路径异常，跳过删除: {abs_tool_dir}")
     finally:
         await db.close()

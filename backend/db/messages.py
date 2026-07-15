@@ -5,6 +5,7 @@ import asyncio
 import aiosqlite
 from typing import List, Optional, Dict, Any
 from backend.database import get_db
+from backend.utils.base import delete_uploaded_files
 from config_loader import config
 from backend.bootstrap import logger
 
@@ -124,7 +125,7 @@ async def update_message(
 async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
     """
     截断消息：删除 from_turn_index 及之后的所有消息，
-    并自动清理 tool_calls 表中对应的孤立工具记录及磁盘文件
+    并自动清理 tool_calls 表中对应的孤立工具记录及磁盘文件和关联的上传文件
     """
     db = await get_db()
     try:
@@ -132,7 +133,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
         
         # 1. 先查出来要被删掉的消息记录
         cursor = await db.execute(
-            "SELECT role, content FROM messages WHERE chat_id = ? AND turn_index >= ?",
+            "SELECT role, content, file_ref FROM messages WHERE chat_id = ? AND turn_index >= ?",
             (chat_id, from_turn_index)
         )
         rows = await cursor.fetchall()
@@ -140,6 +141,8 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
         # 2. 遍历提取所有 tool_call 的 call_id
         call_ids_to_delete = []
         for row in rows:
+            if row['file_ref']:
+                delete_uploaded_files(row['file_ref'])
             if row['role'] == 'assistant' and row['content']:
                 try:
                     segments = json.loads(row['content'])
@@ -206,11 +209,15 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
             for attempt in range(max_retries):
                 try:
                     os.remove(file_path)
-                    logger.info(f"成功删除工具输出文件: {file_path}")
+                    try:
+                        dir_path = os.path.dirname(file_path)
+                        os.rmdir(dir_path)  # 只删空目录，不删有文件的目录
+                    except OSError:
+                        pass  # 目录不为空或已被删除，忽略即可
                     break
                 except PermissionError as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"[WARN] 文件被占用，第 {attempt+1} 次重试...")
+                        logger.warning(f"文件被占用，第 {attempt+1} 次重试...")
                         await asyncio.sleep(0.5)
                     else:
                         logger.error(f"文件被占用无法删除 (重试 {max_retries} 次失败) {file_path}: {e}")
@@ -236,10 +243,13 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
         
         # 1. 取出这一条 assistant 消息的内容，提取 call_id
         cursor = await db.execute(
-            "SELECT role, content FROM messages WHERE chat_id = ? AND turn_index = ?",
+            "SELECT role, content, file_ref FROM messages WHERE chat_id = ? AND turn_index = ?",
             (chat_id, turn_index)
         )
         row = await cursor.fetchone()
+
+        if row and row['file_ref']:
+            delete_uploaded_files(row['file_ref'])
         
         call_ids_to_delete = []
         if row and row['role'] == 'assistant' and row['content']:
@@ -305,11 +315,15 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             for attempt in range(max_retries):
                 try:
                     os.remove(file_path)
-                    logger.info(f"成功删除工具输出文件: {file_path}")
+                    try:
+                        dir_path = os.path.dirname(file_path)
+                        os.rmdir(dir_path)  # 只删空目录，不删有文件的目录
+                    except OSError:
+                        pass
                     break
                 except PermissionError as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"[WARN] 文件被占用，第 {attempt+1} 次重试...")
+                        logger.warning(f"文件被占用，第 {attempt+1} 次重试...")
                         await asyncio.sleep(0.5)
                     else:
                         logger.error(f"文件被占用无法删除 (重试 {max_retries} 次失败) {file_path}: {e}")

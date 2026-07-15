@@ -1,8 +1,9 @@
 # backend/routes/files.py
 import os
 import uuid
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Request
 from config_loader import config
+from backend.utils.base import delete_uploaded_files
 
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -20,3 +21,9 @@ async def upload_file(file: UploadFile = File(...)):
     file_url = f"/files/uploads/{unique_name}"
 
     return {"filename": file.filename, "stored_name": unique_name, "type": file.content_type, "url": file_url}
+
+@router.delete("/")
+async def delete_file(request: Request):
+    data = await request.body()
+    delete_uploaded_files(data)
+    return {"message": "File deleted successfully"}

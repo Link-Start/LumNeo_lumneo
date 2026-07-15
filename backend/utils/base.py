@@ -1,9 +1,12 @@
 # backend/utils/base.py
 import os
 import sys
+import json
 import socket
 from pathlib import Path
 from datetime import datetime, timezone as tz
+from config_loader import config
+from backend.bootstrap import logger
 
 
 def is_absolute(path: str) -> bool:
@@ -65,3 +68,34 @@ def get_local_ip():
         return ip
     except Exception:
         return "127.0.0.1"
+    
+def delete_uploaded_files(file_ref_json: str):
+    """根据 file_ref JSON 字符串，删除对应的物理上传文件"""
+    if not file_ref_json:
+        return
+    try:
+        ref_data = json.loads(file_ref_json)
+        # 如果只是单个对象，转成数组统一处理
+        if isinstance(ref_data, dict):
+            ref_data = [ref_data]
+
+        for item in ref_data:
+            url = item.get('url')
+            if not url:
+                continue
+            
+            # 提取文件名，拼接物理路径
+            # 通常 url 类似 /files/uploads/xxx.jpg 或 /uploads/xxx.jpg
+            if '/uploads/' in url:
+                # 截取 uploads 后的部分作为文件名
+                filename = url.split('/uploads/')[-1]
+                phys_path = os.path.join(config.uploads_dir, filename)
+                
+                if os.path.exists(phys_path):
+                    try:
+                        os.remove(phys_path)
+                    except Exception as e:
+                        logger.error(f"删除上传文件失败 {phys_path}: {e}")
+    except Exception as e:
+        # 避免解析错误导致主流程中断
+        logger.warning(f"解析 file_ref 失败: {e}")
