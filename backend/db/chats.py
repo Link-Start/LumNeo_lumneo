@@ -1,8 +1,12 @@
 # backend/db/chats.py
 import os
 import json
+import uuid
 import aiosqlite
+from datetime import datetime
 from backend.database import get_db
+from config_loader import config
+from backend.bootstrap import logger
 
 
 class ChatRecord:
@@ -19,16 +23,19 @@ class ChatRecord:
         }
 
 
-async def create_chat(title: str = '新对话') -> ChatRecord:
+async def create_chat(title: str = "新对话") -> ChatRecord:
+    """创建新对话"""
     db = await get_db()
     try:
-        cursor = await db.execute(
-            "INSERT INTO chats (title) VALUES (?) RETURNING id, title, created_at",
-            (title,)
+        chat_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        await db.execute(
+            "INSERT INTO chats (id, title, created_at) VALUES (?, ?, ?)",
+            (chat_id, title, now)
         )
-        row = await cursor.fetchone()
         await db.commit()
-        return ChatRecord(row)
+        # 直接构造对象返回，避免再次查询
+        return ChatRecord({'id': chat_id, 'title': title, 'created_at': now})
     finally:
         await db.close()
 
@@ -73,6 +80,7 @@ async def delete_chat(chat_id: str):
                     if meta_data.get('storage_type') == 'file':
                         file_path = meta_data.get('file_path')
                         if file_path:
+                            file_path = f"{config.cache_dir}/{file_path}"
                             abs_path = os.path.abspath(file_path)
                             if os.path.exists(abs_path):
                                 files_to_delete.append(abs_path)
@@ -87,8 +95,8 @@ async def delete_chat(chat_id: str):
         for file_path in files_to_delete:
             try:
                 os.remove(file_path)
-                print(f"[INFO] 成功删除对话关联的工具文件: {file_path}")
+                logger.info(f"成功删除对话关联的工具文件: {file_path}")
             except Exception as e:
-                print(f"[ERROR] 删除对话关联文件失败 {file_path}: {e}")
+                logger.error(f"删除对话关联文件失败 {file_path}: {e}")
     finally:
         await db.close()
