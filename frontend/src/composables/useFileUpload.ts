@@ -63,6 +63,9 @@ export function useFileUpload() {
   
     // 清理去重 Set（需要根据 filename 匹配）
     if (removed) {
+
+      fetch(`/api/files/`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(removed) })
+      
       for (const key of processedFiles) {
         // key 格式是 "filename__size"，匹配 filename 部分
         if (key.startsWith(removed.filename)) {
