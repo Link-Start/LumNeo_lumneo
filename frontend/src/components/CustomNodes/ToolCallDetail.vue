@@ -163,12 +163,6 @@ async function loadDetail() {
   }
 }
 
-watch(() => props.visible, (visible) => {
-  if (visible && props.callId) {
-    loadDetail()
-  }
-})
-
 watch(() => props.callId, () => {
   if (show.value && props.callId) {
     loadDetail()
