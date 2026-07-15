@@ -1,4 +1,5 @@
 # backend/services/llm_service.py
+import os
 import uuid
 import json
 import time
@@ -430,6 +431,7 @@ class LLMService:
                     # 1. 落盘写入文件
                     file_dir = f"{chat_id}/{local_call_id}.txt"
                     file_path = f"{config.cache_dir}/{file_dir}"
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(result_str)
 

@@ -9,6 +9,7 @@ from backend.db.tool_calls import (
     get_tool_calls_by_call_ids,
     delete_tool_calls_by_call_ids,
 )
+from config_loader import config
 
 
 router = APIRouter(prefix="/api/tool-calls", tags=["tool-calls"])
@@ -28,8 +29,8 @@ async def get_tool_call(call_id: str):
     
     # 检查是否为存于磁盘的大文件
     if record.meta_data and record.meta_data.get("storage_type") == "file":
-        file_path = record.meta_data.get("file_path")
-        if file_path and os.path.exists(file_path):
+        file_path = f"{config.cache_dir}/{record.meta_data.get("file_path")}"
+        if os.path.exists(file_path):
             try:
                 # 使用 asyncio.to_thread 将同步的文件读取操作放到后台线程，不堵塞主线程
                 full_content = await asyncio.to_thread(
@@ -55,9 +56,9 @@ async def batch_get_tool_calls(request: BatchRequest):
     for r in records:
         # 检查是否为存于磁盘的大文件
         if r.meta_data and r.meta_data.get("storage_type") == "file":
-            file_path = r.meta_data.get("file_path")
+            file_path = f"{config.cache_dir}/{r.meta_data.get("file_path")}"
             try:
-                if file_path and os.path.exists(file_path):
+                if os.path.exists(file_path):
                     # 使用 asyncio.to_thread 后台读取
                     full_content = await asyncio.to_thread(
                         lambda: open(file_path, "r", encoding="utf-8").read()
