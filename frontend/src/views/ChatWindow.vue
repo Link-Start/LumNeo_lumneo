@@ -120,10 +120,15 @@
                 size="small"
                 placeholder="选择角色"
                 style="width: 150px; margin-right: 12px;"
-                clearable
                 @update:value="switchActiveProfile"
               />
             </div>
+            <n-popover trigger="click">
+              <template #trigger>
+                <n-button size="small" tertiary v-if="chatStore.enableProfile">角色面板</n-button>
+              </template>
+              <n-card :bordered="false">ddd</n-card>
+            </n-popover>
           </n-flex>
           <n-popover
             v-if="showQRCode"
@@ -246,7 +251,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
+import { NButton, NCard, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'
@@ -419,7 +424,7 @@ const profileOptions = computed(() =>
 )
 
 const switchActiveProfile = (profileId: string) => {
-  localStorage.setItem('activeProfileId', profileId)
+  localStorage.setItem('activeProfileId', profileId || '')
 }
 
 function setQRCodeUrl() {

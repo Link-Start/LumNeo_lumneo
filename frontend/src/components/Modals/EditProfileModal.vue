@@ -13,6 +13,14 @@
   @positive-click="saveProfile"
   @negative-click="negativeClick">
     <n-form :model="profileForm" label-placement="left" label-width="70">
+      <n-form-item label="">
+        <n-avatar
+        style="margin-left:200px"
+          round
+          :size="60"
+          src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
+        />
+      </n-form-item>
       <n-form-item label="角色名称">
         <n-input v-model:value="profileForm.name" placeholder="例如：程序员、生活助手" :maxlength="12" show-count/>
       </n-form-item>
@@ -161,7 +169,7 @@
 import {
   NForm, NFormItem, NInput, NPopover, NButton, NSpace,
   NModal, NCheckboxGroup, NCheckbox, NSlider,
-  NInputNumber, NCollapseItem, NCollapse
+  NInputNumber, NCollapseItem, NCollapse, NAvatar
 } from 'naive-ui'
 import { ref, reactive, watch  } from 'vue'
 import { useProfileStore, type Profile } from '@/stores/profiles'
