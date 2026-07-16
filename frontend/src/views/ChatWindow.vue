@@ -127,7 +127,9 @@
               <template #trigger>
                 <n-button size="small" tertiary v-if="chatStore.enableProfile">角色面板</n-button>
               </template>
-              <n-card :bordered="false">ddd</n-card>
+              <n-card :bordered="false">
+                <n-image width="100" src="/images/scenes/s_01.jpg" />
+              </n-card>
             </n-popover>
           </n-flex>
           <n-popover
@@ -251,7 +253,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NCard, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
+import { NButton, NCard, NImage, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'

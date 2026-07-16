@@ -18,6 +18,9 @@
       <!-- 角色信息 (只读展示) -->
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
+          <n-form-item>
+            <n-avatar v-if="profileStore.activeProfile" class="avatar" round :size="60" :src="`/images/avatars/${profileStore.activeProfile.avatar}`"/>
+          </n-form-item>
           <n-form-item label="角色">
             <n-input v-model:value="localProfile.name" disabled />
           </n-form-item>
@@ -164,7 +167,7 @@
 
 <script setup lang="ts">
 import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, 
-  NCheckbox, NText, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
+  NCheckbox, NText, NAvatar, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
 import { ref, reactive, watch, onUnmounted } from 'vue'
 import mSvg from '@/components/MSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
@@ -627,4 +630,5 @@ onUnmounted(() => {
 .upload-area:hover {
   border-color: #1890ff;
 }
+.avatar {box-shadow: 0 0 2px rgba(128,128,.3);border:2px solid #fff;margin-left:220px;margin-bottom:10px;}
 </style>
