@@ -17,7 +17,7 @@
         <div style="position: relative;margin-left:200px;border-radius: 30px;overflow:hidden">
           <n-popover trigger="click" placement="bottom">
             <template #trigger>
-              <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${profileForm.avatar}`"/>
+              <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
             </template>
             <div style="width:226px">
               <n-grid x-gap="12" y-gap="12" :cols="3">
@@ -42,7 +42,7 @@
           :autosize="{ minRows: 3, maxRows: 8 }"
         />
       </n-form-item>
-      <n-form-item label="赋予能力">
+      <n-form-item label="角色天赋">
         <n-button size="small" style="position:absolute;left:-64px;top:40px;" @click="loadTools">刷新</n-button>
         <div style="width: 420px; max-height: 200px; overflow-y: auto;">
           <n-checkbox-group v-model:value="profileForm.tools">

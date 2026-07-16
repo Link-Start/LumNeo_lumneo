@@ -68,6 +68,7 @@ export const useProfileStore = defineStore('profile', () => {
       })
     })
     const newProfile = await res.json()
+    
     const completeProfile: Profile = {
       ...newProfile,
       temperature: newProfile.temperature ?? 1,
@@ -94,17 +95,6 @@ export const useProfileStore = defineStore('profile', () => {
     presence_penalty?: number,
   ) {    
     // 发送更新请求
-    console.log(JSON.stringify({ 
-        name, 
-        avatar,
-        tools, 
-        profile_prompt, 
-        temperature, 
-        top_p, 
-        top_k, 
-        frequency_penalty, 
-        presence_penalty 
-      }));
     
     await fetch(`/api/profiles/${id}`, {
       method: 'PUT',

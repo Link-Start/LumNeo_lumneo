@@ -127,9 +127,7 @@
               <template #trigger>
                 <n-button size="small" tertiary v-if="chatStore.enableProfile">角色面板</n-button>
               </template>
-              <n-card :bordered="false">
-                <n-image width="100" src="/images/scenes/s_01.jpg" />
-              </n-card>
+              <profile-panel :profile-data="profileStore.activeProfile"/>
             </n-popover>
           </n-flex>
           <n-popover
@@ -266,6 +264,7 @@ import mSvg from '@/components/MSvg.vue'
 // import MessageList from '@/components/VirtualMessageList.vue'
 import MessageList from '@/components/MessageList.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import ProfilePanel from '@/components/ProfilePanel.vue'
 
 import { useModel } from '@/composables/useModel'
 import { useFileUpload } from '@/composables/useFileUpload'
