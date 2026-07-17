@@ -54,7 +54,7 @@
                     <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
                       <n-popover trigger="hover">
                         <template #trigger>
-                          <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${getLatestProfile(msg).avatar}`" @click="handleShowModal(getLatestProfile(msg).id)"/>
+                          <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${getLatestProfile(msg).avatar}`" @click="handleShowModal(getLatestProfile(msg).id)"/>
                         </template>
                         <span>{{ msg.profile?.name }}</span>
                       </n-popover>

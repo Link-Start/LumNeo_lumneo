@@ -123,7 +123,7 @@
                 @update:value="switchActiveProfile"
               />
             </div>
-            <n-button v-if="!isMobile && chatStore.enableProfile" size="large" tertiary @click="showPanelModal = true">角色面板</n-button>
+            <n-button v-if="!isMobile && chatStore.enableProfile && profileStore.activeProfileId" size="large" tertiary @click="showPanelModal = true">角色面板</n-button>
             
           </n-flex>
           <n-popover
