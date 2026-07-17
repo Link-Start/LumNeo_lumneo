@@ -15,7 +15,8 @@
     <n-form :model="profileForm" label-placement="left" label-width="70">
       <n-form-item>
         <div style="position: relative;margin-left:200px;border-radius: 30px;overflow:hidden">
-          <n-popover trigger="click" placement="bottom">
+          <n-avatar v-if="isEditing" class="avatar" style="cursor:unset;" round :size="60" :src="`/images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
+          <n-popover v-else trigger="click" placement="bottom">
             <template #trigger>
               <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
             </template>

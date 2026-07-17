@@ -1,12 +1,14 @@
 // src/stores/chat.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useProfileStore } from './profiles'
 
 export interface Message {
   id: number
   role: 'user' | 'assistant' | 'system'
   content: any
   file_ref?: any
+  profile?: any
   turn_index: number
 }
 
@@ -20,6 +22,7 @@ export const useChatStore = defineStore('chat', () => {
   const chats = ref<Chat[]>([])
   const activeChatId = ref<string>('')
   const enableProfile = ref(localStorage.getItem('enableProfile') === 'true')
+  const profileStore = useProfileStore()
 
   // 从后端加载对话列表
   async function loadChats() {
@@ -102,10 +105,16 @@ export const useChatStore = defineStore('chat', () => {
   // ---------- 立即添加到本地（不等待后端） ----------
   async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
+    
     if (!chat) return
     const newMsg: Message = {
       ...msg,
       id: Date.now(),
+      profile: {
+        id: profileStore.activeProfile?.id,
+        name: profileStore.activeProfile?.name,
+        avatar: profileStore.activeProfile?.avatar
+      },
       turn_index: getNextTurnIndex() // 自动注入轮次
     }
     chat.messages.push(newMsg)

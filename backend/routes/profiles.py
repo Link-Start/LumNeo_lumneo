@@ -75,8 +75,6 @@ async def update_profile_route(profile_id: int, profile: ProfileCreate):
 
     return record.to_dict()
 
-default_tools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
-
 # 获取所有角色
 @router.get("/", response_model=List[ProfileResponse])
 async def list_profiles_route(): 
@@ -85,7 +83,7 @@ async def list_profiles_route():
     for r in records:
         d = r.to_dict()
         existing_tools = d.get('tools') or []
-        d['tools'] = default_tools + existing_tools
+        d['tools'] = existing_tools
         result.append(d)
     return result
 

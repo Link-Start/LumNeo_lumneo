@@ -74,12 +74,12 @@ function toggle() {
 <style scoped>
 /* 思考块 */
 .reasoning-block {
-  background: rgba(129, 78, 247, 0.06);
+  background: rgba(250, 250, 250, 0.05);
   border-radius: 6px;
   overflow: hidden;
-  margin:2px 0;
 }
 .reasoning-block .reasoning-summary {
+  padding: 12px;
   font-weight: 600;
   font-size: 16px!important;
   color: var(--thinking-text);
@@ -97,7 +97,7 @@ function toggle() {
   transition: background 0.2s;
 }
 .reasoning-block .reasoning-summary:hover {
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(252, 252, 252, 0.05);
 }
 .reasoning-content {
   padding: 12px;
@@ -131,6 +131,7 @@ function toggle() {
 
 .reasoning-container {
   font-size: 0.9rem;
+  padding:0 12px;
   color: var(--text-secondary);
   display: grid;
   grid-template-rows: 0fr;

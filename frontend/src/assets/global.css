@@ -77,8 +77,9 @@
   max-width: 100%;
   height: auto;
 }
-
-.paragraph-node{margin:10px 0!important;padding:0!important;}
+.node-content{padding:0 24px;width:auto!important;}
+.node-slot[data-node-type="reasoning"] .node-content{padding:0;}
+.paragraph-node{margin:10px 0!important;}
 
 /* ========== 现代表格 ========== */
 table {
