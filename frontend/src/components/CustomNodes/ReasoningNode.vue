@@ -74,7 +74,7 @@ function toggle() {
 <style scoped>
 /* 思考块 */
 .reasoning-block {
-  background: rgba(250, 250, 250, 0.05);
+  background: rgba(250, 250, 250, 0.02);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -97,7 +97,7 @@ function toggle() {
   transition: background 0.2s;
 }
 .reasoning-block .reasoning-summary:hover {
-  background: rgba(252, 252, 252, 0.05);
+  background: rgba(252, 252, 252, 0.02);
 }
 .reasoning-content {
   padding: 12px;

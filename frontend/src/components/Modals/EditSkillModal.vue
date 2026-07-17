@@ -6,7 +6,7 @@
     preset="dialog"
     draggable
     :mask-closable="false"
-    style="max-width: 520px; width: 96%"
+    style="max-width: 600px; width: 96%"
     title="习得技能"
     positive-text="确认"
     negative-text="取消"
@@ -15,14 +15,14 @@
     @negative-click="negativeClick"
   >
     <div class="modal-content">
-      <!-- 角色信息 (只读展示) -->
+      <!-- 角色信息 -->
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
           <n-form-item>
             <n-avatar class="avatar" round :size="60" :src="`./images/avatars/${localProfile.avatar}`"/>
           </n-form-item>
           <n-form-item label="角色">
-            <n-input v-model:value="localProfile.name" disabled />
+            <n-input v-model:value="localProfile.name" size="large" disabled />
           </n-form-item>
           <n-form-item label="天赋">
             <n-flex :size="4" style="margin-top:6px">
@@ -51,12 +51,11 @@
           type="primary"
           dashed
           block
+          size="large"
           style="margin-top: 12px"
           @click="openAddSkillModal"
         >
-          <template #icon>
-            <span style="font-size: 16px">+</span>
-          </template>
+          <template #icon><n-icon><add /></n-icon></template>
           添加技能
         </n-button>
         <br>
@@ -166,9 +165,10 @@
 </template>
 
 <script setup lang="ts">
-import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, 
+import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, NIcon,
   NCheckbox, NText, NAvatar, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
 import { ref, reactive, computed, watch, onUnmounted } from 'vue'
+import { Add } from '@vicons/ionicons5'
 import mSvg from '@/components/MSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
@@ -609,5 +609,5 @@ onUnmounted(() => {
 .upload-area:hover {
   border-color: #1890ff;
 }
-.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);border:2px solid #fff;margin-left:220px;margin-bottom:10px;}
+.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);border:2px solid #fff;margin-left:240px;margin-bottom:10px;}
 </style>

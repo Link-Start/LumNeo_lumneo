@@ -5,8 +5,8 @@
       <div class="panel-header">
         <div class="panel-title">
             <n-flex>
-            <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${profile.avatar}`"/>
-            {{ profile.name }} 
+            <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${profile.avatar || 'a_01.jpg'}`"/>
+            {{ profile.name }}
             </n-flex>
             <div class="panel-subtitle">当前角色</div>
         </div>
@@ -26,7 +26,7 @@
               height="100%"
               object-fit="cover"
               :show-toolbar="false"
-              :previewed-img-props="{ style: { width: '680px', borderRadius: '10px' } }"
+              :previewed-img-props="{ style: { width: '720px', borderRadius: '10px' } }"
             />
           </div>
         </div>

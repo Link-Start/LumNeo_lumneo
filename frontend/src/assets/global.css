@@ -48,7 +48,6 @@
 
 .node-content .code-block-container {min-height:auto!important;}
 
-
 /* 全局按钮过渡 */
 .n-button {
   transition: all 0.2s ease;
@@ -78,7 +77,6 @@
   height: auto;
 }
 .node-content{padding:0 24px;width:auto!important;}
-.node-slot[data-node-type="reasoning"] .node-content{padding:0;}
 .paragraph-node{margin:10px 0!important;}
 
 /* ========== 现代表格 ========== */
@@ -300,6 +298,7 @@ tr:last-child td:last-child {
   /* 消息气泡最大宽度加大，让文字更容易阅读 */
   .bubble {
     max-width: 98%;
+    margin-right: 12px;
   }
 
   /* 输入区域固定在底部，并优化工具栏排列 */

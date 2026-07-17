@@ -146,7 +146,6 @@ function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean
 .toolcalls-block {
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--bg-secondary);
   overflow: hidden;
   margin: 8px 0;
 }

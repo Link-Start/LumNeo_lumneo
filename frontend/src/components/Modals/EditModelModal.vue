@@ -4,6 +4,7 @@
     :auto-focus="false" 
     preset="dialog" 
     draggable 
+    style="max-width:600px;width:96%;" 
     :mask-closable="false" 
     :loading="configStore.loading" 
     :title="modelId ? '编辑模型' : '添加模型'"
@@ -11,20 +12,27 @@
     negative-text="取消" 
     @update:show="negativeClick"
     @positive-click="saveModel">
-    <n-form :model="modelForm" label-placement="left" label-width="80">
+    <n-form :model="modelForm" label-placement="left" label-width="90">
       <n-form-item label="名称" required>
-        <n-input v-model:value="modelForm.name" placeholder="例如：我的 GPT-4" />
+        <n-input v-model:value="modelForm.name" size="large" placeholder="例如：我的 GPT-4" />
       </n-form-item>
       <n-form-item label="类型">
         <n-radio-group v-model:value="modelForm.type">
-          <n-radio value="local">本地模型</n-radio>
-          <n-radio value="online">线上模型</n-radio>
+          <n-radio value="local" size="large">本地模型</n-radio>
+          <n-radio value="online" size="large">线上模型</n-radio>
         </n-radio-group>
       </n-form-item>
+      <n-form-item label="Base URL" required>
+        <n-input v-model:value="modelForm.baseUrl" size="large" placeholder="http://localhost:1234/v1" />
+      </n-form-item>
+      <n-form-item label="API Key">
+        <n-input v-model:value="modelForm.apiKey" type="password" size="large" placeholder="sk-..." />
+      </n-form-item>
       <n-form-item label="模型 ID" required>
-        <n-space>
+        <n-input-group>
           <n-select
-            style="width: 240px"
+            style="width: 370px"
+            size="large"
             v-model:value="modelForm.modelName"
             :options="modelOptions"
             filterable
@@ -32,14 +40,8 @@
             :loading="modelsLoading"
             @focus="autoFetchModels"
           />
-          <n-button @click="fetchModels">获取</n-button>
-        </n-space>
-      </n-form-item>
-      <n-form-item label="Base URL">
-        <n-input v-model:value="modelForm.baseUrl" placeholder="http://localhost:1234/v1" />
-      </n-form-item>
-      <n-form-item label="API Key">
-        <n-input v-model:value="modelForm.apiKey" type="password" placeholder="sk-..." />
+          <n-button @click="fetchModels" secondary size="large">获取ID</n-button>
+        </n-input-group>
       </n-form-item>
     </n-form>
   </n-modal>
@@ -47,7 +49,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, PropType  } from 'vue'
-import { NForm, NFormItem, NRadio, NRadioGroup, NInput, NSelect, NButton, NSpace, NModal, useMessage } from 'naive-ui'
+import { NForm, NFormItem, NRadio, NRadioGroup, NInputGroup, NInput, NSelect, NButton, NModal, useMessage } from 'naive-ui'
 import { useConfigStore, type ModelConfig } from '@/stores/config'
 
 const props = defineProps({

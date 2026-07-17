@@ -95,7 +95,7 @@
             <n-button v-if="isMobile" text @click="sidebarOpen = !sidebarOpen; sidebarCollapsed = !sidebarCollapsed">
               <template #icon><n-icon><MenuOutline /></n-icon></template>
             </n-button>
-            <n-button v-if="!isMobile && sidebarCollapsed" text class="icon-btn" @click="sidebarCollapsed = !sidebarCollapsed" title="展开侧栏">
+            <n-button v-if="!isMobile && sidebarCollapsed" text class="icon-btn" style="margin-top:6px" @click="sidebarCollapsed = !sidebarCollapsed" title="展开侧栏">
               <template #icon>
                 <n-icon :size="22">
                   <m-svg name="expand"/>
@@ -106,7 +106,7 @@
               <n-select
                 v-model:value="activeModelId"
                 :options="modelOptions"
-                size="small"
+                size="large"
                 style="width: 120px"
                 placeholder="选择模型"
                 @update:value="switchActiveModel"
@@ -117,13 +117,13 @@
                 v-if="chatStore.enableProfile"
                 v-model:value="profileStore.activeProfileId"
                 :options="profileOptions"
-                size="small"
+                size="large"
                 placeholder="选择角色"
-                style="width: 150px; margin-right: 12px;"
+                style="width: 150px;"
                 @update:value="switchActiveProfile"
               />
             </div>
-            <n-button size="small" tertiary v-if="chatStore.enableProfile" @click="showPanelModal = true">角色面板</n-button>
+            <n-button v-if="!isMobile && chatStore.enableProfile" size="large" tertiary @click="showPanelModal = true">角色面板</n-button>
             
           </n-flex>
           <n-popover
@@ -132,7 +132,7 @@
             trigger="hover"
           >
             <template #trigger>
-              <n-button text>
+              <n-button text size="large">
                 <template #icon>
                   <n-icon><QrCodeOutline /></n-icon>
                 </template>
@@ -634,7 +634,7 @@ onUnmounted(() => {
 
 .top-bar {
   display: flex;
-  height: 30px;
+  height: 40px;
   justify-content: space-between;
   align-items: center;
   padding: 8px 20px;

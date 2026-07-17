@@ -10,7 +10,6 @@
     </div>
 
     <div v-else class="message-main">
-      <!-- 使用抽离出来的目录组件 -->
       <MessageToc
         :messages="messages"
         :is-mobile="isMobile"
@@ -55,7 +54,7 @@
                     <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
                       <n-popover trigger="hover">
                         <template #trigger>
-                          <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${msg.profile?.avatar}`" @click="handleShowModal(msg.profile?.id)"/>
+                          <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${getLatestProfile(msg).avatar}`" @click="handleShowModal(getLatestProfile(msg).id)"/>
                         </template>
                         <span>{{ msg.profile?.name }}</span>
                       </n-popover>
@@ -216,6 +215,19 @@ const listItems = computed<any>(() => {
   // 过滤完后，再按原逻辑附加流式占位符
   return props.isLoading ? [...displayMsgs, { __streaming: true }] : displayMsgs
 })
+
+// 根据消息中的 profile.id 获取最新的角色信息
+function getLatestProfile(msg: Message) {
+  const id = msg.profile?.id
+  if (id) {
+    const latest = profileStore.getProfile(id)
+    if (latest) {
+      return latest
+    }
+  }
+  // 降级：使用消息自带快照（防止角色被删除导致空白）
+  return msg.profile || { avatar: 'a_01.jpg', name: '' }
+}
 
 const showScrollBtn = ref(false)
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null
@@ -564,5 +576,5 @@ onUnmounted(() => {
   background: var(--border-color-hover);
 }
 .avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
-.assistant-box {background: rgba(255,255,255,.06);border-radius: 8px;margin-bottom:12px;}
+.assistant-box {background: rgba(255,255,255,.06);border-radius: 8px;margin-bottom:12px;padding-top:24px;}
 </style>

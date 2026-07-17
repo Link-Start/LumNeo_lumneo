@@ -1,5 +1,5 @@
 <template>
-  <n-drawer :show="show" :auto-focus="false" @update:show="(val: boolean) => emit('update:show', val)" width="400">
+  <n-drawer :show="show" :auto-focus="false" @update:show="(val: boolean) => emit('update:show', val)" width="470">
     <n-drawer-content title="设置" closable>
       <n-tabs default-value="model">
         <n-tab-pane name="model" tab="模型管理">
@@ -7,17 +7,20 @@
             <!-- 当前活跃模型指示 -->
             <n-alert v-if="!configStore.activeModel" type="warning" title="尚未选择模型" />
             <div v-else>
-              <n-tag type="info" size="small">当前使用：{{ configStore.activeModel.name }}</n-tag>
+              <n-tag type="info" :bordered="false" size="large">当前使用：{{ configStore.activeModel.name }}</n-tag>
             </div>
 
             <n-divider />
 
             <!-- 模型列表 -->
-            <n-list hoverable clickable>
+            <n-list hoverable clickable bordered>
               <n-list-item v-for="model in configStore.savedModels" :key="model.id">
                 <template #suffix>
                   <n-space>
-                    <n-button text size="small" @click="editModel(model)">编辑</n-button>
+                    <n-button text size="small" @click="editModel(model)">
+                      <template #icon><n-icon><create-outline /></n-icon></template>
+                      编辑
+                    </n-button>
                     <n-popconfirm 
                     @positive-click="() => configStore.deleteModel(model.id)" 
                     negative-text="取消" 
@@ -26,7 +29,10 @@
                     :positive-button-props="{size: 'tiny'}"
                     >
                       <template #trigger>
-                        <n-button text size="small" type="error">删除</n-button>
+                        <n-button text size="small" type="error">
+                          <template #icon><n-icon><trash-outline /></n-icon></template>
+                          删除
+                        </n-button>
                       </template>
                       确定删除模型「{{ model.name }}」吗？
                     </n-popconfirm>
@@ -40,8 +46,11 @@
                 </div>
               </n-list-item>
             </n-list>
-
-            <n-button type="primary" block @click="openAddModelDialog">添加模型</n-button>
+            <br>
+            <n-button type="primary" block size="large" @click="openAddModelDialog">
+              <template #icon><n-icon><add /></n-icon></template>
+              添加模型
+            </n-button>
           </n-space>
 
 
@@ -54,7 +63,7 @@
               <n-switch v-model:value="chatStore.enableProfile" @update-value="handleProfile"/>
             </n-form-item>
             <n-form-item label="主题">
-              <n-button @click="configStore.toggleTheme">
+              <n-button @click="configStore.toggleTheme" size="large">
                 <template #icon>
                   <n-icon><m-svg :name="configStore.themeMode === 'dark' ? 'moon' : 'son'"/></n-icon>
                 </template>
@@ -62,10 +71,10 @@
               </n-button>
             </n-form-item>
             <n-form-item label="工作目录">
-              <n-flex>
-                <n-input style="width:70%" v-model:value="workspacePath" placeholder="选择或输入目录路径" @change="saveWorkspace(workspacePath)"/>
-                <n-button text @click="selectFolder">选择目录</n-button>
-              </n-flex>
+              <n-input-group>
+                <n-input v-model:value="workspacePath" size="large" placeholder="选择或输入目录路径" @change="saveWorkspace(workspacePath)"/>
+                <n-button secondary @click="selectFolder" size="large">选择</n-button>
+              </n-input-group>
             </n-form-item>
           </n-form>
 
@@ -74,22 +83,33 @@
             <div>
               <n-divider />
               <h3 style="margin-bottom: 12px;">角色管理</h3>
-              <n-select
+              <n-select size="large"
                 v-model:value="profileId"
                 :options="profileOptions"
                 placeholder="选择角色"
-                clearable
                 style="margin-bottom: 12px;"
               />
-              <n-space>
-                <n-button @click="openCreateProfile" size="small" secondary type="primary">新建角色</n-button>
-                <n-button @click="openEditProfile" size="small" secondary :disabled="!profileId">编辑</n-button>
-                <n-button @click="openProfileSkills" size="small" secondary :disabled="!profileId">习得技能</n-button>
+              <n-space justify="center">
+                <n-button @click="openCreateProfile" secondary type="primary">
+                  <template #icon><n-icon><add /></n-icon></template>
+                  新建角色
+                </n-button>
+                <n-button @click="openEditProfile" secondary :disabled="!profileId">
+                  <template #icon><n-icon><create-outline /></n-icon></template>
+                  编辑
+                </n-button>
+                <n-button @click="openProfileSkills" secondary :disabled="!profileId">
+                  <template #icon><n-icon><book-outline /></n-icon></template>
+                  习得技能
+                </n-button>
                 <n-popconfirm
                   @positive-click="deleteCurrentProfile"
                 >
                   <template #trigger>
-                    <n-button size="small" secondary type="error" :disabled="!profileId">删除</n-button>
+                    <n-button secondary type="error" :disabled="!profileId">
+                      <template #icon><n-icon><trash-outline /></n-icon></template>
+                      删除
+                    </n-button>
                   </template>
                   确定删除当前角色吗？
                 </n-popconfirm>
@@ -123,11 +143,12 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
 import {
-  NDrawer, NDrawerContent, NForm, NFormItem, NInput, NFlex,
+  NDrawer, NDrawerContent, NForm, NFormItem, NInputGroup, NInput,
   NSwitch, NButton, NSpace, NDivider, NIcon,
   NTabs, NTabPane, NList, NListItem, NPopconfirm, NTag, NAlert, 
   NSelect, NText, useMessage
 } from 'naive-ui'
+import { Add, CreateOutline, TrashOutline, BookOutline } from '@vicons/ionicons5'
 import SkillManager from '@/components/SkillManager.vue'
 import EditProfileModal from '@/components/Modals/EditProfileModal.vue'
 import EditModelModal from '@/components/Modals/EditModelModal.vue'

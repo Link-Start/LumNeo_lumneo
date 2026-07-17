@@ -56,7 +56,6 @@ async def create_profile_route(profile: ProfileCreate):
 # 更新角色
 @router.put("/{profile_id}", response_model=ProfileResponse)
 async def update_profile_route(profile_id: int, profile: ProfileCreate):
-    print(profile)
     record = await update_profile_db(
         profile_id=profile_id,
         name=profile.name,

@@ -5,7 +5,7 @@
   preset="dialog" 
   draggable
   :mask-closable="false"
-  style="max-width:520px;width:96%;" 
+  style="max-width:600px;width:96%;" 
   :title="isEditing ? '编辑角色' : '新建角色'"
   positive-text="确认"
   negative-text="关闭"
@@ -14,9 +14,8 @@
   @negative-click="negativeClick">
     <n-form :model="profileForm" label-placement="left" label-width="70">
       <n-form-item>
-        <div style="position: relative;margin-left:200px;border-radius: 30px;overflow:hidden">
-          <n-avatar v-if="isEditing" class="avatar" style="cursor:unset;" round :size="60" :src="`./images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
-          <n-popover v-else trigger="click" placement="bottom">
+        <div style="position: relative;margin-left:240px;border-radius: 30px;overflow:hidden">
+          <n-popover trigger="click" placement="bottom">
             <template #trigger>
               <n-avatar class="avatar" round :size="60" :src="`./images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
             </template>
@@ -31,21 +30,22 @@
         </div>
       </n-form-item>
       <n-form-item label="角色名称">
-        <n-input v-model:value="profileForm.name" placeholder="例如：程序员、生活助手" :maxlength="12" show-count/>
+        <n-input v-model:value="profileForm.name" placeholder="例如：程序员、生活助手" size="large" :maxlength="12" show-count/>
       </n-form-item>
       <n-form-item label="角色描述">
         <n-input
           v-model:value="profileForm.profile_prompt"
           type="textarea"
+          size="large"
           placeholder="例如：你是一个专业的 Python 开发者，回答要简洁..."
           show-count
           :maxlength="300"
-          :autosize="{ minRows: 3, maxRows: 8 }"
+          :autosize="{ minRows: 3, maxRows: 6 }"
         />
       </n-form-item>
       <n-form-item label="角色天赋">
         <n-button size="small" style="position:absolute;left:-64px;top:40px;" @click="loadTools">刷新</n-button>
-        <div style="width: 420px; max-height: 200px; overflow-y: auto;">
+        <div style="width: 520px; max-height: 180px; overflow-y: auto;">
           <n-checkbox-group v-model:value="profileForm.tools">
             <n-space vertical>
               <n-checkbox v-for="tool in allTools" :key="tool.function.name" :value="tool.function.name">
@@ -74,7 +74,7 @@
               :min="0"
               :max="2"
               :step="0.1"
-              style="width: 200px"
+              style="width: 300px"
             />
             <n-input-number
               v-model:value="profileForm.temperature"
@@ -95,7 +95,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              style="width: 200px"
+              style="width: 300px"
             />
             <n-input-number
               v-model:value="profileForm.top_p"
@@ -116,7 +116,7 @@
               :min="1"
               :max="100"
               :step="1"
-              style="width: 200px"
+              style="width: 300px"
             />
             <n-input-number
               v-model:value="profileForm.top_k"
@@ -136,7 +136,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 200px"
+              style="width: 300px"
             />
             <n-input-number
               v-model:value="profileForm.frequency_penalty"
@@ -157,7 +157,7 @@
               :min="-2"
               :max="2"
               :step="0.1"
-              style="width: 200px"
+              style="width: 300px"
             />
             <n-input-number
               v-model:value="profileForm.presence_penalty"
