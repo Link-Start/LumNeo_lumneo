@@ -13,6 +13,22 @@
   @positive-click="saveProfile"
   @negative-click="negativeClick">
     <n-form :model="profileForm" label-placement="left" label-width="70">
+      <n-form-item>
+        <div style="position: relative;margin-left:200px;border-radius: 30px;overflow:hidden">
+          <n-popover trigger="click" placement="bottom">
+            <template #trigger>
+              <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
+            </template>
+            <div style="width:226px">
+              <n-grid x-gap="12" y-gap="12" :cols="3">
+                <n-grid-item v-for="i in 9">
+                  <n-avatar class="avatar" round :size="60" :src="`/images/avatars/a_0${i}.jpg`" @click="selectAvatar(`a_0${i}.jpg`)"/>
+                </n-grid-item>
+              </n-grid>
+            </div>
+          </n-popover>
+        </div>
+      </n-form-item>
       <n-form-item label="角色名称">
         <n-input v-model:value="profileForm.name" placeholder="例如：程序员、生活助手" :maxlength="12" show-count/>
       </n-form-item>
@@ -26,7 +42,7 @@
           :autosize="{ minRows: 3, maxRows: 8 }"
         />
       </n-form-item>
-      <n-form-item label="赋予能力">
+      <n-form-item label="角色天赋">
         <n-button size="small" style="position:absolute;left:-64px;top:40px;" @click="loadTools">刷新</n-button>
         <div style="width: 420px; max-height: 200px; overflow-y: auto;">
           <n-checkbox-group v-model:value="profileForm.tools">
@@ -160,11 +176,12 @@
 <script setup lang="ts">
 import {
   NForm, NFormItem, NInput, NPopover, NButton, NSpace,
-  NModal, NCheckboxGroup, NCheckbox, NSlider,
-  NInputNumber, NCollapseItem, NCollapse
+  NModal, NCheckboxGroup, NCheckbox, NSlider, NGrid, NGridItem,
+  NInputNumber, NCollapseItem, NCollapse, NAvatar
 } from 'naive-ui'
 import { ref, reactive, watch  } from 'vue'
 import { useProfileStore, type Profile } from '@/stores/profiles'
+
 
 const props = defineProps({
     show: {
@@ -189,6 +206,7 @@ const allTools = ref<{ function: { name: string; title: string; description: str
 const editingProfile = ref<Profile | null>(null)
 const profileForm = reactive({
   name: '',
+  avatar: 'a_01.jpg',
   tools: [] as string[],
   profile_prompt: '',
   temperature: 1,
@@ -226,6 +244,7 @@ const openCreateProfile = () => {
     }
     editingProfile.value = null
     profileForm.name = ''
+    profileForm.avatar = 'a_01.jpg'
     profileForm.tools = []
     profileForm.profile_prompt = ''
     profileForm.temperature = 1
@@ -245,6 +264,7 @@ const openEditProfile = () => {
   if (!p) return
   editingProfile.value = { ...p }
   profileForm.name = p.name
+  profileForm.avatar = p.avatar
   profileForm.tools = [...p.tools]
   profileForm.profile_prompt = p.profile_prompt || ''
   // 读取角色保存的参数，若旧角色没有则使用默认值
@@ -259,12 +279,17 @@ const negativeClick = () => {
     emit('update:show', false)
 }
 
+const selectAvatar = (avatar: string) => {
+  profileForm.avatar = avatar
+}
+
 // 保存配置
-async function saveProfile() {
+const saveProfile = async () => {
     if (props.isEditing && editingProfile.value) {
         await profileStore.updateProfile(
         editingProfile.value.id,
         profileForm.name,
+        profileForm.avatar,
         profileForm.tools,
         profileForm.profile_prompt,
         profileForm.temperature,
@@ -276,6 +301,7 @@ async function saveProfile() {
     } else {
         await profileStore.createProfile(
         profileForm.name,
+        profileForm.avatar,
         profileForm.tools,
         profileForm.profile_prompt,
         profileForm.temperature,
@@ -288,3 +314,7 @@ async function saveProfile() {
     emit('update:show', false)
 }
 </script>
+
+<style scoped>
+.avatar {box-shadow: 0 0 2px rgba(128,128,.3);border:2px solid #fff;cursor: pointer;}
+</style>

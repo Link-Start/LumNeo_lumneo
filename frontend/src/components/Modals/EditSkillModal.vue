@@ -18,10 +18,13 @@
       <!-- 角色信息 (只读展示) -->
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
+          <n-form-item>
+            <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${localProfile.avatar}`"/>
+          </n-form-item>
           <n-form-item label="角色">
             <n-input v-model:value="localProfile.name" disabled />
           </n-form-item>
-          <n-form-item label="能力">
+          <n-form-item label="天赋">
             <n-flex :size="4" style="margin-top:6px">
               <n-tag v-for="name in localProfile.tools" :key="name" :bordered="false" type="info">
                 {{ toolStore.toolsInfo[name]?.title ?? name }}
@@ -164,11 +167,12 @@
 
 <script setup lang="ts">
 import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, 
-  NCheckbox, NText, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
+  NCheckbox, NText, NAvatar, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
 import { ref, reactive, watch, onUnmounted } from 'vue'
 import mSvg from '@/components/MSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
+
 
 interface SkillItem {
   id: string
@@ -190,6 +194,7 @@ const toolStore = useToolStore()
 // ---------- 主弹窗数据 ----------
 const localProfile = reactive({
   name: '',
+  avatar: '',
   tools: [] as string[],
   skills: [] as string[],
 })
@@ -242,6 +247,7 @@ watch(
       const p = profileStore.getProfile(props.profileId)
       if (p) {
         localProfile.name = p.name || ''
+        localProfile.avatar = p.avatar || 'a_01.jpg'
         localProfile.tools = p.tools || []
         await loadLearnedSkills()
       }
@@ -627,4 +633,5 @@ onUnmounted(() => {
 .upload-area:hover {
   border-color: #1890ff;
 }
+.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);border:2px solid #fff;margin-left:220px;margin-bottom:10px;}
 </style>

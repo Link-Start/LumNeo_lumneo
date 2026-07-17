@@ -53,9 +53,10 @@ async def get_all_tools(mcp_manager=None):
 
 async def get_mcp_tools(mcp_manager=None):
     """获取MCP工具"""
+    mcp_tools = []
     if mcp_manager:
         mcp_tools = await mcp_manager.get_all_tools()
-     # 过滤掉非字典项（防止意外混入对象）
+    # 过滤掉非字典项（防止意外混入对象）
     clean_tools = [t for t in mcp_tools if isinstance(t, dict)]
 
     return clean_tools

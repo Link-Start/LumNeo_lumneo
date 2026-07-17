@@ -8,6 +8,7 @@ class ProfileRecord:
     def __init__(self, row: aiosqlite.Row):
         self.id = row['id']
         self.name = row['name']
+        self.avatar = row['avatar']
         self.profile_prompt = row['profile_prompt'] or ""
         # 解析 tools JSON
         self.tools = self._parse_json(row['tools'])
@@ -30,6 +31,7 @@ class ProfileRecord:
         return {
             'id': self.id,
             'name': self.name,
+            'avatar': self.avatar,
             'tools': self.tools,
             'profile_prompt': self.profile_prompt,
             'temperature': self.temperature,
@@ -41,6 +43,7 @@ class ProfileRecord:
 
 async def create_profile(
     name: str, 
+    avatar: str,
     tools: List[str], 
     profile_prompt: str, 
     temperature: float, 
@@ -55,9 +58,9 @@ async def create_profile(
         tools_json = json.dumps(tools, ensure_ascii=False)
         cursor = await db.execute(
             """INSERT INTO profiles 
-               (name, tools, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, tools_json, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty)
+               (name, avatar, tools, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, avatar, tools_json, profile_prompt, temperature, top_p, top_k, frequency_penalty, presence_penalty)
         )
         await db.commit()
         profile_id = cursor.lastrowid
@@ -72,6 +75,7 @@ async def create_profile(
 async def update_profile(
     profile_id: int,
     name: str, 
+    avatar: str,
     tools: List[str], 
     profile_prompt: str, 
     temperature: float, 
@@ -86,10 +90,10 @@ async def update_profile(
         tools_json = json.dumps(tools, ensure_ascii=False)
         await db.execute(
             """UPDATE profiles 
-               SET name = ?, tools = ?, profile_prompt = ?,
+               SET name = ?, avatar = ?, tools = ?, profile_prompt = ?,
                    temperature = ?, top_p = ?, top_k = ?, frequency_penalty = ?, presence_penalty = ?
                WHERE id = ?""",
-            (name, tools_json, profile_prompt,
+            (name, avatar, tools_json, profile_prompt,
              temperature, top_p, top_k, frequency_penalty, presence_penalty,
              profile_id)
         )
@@ -111,7 +115,7 @@ async def list_profiles() -> List[ProfileRecord]:
     db = await get_db()
     try:
         cursor = await db.execute(
-            """SELECT id, name, tools, profile_prompt,
+            """SELECT id, name, avatar, tools, profile_prompt,
                       temperature, top_p, top_k, frequency_penalty, presence_penalty
                FROM profiles"""
         )

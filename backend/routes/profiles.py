@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/profiles", tags=["profiles"])
 
 class ProfileCreate(BaseModel):
     name: str
+    avatar: str
     tools: List[str] = []
     profile_prompt: str = ""
     temperature: float = Field(default=1.0, ge=0.0, le=2.0)
@@ -26,6 +27,7 @@ class ProfileCreate(BaseModel):
 class ProfileResponse(BaseModel):
     id: int
     name: str
+    avatar: str
     tools: List[str]
     profile_prompt: str
     temperature: float
@@ -39,6 +41,7 @@ class ProfileResponse(BaseModel):
 async def create_profile_route(profile: ProfileCreate):
     record = await create_profile_db(
         name=profile.name,
+        avatar=profile.avatar,
         tools=profile.tools,
         profile_prompt=profile.profile_prompt,
         temperature=profile.temperature,
@@ -53,9 +56,11 @@ async def create_profile_route(profile: ProfileCreate):
 # 更新角色
 @router.put("/{profile_id}", response_model=ProfileResponse)
 async def update_profile_route(profile_id: int, profile: ProfileCreate):
+    print(profile)
     record = await update_profile_db(
         profile_id=profile_id,
         name=profile.name,
+        avatar=profile.avatar,
         tools=profile.tools,
         profile_prompt=profile.profile_prompt,
         temperature=profile.temperature,

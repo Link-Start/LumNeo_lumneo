@@ -50,6 +50,7 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            avatar TEXT DEFAULT '',
             tools TEXT NOT NULL DEFAULT '[]',
             profile_prompt TEXT DEFAULT '',
             temperature REAL DEFAULT 1.0,
@@ -118,6 +119,24 @@ async def init_db():
             FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
         )
     """)
-
+    await migrate_db(db)
     await db.commit()
     await db.close()
+
+
+async def migrate_db(db):
+    """执行数据库迁移"""
+    # 获取所有表的列信息
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = await cursor.fetchall()
+    table_names = [t[0] for t in tables]
+    
+    # profiles 表迁移
+    if 'profiles' in table_names:
+        cursor = await db.execute("PRAGMA table_info(profiles)")
+        columns = await cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        # 添加 avatar 字段
+        if 'avatar' not in column_names:
+            await db.execute("ALTER TABLE profiles ADD COLUMN avatar TEXT DEFAULT ''")

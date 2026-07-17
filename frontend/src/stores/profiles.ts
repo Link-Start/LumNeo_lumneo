@@ -5,6 +5,7 @@ import { ref, computed } from 'vue'
 export interface Profile {
   id: number
   name: string
+  avatar: string
   tools: string[]
   profile_prompt: string
   temperature: number
@@ -42,6 +43,7 @@ export const useProfileStore = defineStore('profile', () => {
 
   async function createProfile(
     name: string,
+    avatar: string,
     tools: string[] = [],
     profile_prompt: string = '',
     temperature: number = 1,
@@ -49,12 +51,13 @@ export const useProfileStore = defineStore('profile', () => {
     top_k: number = 40,
     frequency_penalty: number = 0,
     presence_penalty: number = 0,
-  ) {
+  ) {    
     const res = await fetch('/api/profiles/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         name, 
+        avatar,
         tools, 
         profile_prompt, 
         temperature, 
@@ -65,6 +68,7 @@ export const useProfileStore = defineStore('profile', () => {
       })
     })
     const newProfile = await res.json()
+    
     const completeProfile: Profile = {
       ...newProfile,
       temperature: newProfile.temperature ?? 1,
@@ -81,6 +85,7 @@ export const useProfileStore = defineStore('profile', () => {
   async function updateProfile(
     id: number,
     name: string,
+    avatar: string,
     tools: string[],
     profile_prompt: string = '',
     temperature?: number,
@@ -88,13 +93,15 @@ export const useProfileStore = defineStore('profile', () => {
     top_k?: number,
     frequency_penalty?: number,
     presence_penalty?: number,
-  ) {
+  ) {    
     // 发送更新请求
+    
     await fetch(`/api/profiles/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         name, 
+        avatar,
         tools, 
         profile_prompt, 
         temperature, 
@@ -109,6 +116,7 @@ export const useProfileStore = defineStore('profile', () => {
     const profile = profiles.value.find(p => p.id === id)
     if (profile) {
       profile.name = name
+      profile.avatar = avatar
       profile.tools = tools
       profile.profile_prompt = profile_prompt
       if (temperature !== undefined) profile.temperature = temperature
