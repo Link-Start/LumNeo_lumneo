@@ -139,9 +139,6 @@ class LLMService:
 
             extra_body = {
                 "top_k": params.get('top_k', 20),
-                "chat_template_kwargs": {
-                    "add_generation_prompt": True,
-                }
             }
 
             if self.thinking == "enabled":
