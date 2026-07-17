@@ -19,14 +19,14 @@
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
           <n-form-item>
-            <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${localProfile.avatar}`"/>
+            <n-avatar class="avatar" round :size="60" :src="`./images/avatars/${localProfile.avatar}`"/>
           </n-form-item>
           <n-form-item label="角色">
             <n-input v-model:value="localProfile.name" disabled />
           </n-form-item>
           <n-form-item label="天赋">
             <n-flex :size="4" style="margin-top:6px">
-              <n-tag v-for="name in localProfile.tools" :key="name" :bordered="false" type="info">
+              <n-tag v-for="name in activateTools" :key="name" :bordered="false" type="info">
                 {{ toolStore.toolsInfo[name]?.title ?? name }}
               </n-tag>
             </n-flex>
@@ -35,7 +35,7 @@
             <n-flex :size="4" v-if="selectedSkills.length">
               <!-- 只展示已勾选的技能，并转换为名称 -->
               <n-tag v-for="skillId in selectedSkills" :key="skillId" :bordered="false" type="warning">
-                {{ getSkillNameById(skillId) }}
+                {{ skillStore.getSkillNameById(skillId) }}
               </n-tag>
             </n-flex>
             <span v-else style="color: var(--text-secondary)">未装备任何技能</span>
@@ -61,11 +61,11 @@
         </n-button>
         <br>
         <!-- 技能列表 -->
-        <div class="skill-checkbox-list" v-if="allSkills.length">
+        <div class="skill-checkbox-list" v-if="skillStore.allSkills.length">
           <n-checkbox-group v-model:value="selectedSkills">
             <n-flex :size="12">
               <n-checkbox 
-                v-for="skill in allSkills" 
+                v-for="skill in skillStore.allSkills" 
                 :key="skill.id" 
                 :value="skill.id"
               >
@@ -168,18 +168,12 @@
 <script setup lang="ts">
 import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup, 
   NCheckbox, NText, NAvatar, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
-import { ref, reactive, watch, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import mSvg from '@/components/MSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
+import { SkillItem, useSkillStore } from '@/stores/skills'
 
-
-interface SkillItem {
-  id: string
-  name: string
-  isGlobal: boolean
-  description?: string
-}
 
 const props = defineProps({
   show: Boolean,
@@ -190,6 +184,7 @@ const emit = defineEmits(['update:show'])
 const message = useMessage()
 const profileStore = useProfileStore()
 const toolStore = useToolStore()
+const skillStore = useSkillStore()
 
 // ---------- 主弹窗数据 ----------
 const localProfile = reactive({
@@ -199,32 +194,14 @@ const localProfile = reactive({
   skills: [] as string[],
 })
 
-const allSkills = ref<SkillItem[]>([])
+const activateTools = computed(() => {
+  return [...toolStore.defaultTools, ...localProfile.tools]
+})
+
 const selectedSkills = ref<string[]>([])
 const originalSelectedSkills = ref<string[]>([])
 
-// 根据技能 id 获取技能名称
-function getSkillNameById(id: string): string {
-  const skill = allSkills.value.find(s => s.id === id)
-  return skill?.name ?? '未知技能'
-}
 
-// 加载所有可用技能
-async function loadAllSkills() {
-  try {
-     const url = props.profileId ? `/api/skills/list?profile_id=${props.profileId}` : '/api/skills/list'
-    const res = await fetch(url)
-    const data = await res.json()
-    allSkills.value = (data || []).map((item: any) => ({
-      id: item.id,
-      name: item.name || item.id,
-      isGlobal: !!item.is_global,
-      description: item.description
-    }))
-  } catch (e) {
-    message.error("加载技能列表失败")
-  }
-}
 // 加载已习得技能
 async function loadLearnedSkills() {
     try {
@@ -241,9 +218,8 @@ watch(
   () => props.show,
   async (val) => {
     if (val && props.profileId != null) {
+      skillStore.loadAllSkills(props.profileId)
       selectedSkills.value = []
-      // 加载所有可用技能
-      await loadAllSkills()
       const p = profileStore.getProfile(props.profileId)
       if (p) {
         localProfile.name = p.name || ''
@@ -422,12 +398,12 @@ const flushQueue = async () => {
         }
 
         // 检查是否已在列表中
-        const existIndex = allSkills.value.findIndex(s => s.id === newSkill.id)
+        const existIndex = skillStore.allSkills.findIndex(s => s.id === newSkill.id)
         
         if (existIndex === -1) {
-          allSkills.value.push(newSkill)
+          skillStore.allSkills.push(newSkill)
         } else {
-          allSkills.value[existIndex] = newSkill
+          skillStore.allSkills[existIndex] = newSkill
         }
         
         // 自动勾选新添加的技能（使用 id）
@@ -545,7 +521,7 @@ const addSkill = async () => {
     message.warning('请输入技能名称')
     return false
   }
-  if (allSkills.value.find(s => s.name === name)) {
+  if (skillStore.allSkills.find(s => s.name === name)) {
     message.warning('技能名称已存在')
     return false
   }

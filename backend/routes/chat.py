@@ -193,6 +193,7 @@ async def chat(
                     'frequency_penalty': profile.frequency_penalty,
                     'presence_penalty': profile.presence_penalty,
                 } if profile else {},
+                profile_id=profile.id if profile else None,
                 chat_id=request.chat_id,
                 turn_index=request.turn_index
             ),

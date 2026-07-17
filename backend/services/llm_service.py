@@ -35,6 +35,7 @@ class LLMService:
         request: Optional[Request] = None,
         mcp_manager=None,
         params: Dict = None,
+        profile_id:int = None,
         chat_id: Optional[str] = None,
         turn_index: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
@@ -174,6 +175,12 @@ class LLMService:
             try:
                 response = await self.client.chat.completions.create(**kwargs)
             except APIError as e:
+                logger.error(f"LLM API 错误:{e.message}")
+                error_content = f"❌ 模型服务错误：{e.message}"
+                segments.append({
+                    "type": "error",
+                    "content": error_content
+                })
                 yield f"\n❌ 模型服务错误：{e.message}"
                 break
 
@@ -547,6 +554,7 @@ class LLMService:
                 chat_id=chat_id,
                 role="assistant",
                 content=segments_json,
+                profile_id=profile_id,
                 file_ref=None,
                 turn_index=turn_index
             )

@@ -19,7 +19,7 @@
       />
 
       <div ref="scrollContainerRef" class="message-scroller" @scroll="onScroll">
-        <div ref="messageListRef" class="message-list" :style="{ width: isMobile ? '90%' : '80%', maxWidth: '1000px', margin: '0 auto' }">
+        <div ref="messageListRef" class="message-list" :style="{ width: isMobile ? '90%' : '76%', maxWidth: '1000px', margin: '0 auto' }">
           <div
             v-for="(msg, index) in listItems"
             :key="getItemKey(msg, index)"
@@ -52,7 +52,15 @@
                   </template>
                   <!-- 助手消息 Markdown -->
                   <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
-                    <div class="message-content" :data-theme="isDark">
+                    <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
+                      <n-popover trigger="hover">
+                        <template #trigger>
+                          <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${msg.profile?.avatar}`" @click="handleShowModal(msg.profile?.id)"/>
+                        </template>
+                        <span>{{ msg.profile?.name }}</span>
+                      </n-popover>
+                    </div>
+                    <div class="message-content assistant-box" :data-theme="isDark">
                       <MarkdownRender
                         :key="'msg-' + chatId + '-' + msg.id + '-' + index"
                         custom-id="chat"
@@ -136,17 +144,22 @@
         </div>
       </div>
     </div>
+
+    <n-modal v-model:show="showPanelModal" transform-origin="center">
+      <profile-panel :profile-data="profileStore.getProfile(profileId)"/>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, type PropType, nextTick, watch } from 'vue'
-import { NButton, NIcon, NImage, NPopconfirm } from 'naive-ui'
+import { NButton, NIcon, NImage, NPopconfirm, NAvatar, NPopover, NModal } from 'naive-ui'
 import { DocumentOutline } from '@vicons/ionicons5'
 import { MarkdownRender, setCustomComponents, removeCustomComponents, setInfographicLoader } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import type { Message } from '@/stores/chat'
 import { normalizeFileRef, processMessageContent, renderStructuredContent } from '@/utils/message'
+import { useProfileStore } from '@/stores/profiles'
 import svgWelcomeDark from '@/components-svg/svgWelcomeDark.vue'
 import svgWelcomeLight from '@/components-svg/svgWelcomeLight.vue'
 import svgLoading from '@/components-svg/svgLoading.vue'
@@ -156,8 +169,9 @@ import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
 import ImageNode from '@/components/CustomNodes/ImageNode.vue'
 import LinkNode from '@/components/CustomNodes/LinkNode.vue'
-// 引入目录组件 (请根据实际路径调整)
 import MessageToc from '@/components/MessageToc.vue'
+import ProfilePanel from '@/components/ProfilePanel.vue'
+
 
 const customHtmlTags = ['reasoning', 'toolcalls', 'tokenusage']
 
@@ -180,8 +194,10 @@ const emit = defineEmits<{
   delete: [id: number]
 }>()
 
+const profileStore = useProfileStore()
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
+const showPanelModal = ref(false)
 
 const currentMessages = computed(() => props.messages)
 
@@ -204,6 +220,11 @@ const listItems = computed<any>(() => {
 const showScrollBtn = ref(false)
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null
 const SCROLL_END_THRESHOLD = 80
+const profileId = ref(1)
+const handleShowModal = (id: number) => {
+  showPanelModal.value = true
+  profileId.value = id
+}
 
 function isAtEnd(): boolean {
   if (!scrollContainerRef.value) return true
@@ -511,7 +532,7 @@ onUnmounted(() => {
   pointer-events: none;
   transition: opacity 0.2s;
   position: absolute;
-  left: 0;
+  left: 4px;
 }
 .user-actions {
   right: 0;
@@ -542,4 +563,6 @@ onUnmounted(() => {
 .msg-file-other:hover {
   background: var(--border-color-hover);
 }
+.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
+.assistant-box {background: rgba(255,255,255,.06);border-radius: 8px;margin-bottom:12px;}
 </style>

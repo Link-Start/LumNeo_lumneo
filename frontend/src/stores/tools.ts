@@ -9,6 +9,7 @@ export interface toolConfig {
 }
 
 export const useToolStore = defineStore('tools', () => {
+  const defaultTools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
   const toolsInfo = ref<Record<string, toolConfig>>({})
     async function loadToolsInfo() {
         const res = await fetch('/api/tools-info')
@@ -18,6 +19,7 @@ export const useToolStore = defineStore('tools', () => {
 
   return {
     loadToolsInfo,
-    toolsInfo
+    toolsInfo,
+    defaultTools
   }
 })

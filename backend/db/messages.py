@@ -16,9 +16,20 @@ class MessageRecord:
         self.chat_id = row['chat_id']
         self.role = row['role']
         self.content = self._parse_content(row['content'])
+        self.profile_id = row['profile_id']
         self.file_ref = self._parse_json(row['file_ref'])
         self.turn_index = row['turn_index']
         self.created_at = row['created_at']
+
+        self.profile = None
+        if 'p_id' in row.keys():
+            p_id = row['p_id']
+            if p_id is not None:
+                self.profile = {
+                    'id': p_id,
+                    'name': row['p_name'] if 'p_name' in row.keys() else '',
+                    'avatar': row['p_avatar'] if 'p_avatar' in row.keys() else ''
+                }
     
     def _parse_content(self, val):
         # 如果 content 是 JSON 字符串 (assistant 角色)，尝试解析为字典
@@ -43,6 +54,8 @@ class MessageRecord:
             'chat_id': self.chat_id,
             'role': self.role,
             'content': self.content,
+            'profile_id': self.profile_id,
+            'profile': self.profile,
             'file_ref': self.file_ref,
             'turn_index': self.turn_index,
             'created_at': self.created_at
@@ -54,7 +67,16 @@ async def get_messages(chat_id: str) -> List[MessageRecord]:
     db = await get_db()
     try:
         cursor = await db.execute(
-            "SELECT id, chat_id, role, content, file_ref, turn_index, created_at FROM messages WHERE chat_id = ? ORDER BY turn_index ASC",
+            """
+            SELECT 
+                m.id, m.chat_id, m.role, m.content, 
+                m.profile_id, m.file_ref, m.turn_index, m.created_at,
+                p.id AS p_id, p.name AS p_name, p.avatar AS p_avatar
+            FROM messages m
+            LEFT JOIN profiles p ON m.profile_id = p.id
+            WHERE m.chat_id = ?
+            ORDER BY m.turn_index ASC
+            """,
             (chat_id,)
         )
         rows = await cursor.fetchall()
@@ -67,6 +89,7 @@ async def add_message(
     chat_id: str, 
     role: str, 
     content: Any, 
+    profile_id: int = None,
     file_ref: Optional[dict] = None,
     turn_index: Optional[int] = None
 ) -> MessageRecord:
@@ -87,8 +110,8 @@ async def add_message(
         file_ref_json = json.dumps(file_ref) if file_ref else None
 
         cursor = await db.execute(
-            "INSERT INTO messages (chat_id, role, content, file_ref, turn_index) VALUES (?, ?, ?, ?, ?)",
-            (chat_id, role, content_str, file_ref_json, turn_index)
+            "INSERT INTO messages (chat_id, role, content, profile_id, file_ref, turn_index) VALUES (?, ?, ?, ?, ?, ?)",
+            (chat_id, role, content_str, profile_id, file_ref_json, turn_index)
         )
         await db.commit()
         msg_id = cursor.lastrowid
@@ -104,6 +127,7 @@ async def update_message(
     message_id: int, 
     chat_id: str, 
     content: Any, 
+    profile_id: int = None,
     file_ref: Optional[dict] = None
 ) -> bool:
     """更新消息内容（移除了 tool_calls 参数）"""
@@ -113,8 +137,8 @@ async def update_message(
         file_ref_json = json.dumps(file_ref) if file_ref else None
         
         await db.execute(
-            "UPDATE messages SET content = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
-            (content_str, file_ref_json, message_id, chat_id)
+            "UPDATE messages SET content = ?, profile_id = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
+            (content_str, profile_id, file_ref_json, message_id, chat_id)
         )
         await db.commit()
         return db.total_changes > 0

@@ -1,15 +1,14 @@
 <template>
   <div class="profile-panel-container">
-    <n-card :bordered="false" size="small" class="panel-card">
-      
+    <n-card :bordered="false" size="small" class="panel-card" aria-modal="true">
       <!-- 标题区域 -->
       <div class="panel-header">
         <div class="panel-title">
             <n-flex>
-            <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${profile.avatar}`"/>
+            <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${profile.avatar}`"/>
             {{ profile.name }} 
-            <!-- <span class="panel-subtitle">角色</span> -->
             </n-flex>
+            <div class="panel-subtitle">当前角色</div>
         </div>
         <div class="time-badge">
           <span class="time-ampm">{{ ampm }}</span>
@@ -22,10 +21,12 @@
         <div class="scenes-box">
           <div class="scenes-wrapper">
             <n-image
-              src="/images/scenes/s_01.jpg"
+              :src="defaultProfile.sceneImage"
               width="100%"
               height="100%"
               object-fit="cover"
+              :show-toolbar="false"
+              :previewed-img-props="{ style: { width: '680px', borderRadius: '10px' } }"
             />
           </div>
         </div>
@@ -66,7 +67,7 @@
       <div class="talent-section">
         <div class="section-title" style="color:#34d399">| 天赋 Talent</div>
         <n-space>
-          <n-tag v-for="name in profile.tools" :bordered="false" type="info">
+          <n-tag v-for="name in activateTools" :bordered="false" type="info">
             {{ toolStore.toolsInfo[name]?.title ?? name }}
           </n-tag>
         </n-space>
@@ -75,17 +76,18 @@
       <!-- 技能 -->
       <div class="skills-section">
         <div class="section-title">| 技能 Skills</div>
-        <n-space>
+        <n-space v-if="profile.skills.length">
           <n-tag v-for="skillId in profile.skills" :key="skillId" :bordered="false" type="warning">
-            {{ getSkillNameById(skillId) }}
+            {{ skillStore.getSkillNameById(skillId) }}
           </n-tag>
         </n-space>
+        <div v-else>无</div>
       </div>
 
       <!-- 描述 -->
       <div class="lore-section">
         <span class="lore-title">[ 描述 ]</span>
-        <span class="lore-text">{{ profile.profile_prompt }}</span>
+        <span class="lore-text">{{ profile.profile_prompt || '无' }}</span>
       </div>
 
     </n-card>
@@ -96,13 +98,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { NImage, NCard, NAvatar, NFlex, NTag, NSpace } from 'naive-ui'
 import { useToolStore } from '@/stores/tools'
+import { useSkillStore } from '@/stores/skills'
 
-interface SkillItem {
-  id: string
-  name: string
-  isGlobal: boolean
-  description?: string
-}
 
 const props = defineProps<{
   profileData?: any
@@ -118,6 +115,14 @@ const profile = computed(() => {
 })
 
 const toolStore = useToolStore()
+const skillStore = useSkillStore()
+const activateTools = computed(() => {
+  return [...toolStore.defaultTools, ...profile.value.tools]
+})
+
+const scenesGroup = computed(() => {
+  return Array.from({ length: 28 }, (_, i) => `./images/scenes/s_${String(i+1).padStart(2, '0')}.jpg`)
+})
 
 // 工具函数：属性条百分比
 const getStatPercent = (current: number, max: number) => {
@@ -140,40 +145,16 @@ onMounted(() => {
   timer = setInterval(() => {
     now.value = new Date()
   }, 1000)
+  defaultProfile.value.sceneImage = scenesGroup.value[Math.floor(Math.random() * scenesGroup.value.length)]
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
 // --------------------------
 
-// 技能相关
-const allSkills = ref<SkillItem[]>([])
 
-async function loadAllSkills() {
-  try {
-    const url = props.profileData.id
-      ? `/api/skills/list?profile_id=${props.profileData.id}`
-      : '/api/skills/list'
-    const res = await fetch(url)
-    const data = await res.json()
-    allSkills.value = (data || []).map((item: any) => ({
-      id: item.id,
-      name: item.name || item.id,
-      isGlobal: !!item.is_global,
-      description: item.description,
-    }))
-  } catch (e) {
-    // ignore
-  }
-}
-
-function getSkillNameById(id: string): string {
-  const skill = allSkills.value.find(s => s.id === id)
-  return skill?.name ?? '未知技能'
-}
-
-onMounted(async () => {
-  await loadAllSkills()
+onMounted(async () => {  
+  skillStore.loadAllSkills(props.profileData.id)
   const res = await fetch(`/api/profiles/${props.profileData.id}/skills`)
   const data = await res.json()
   defaultProfile.value.skills = data || []
@@ -184,9 +165,8 @@ onMounted(async () => {
 /* ---- 容器 ---- */
 .profile-panel-container {
   width: 100%;
-  max-width: 650px;
+  max-width: 680px;
   background: #0a0f1d;
-  border: 1px solid #1e3a5f;
   border-radius: 6px;
   box-shadow: 0 0 20px rgba(0, 150, 255, 0.05);
   font-family: system-ui, -apple-system, sans-serif;
@@ -196,6 +176,19 @@ onMounted(async () => {
   background: transparent !important;
   padding: 0 !important;
   color: #bdd3ff;
+  border: 1px solid #1e3a5f;
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    border-color: #1e3a5f;
+    box-shadow: 0 0 20px rgba(0, 150, 255, 0.05);
+  }
+  50% {
+    border-color: #4a9eff;
+    box-shadow: 0 0 30px rgba(0, 150, 255, 0.4), inset 0 0 15px rgba(0, 150, 255, 0.1);
+  }
 }
 
 /* ---- 头部 ---- */
@@ -226,7 +219,7 @@ onMounted(async () => {
   position: absolute;
   right: 20px;
   top: 16px;
-  background: #7c3aed;
+  background: #814ddb;
   padding: 2px 12px;
   border-radius: 4px;
   display: flex;
@@ -254,7 +247,6 @@ onMounted(async () => {
 
 .scenes-box {
   flex: 0 0 35%;
-  border: 1px solid #1e3a5f;
   border-radius: 4px;
   height: 180px;
   overflow: hidden;
@@ -342,7 +334,7 @@ onMounted(async () => {
 /* ---- 技能 ---- */
 .skills-section {
   padding: 12px 20px;
-  border-top: 1px solid #1e3a5f;
+  background: #0b1324;
 }
 
 .section-title {

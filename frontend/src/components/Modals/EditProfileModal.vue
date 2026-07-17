@@ -15,14 +15,15 @@
     <n-form :model="profileForm" label-placement="left" label-width="70">
       <n-form-item>
         <div style="position: relative;margin-left:200px;border-radius: 30px;overflow:hidden">
-          <n-popover trigger="click" placement="bottom">
+          <n-avatar v-if="isEditing" class="avatar" style="cursor:unset;" round :size="60" :src="`./images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
+          <n-popover v-else trigger="click" placement="bottom">
             <template #trigger>
-              <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
+              <n-avatar class="avatar" round :size="60" :src="`./images/avatars/${profileForm.avatar||'a_01.jpg'}`"/>
             </template>
             <div style="width:226px">
               <n-grid x-gap="12" y-gap="12" :cols="3">
                 <n-grid-item v-for="i in 9">
-                  <n-avatar class="avatar" round :size="60" :src="`/images/avatars/a_0${i}.jpg`" @click="selectAvatar(`a_0${i}.jpg`)"/>
+                  <n-avatar class="avatar" round :size="60" :src="`./images/avatars/a_0${i}.jpg`" @click="selectAvatar(`a_0${i}.jpg`)"/>
                 </n-grid-item>
               </n-grid>
             </div>

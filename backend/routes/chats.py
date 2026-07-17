@@ -1,7 +1,7 @@
 # backend/routes/chats.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union
 from backend.db.chats import (
     create_chat,
     update_chat_title,
@@ -28,6 +28,8 @@ class MessageResponse(BaseModel):
     chat_id: str
     role: str
     content: Any
+    profile_id: Optional[int] = None
+    profile: Optional[Dict[str, Any]] = None
     file_ref: Optional[Union[dict, list]] = None
     turn_index: int
     created_at: Optional[str] = None

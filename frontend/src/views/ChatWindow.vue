@@ -123,12 +123,8 @@
                 @update:value="switchActiveProfile"
               />
             </div>
-            <n-popover trigger="click">
-              <template #trigger>
-                <n-button size="small" tertiary v-if="chatStore.enableProfile">角色面板</n-button>
-              </template>
-              <profile-panel :profile-data="profileStore.activeProfile"/>
-            </n-popover>
+            <n-button size="small" tertiary v-if="chatStore.enableProfile" @click="showPanelModal = true">角色面板</n-button>
+            
           </n-flex>
           <n-popover
             v-if="showQRCode"
@@ -202,6 +198,10 @@
     <!-- 设置抽屉 -->
     <SettingsDrawer v-model:show="showSettings" />
 
+    <n-modal v-model:show="showPanelModal" transform-origin="center">
+      <profile-panel :profile-data="profileStore.activeProfile"/>
+    </n-modal>
+
     <!-- 编辑消息模态框 -->
     <n-modal
       v-model:show="showEditModal"
@@ -251,7 +251,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NCard, NImage, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
+import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'
@@ -261,7 +261,6 @@ import { useToolStore } from '@/stores/tools'
 import SettingsDrawer from '@/components/SettingsDrawer.vue'
 import Introduction from '@/components/Introduction.vue'
 import mSvg from '@/components/MSvg.vue'
-// import MessageList from '@/components/VirtualMessageList.vue'
 import MessageList from '@/components/MessageList.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import ProfilePanel from '@/components/ProfilePanel.vue'
@@ -283,6 +282,7 @@ const isMobile = ref(false)
 const sidebarOpen = ref(false)
 const qrCodeUrl = ref('')
 const showQRCode = ref(true)
+const showPanelModal = ref(false)
 
 const isDark = computed(() => configStore.themeMode === 'dark')
 

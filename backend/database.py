@@ -34,6 +34,7 @@ async def init_db():
             chat_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT DEFAULT NULL,
+            profile_id INTEGER DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
             turn_index INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -140,3 +141,13 @@ async def migrate_db(db):
         # 添加 avatar 字段
         if 'avatar' not in column_names:
             await db.execute("ALTER TABLE profiles ADD COLUMN avatar TEXT DEFAULT ''")
+
+    # messages 表迁移
+    if 'messages' in table_names:
+        cursor = await db.execute("PRAGMA table_info(messages)")
+        columns = await cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        # 添加 avatar 字段
+        if 'profile_id' not in column_names:
+            await db.execute("ALTER TABLE messages ADD COLUMN profile_id TEXT DEFAULT ''")
