@@ -19,7 +19,7 @@
       <div class="profile-section">
         <n-form label-placement="left" label-width="70" size="large" :show-feedback="false">
           <n-form-item>
-            <n-avatar class="avatar" round :size="60" :src="`/images/avatars/${localProfile.avatar}`"/>
+            <n-avatar class="avatar" round :size="60" :src="`./images/avatars/${localProfile.avatar}`"/>
           </n-form-item>
           <n-form-item label="角色">
             <n-input v-model:value="localProfile.name" disabled />

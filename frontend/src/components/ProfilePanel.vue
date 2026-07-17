@@ -5,7 +5,7 @@
       <div class="panel-header">
         <div class="panel-title">
             <n-flex>
-            <n-avatar class="avatar" round :size="40" :src="`/images/avatars/${profile.avatar}`"/>
+            <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${profile.avatar}`"/>
             {{ profile.name }} 
             </n-flex>
             <div class="panel-subtitle">当前角色</div>
@@ -121,7 +121,7 @@ const activateTools = computed(() => {
 })
 
 const scenesGroup = computed(() => {
-  return Array.from({ length: 28 }, (_, i) => `/images/scenes/s_${String(i+1).padStart(2, '0')}.jpg`)
+  return Array.from({ length: 28 }, (_, i) => `./images/scenes/s_${String(i+1).padStart(2, '0')}.jpg`)
 })
 
 // 工具函数：属性条百分比
