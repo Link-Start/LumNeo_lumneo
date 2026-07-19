@@ -23,6 +23,9 @@ class ChatResponse(BaseModel):
     title: str
     created_at: Optional[str] = None
 
+class MessageIdResponse(BaseModel):
+    id: int
+
 class MessageResponse(BaseModel):
     id: int
     chat_id: str
@@ -114,3 +117,13 @@ async def delete_message_route(chat_id: str, turn_index: int):
     # 内部会执行事务，自动清理 tool_calls
     deleted_count = await truncate_messages_db(chat_id=chat_id, from_turn_index=turn_index)
     return {"status": "ok", "deleted_count": deleted_count}
+
+@router.get("/{chat_id}/messages/by-turn", response_model=MessageIdResponse)
+async def get_message_by_turn(chat_id: str, turn_index: int):
+    records = await get_messages(chat_id)
+    matches = [r for r in records if r.turn_index == turn_index]
+    if not matches:
+        raise HTTPException(status_code=404, detail="Message not found")
+    # 按 id 降序取最新的（通常 assistant 在 user 之后）
+    matches.sort(key=lambda r: r.id, reverse=True)
+    return {"id": matches[0].id}

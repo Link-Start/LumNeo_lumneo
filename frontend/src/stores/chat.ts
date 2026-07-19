@@ -130,11 +130,20 @@ export const useChatStore = defineStore('chat', () => {
       }).catch(() => {})
     }
   }
+  // 更新消息id
+  function updateMessageId(turnIndex: number, newId: number) {
+    const chat = chats.value.find(c => c.id === activeChatId.value)
+    if (!chat) return
+    const msg = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
+    if (msg) {
+      msg.id = newId
+    }
+}
 
   // ---------- 异步保存到后端 ----------
   async function saveMessageToBackend(msg: Message) {
     if (!activeChatId.value) return
-    // 【注意】参数中不再包含 tool_calls 和 tool_call_id
+    // 参数中不再包含 tool_calls 和 tool_call_id
     const res = await fetch(`/api/chats/${activeChatId.value}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -146,7 +155,7 @@ export const useChatStore = defineStore('chat', () => {
           : msg.file_ref 
             ? { filename: msg.file_ref.filename, type: msg.file_ref.type, url: msg.file_ref.url }
             : null,
-        turn_index: msg.turn_index // 【新增】将轮次传给后端
+        turn_index: msg.turn_index
       })
     })
     const data = await res.json()
@@ -155,7 +164,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // ---------- 【新增】截断编辑：重新生成 / 重试 ----------
+  // ---------- 截断编辑：重新生成 / 重试 ----------
   async function truncateAtTurn(turnIndex: number) {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     if (!chat) return
@@ -208,6 +217,7 @@ export const useChatStore = defineStore('chat', () => {
     getNextTurnIndex,
     addMessageToLocal,
     saveMessageToBackend,
+    updateMessageId,
     editMessage,
     deleteMessage,
     truncateAtTurn

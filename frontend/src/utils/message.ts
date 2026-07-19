@@ -421,23 +421,28 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       // 步骤 A：标准 OpenAI 必须的第一条 assistant 消息（带上参数）
       finalMessages.push({
         role: 'assistant',
-        content: null, // 标准协议规定：有 tool_calls 时，content 可以为 null
+        content: '', // 标准协议规定：有 tool_calls 时，content 可以为 null
         tool_calls: toolSegments.map((s: any) => ({
           id: s.content.id,
           type: 'function',
           function: {
             name: s.content.name,
-            arguments: toolDetails[s.content.id]?.arguments || '{}'
+            arguments: (() => {
+              const raw = toolDetails[s.content.id]?.arguments
+              return raw ? (typeof raw === 'string' ? raw : JSON.stringify(raw)) : '{}'
+            })()
           }
         }))
       })
 
       // 步骤 B：紧跟其后的所有 role: tool 结果消息
       for (const s of toolSegments) {
+        const resultRaw = toolDetails[s.content.id]?.result
+        const resultContent = resultRaw ? (typeof resultRaw === 'string' ? resultRaw : JSON.stringify(resultRaw)) : ''
         finalMessages.push({
           role: 'tool',
           tool_call_id: s.content.id,
-          content: toolDetails[s.content.id]?.result || ''
+          content: resultContent
         })
       }
 

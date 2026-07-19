@@ -28,7 +28,8 @@ export function useChat() {
     }
   }
 
-  const onStreamEnd = ref<((fullText: string) => void) | null>(null)
+type StreamEndCallback = (chatId: string, turnIndex: number) => void
+const onStreamEnd = ref<StreamEndCallback | null>(null)
 
 async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
   if (!response.ok || !response.body) throw new Error('网络响应失败')
@@ -56,14 +57,6 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
   }
   return { finalSegments }
 }
-
-  /**
-   * 流式正常结束后，直接重载对话列表，保证本地数据与后端 JSON 结构严格一致
-   */
-  async function finalizeAssistantMessage(chatId: string) {
-    await chatStore.loadMessages(chatId)
-    streamingContent.value = ''
-  }
 
 /**
    * 保存被中断的消息到本地和后端
@@ -210,7 +203,7 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
       isLoading.value = false
       if (onStreamEnd.value && chatStore.activeChatId === chatId) {
         // 由于已经重载过数据，此处仅用于外部回调通知
-        onStreamEnd.value('')
+        onStreamEnd.value(chatId, assistantTurnIndex)
       }
     }
   }
@@ -350,7 +343,7 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
         streamingContent.value = ''
       }
 
-      if (onStreamEnd.value) onStreamEnd.value('')
+      if (onStreamEnd.value) onStreamEnd.value(chatId, assistantMsg.turn_index)
     } catch (error: any) {
       if (error.name === 'AbortError') {
         await saveAbortedMessage(chatId, assistantMsg.turn_index, streamingContent.value)

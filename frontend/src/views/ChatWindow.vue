@@ -298,7 +298,7 @@ const { activeModelId, modelOptions, switchActiveModel } = useModel()
 const { uploadFileList, uploadedFiles, isDragging, onDragEnter, onDragOver,
     onDragLeave, onDrop, onBeforeUpload, handleFileUpload, removeFile, clearFiles
 } = useFileUpload()
-const { currentInput, isLoading, streamingContent, regeneratingMsg,
+const { currentInput, isLoading, streamingContent, regeneratingMsg, onStreamEnd,
     sendMessage, regenerateResponse, regenerateFromCurrentHistory, stopGeneration
 } = useChat()
 const { showEditModal, editContent, copySvgName, copyContent,
@@ -330,6 +330,20 @@ const onKeydown = (e: KeyboardEvent) => {
       return
     }
     isFullscreen.value = false
+  }
+}
+
+onStreamEnd.value = async (chatId: string, turnIndex: number) => {
+  try {
+    const res = await fetch(`/api/chats/${chatId}/messages/by-turn?turn_index=${turnIndex}`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.id) {
+        chatStore.updateMessageId(turnIndex, data.id)
+      }
+    }
+  } catch (e) {
+    console.warn('获取消息 ID 失败', e)
   }
 }
 

@@ -52,8 +52,6 @@
               添加模型
             </n-button>
           </n-space>
-
-
         </n-tab-pane>
 
         <!-- 功能设置 -->
@@ -145,7 +143,7 @@ import { ref, watch, onMounted, computed } from 'vue'
 import {
   NDrawer, NDrawerContent, NForm, NFormItem, NInputGroup, NInput,
   NSwitch, NButton, NSpace, NDivider, NIcon,
-  NTabs, NTabPane, NList, NListItem, NPopconfirm, NTag, NAlert, 
+  NTabs, NTabPane, NList, NListItem, NPopconfirm, NTag, NAlert,
   NSelect, NText, useMessage
 } from 'naive-ui'
 import { Add, CreateOutline, TrashOutline, BookOutline } from '@vicons/ionicons5'

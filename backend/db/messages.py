@@ -126,20 +126,35 @@ async def add_message(
 async def update_message(
     message_id: int, 
     chat_id: str, 
-    content: Any, 
+    content: Any = None,
     profile_id: int = None,
     file_ref: Optional[dict] = None
 ) -> bool:
-    """更新消息内容（移除了 tool_calls 参数）"""
     db = await get_db()
     try:
-        content_str = json.dumps(content, ensure_ascii=False) if isinstance(content, (dict, list)) else content
-        file_ref_json = json.dumps(file_ref) if file_ref else None
+        updates = []
+        params = []
         
-        await db.execute(
-            "UPDATE messages SET content = ?, profile_id = ?, file_ref = ? WHERE id = ? AND chat_id = ?",
-            (content_str, profile_id, file_ref_json, message_id, chat_id)
-        )
+        if content is not None:
+            content_str = json.dumps(content, ensure_ascii=False) if isinstance(content, (dict, list)) else content
+            updates.append("content = ?")
+            params.append(content_str)
+        
+        if profile_id is not None:
+            updates.append("profile_id = ?")
+            params.append(profile_id)
+        
+        if file_ref is not None:
+            file_ref_json = json.dumps(file_ref) if file_ref else None
+            updates.append("file_ref = ?")
+            params.append(file_ref_json)
+        
+        if not updates:
+            return True
+        
+        params.extend([message_id, chat_id])
+        query = f"UPDATE messages SET {', '.join(updates)} WHERE id = ? AND chat_id = ?"
+        await db.execute(query, tuple(params))
         await db.commit()
         return db.total_changes > 0
     finally:
