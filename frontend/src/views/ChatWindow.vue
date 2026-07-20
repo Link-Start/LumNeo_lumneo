@@ -109,6 +109,7 @@
                 size="large"
                 style="width: 120px"
                 placeholder="选择模型"
+                :disabled="isLoading"
                 @update:value="switchActiveModel"
               />
             </div>
@@ -120,6 +121,7 @@
                 size="large"
                 placeholder="选择角色"
                 style="width: 150px;"
+                :disabled="isLoading"
                 @update:value="switchActiveProfile"
               />
             </div>

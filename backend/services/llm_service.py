@@ -139,6 +139,7 @@ class LLMService:
 
             extra_body = {
                 "top_k": params.get('top_k', 20),
+                "chat_template_kwargs": {}
             }
 
             if self.thinking == "enabled":
@@ -146,6 +147,11 @@ class LLMService:
                 extra_body["preserve_thinking"] = True
                 extra_body["chat_template_kwargs"]["enable_thinking"] = True
                 extra_body["chat_template_kwargs"]["preserve_thinking"] = True
+            if self.thinking == "disabled":
+                extra_body["enable_thinking"] = False
+                extra_body["preserve_thinking"] = False
+                extra_body["chat_template_kwargs"]["enable_thinking"] = False
+                extra_body["chat_template_kwargs"]["preserve_thinking"] = False
 
             kwargs["extra_body"] = extra_body
 

@@ -143,6 +143,7 @@ export const useChatStore = defineStore('chat', () => {
   // ---------- 异步保存到后端 ----------
   async function saveMessageToBackend(msg: Message) {
     if (!activeChatId.value) return
+    
     // 参数中不再包含 tool_calls 和 tool_call_id
     const res = await fetch(`/api/chats/${activeChatId.value}/messages`, {
       method: 'POST',
@@ -155,6 +156,7 @@ export const useChatStore = defineStore('chat', () => {
           : msg.file_ref 
             ? { filename: msg.file_ref.filename, type: msg.file_ref.type, url: msg.file_ref.url }
             : null,
+        profile_id: profileStore.activeProfile?.id,
         turn_index: msg.turn_index
       })
     })

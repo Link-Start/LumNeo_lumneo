@@ -44,6 +44,7 @@ class UpdateChatTitle(BaseModel):
 class AddMessageRequest(BaseModel):
     role: str
     content: Any
+    profile_id: Optional[int] = None
     file_ref: Optional[Union[dict, list]] = None
     turn_index: Optional[int] = None  # 如果没传，后端会自动分配下一轮
 
@@ -92,6 +93,7 @@ async def add_message_route(chat_id: str, req: AddMessageRequest):
         chat_id=chat_id,
         role=req.role,
         content=req.content,
+        profile_id=req.profile_id,
         file_ref=req.file_ref,
         turn_index=req.turn_index
     )
