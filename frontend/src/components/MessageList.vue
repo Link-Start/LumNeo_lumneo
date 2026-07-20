@@ -172,7 +172,7 @@ import MessageToc from '@/components/MessageToc.vue'
 import ProfilePanel from '@/components/ProfilePanel.vue'
 
 
-const customHtmlTags = ['reasoning', 'toolcalls', 'tokenusage']
+const customHtmlTags = ['thinking-group', 'reasoning', 'toolcalls', 'tokenusage']
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
