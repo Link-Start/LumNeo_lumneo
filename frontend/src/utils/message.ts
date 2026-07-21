@@ -116,6 +116,11 @@ export function processMessageContent(text: string, isStreaming = false): string
   return processedText.trim()
 }
 
+// 检查缓冲区是否全是 tool_call（用于决定是否直接输出 toolcalls）
+function isAllToolCalls(items: any[]): boolean {
+  return items.length > 0 && items.every(seg => seg.type === 'tool_call')
+}
+
 // ============================================================
 // 第二部分：历史记录渲染（根据 JSON 数组转标签）
 // ============================================================
@@ -174,6 +179,25 @@ export function renderStructuredContent(input: string | any[]): string {
         return `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
       }
       return ''
+    }
+
+    // 全是 tool_call → 合并成一个 toolcalls 标签
+    if (isAllToolCalls(thinkingItems)) {
+      const allTools = thinkingItems.map(seg => ({
+        call_id: seg.content?.id,
+        name: seg.content?.name || '工具',
+        streaming: false,
+        status: seg.content?.status || 'success',
+        error_message: seg.content?.error_message || null
+      }))
+
+      const tagContent = JSON.stringify({
+        tools: allTools,
+        count: allTools.length,
+        loading: false
+      })
+      thinkingItems.length = 0
+      return `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
     }
 
     // 多个项：合并为统一结构，便于 thinking-group 组件渲染
