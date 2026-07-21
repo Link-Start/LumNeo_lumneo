@@ -214,8 +214,9 @@ export function renderStructuredContent(input: string | any[]): string {
     pushToolCalls() // 尾部剩余的工具调用
 
     const jsonStr = JSON.stringify(mergedNodes)
+    const encoded = btoa(unescape(encodeURIComponent(jsonStr)))
     thinkingItems.length = 0
-    return `\n\n<thinking-group items='${jsonStr}'></thinking-group>\n\n`
+    return `\n\n<thinking-group items='${encoded}'></thinking-group>\n\n`
   }
 
   // 4. 遍历所有片段，构建结果字符串

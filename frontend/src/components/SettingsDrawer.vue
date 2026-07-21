@@ -7,13 +7,12 @@
             <!-- 当前活跃模型指示 -->
             <n-alert v-if="!configStore.activeModel" type="warning" title="尚未选择模型" />
             <div v-else>
-              <n-tag type="info" :bordered="false" size="large">当前使用：{{ configStore.activeModel.name }}</n-tag>
+              <n-tag type="info" :bordered="false" size="large" style="border-radius:4px;">当前使用：{{ configStore.activeModel.name }}</n-tag>
             </div>
 
-            <n-divider />
 
             <!-- 模型列表 -->
-            <n-list hoverable clickable bordered>
+            <n-list clickable bordered>
               <n-list-item v-for="model in configStore.savedModels" :key="model.id">
                 <template #suffix>
                   <n-space>

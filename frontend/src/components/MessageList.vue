@@ -163,6 +163,7 @@ import svgWelcomeDark from '@/components-svg/svgWelcomeDark.vue'
 import svgWelcomeLight from '@/components-svg/svgWelcomeLight.vue'
 import svgLoading from '@/components-svg/svgLoading.vue'
 import mSvg from '@/components/MSvg.vue'
+import ThinkingGroupNode from '@/components/CustomNodes/ThinkingGroupNode.vue'
 import ReasoningNode from '@/components/CustomNodes/ReasoningNode.vue'
 import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
@@ -401,6 +402,7 @@ onMounted(() => {
   setCustomComponents('chat', {
     reasoning: ReasoningNode,
     toolcalls: ToolCallsNode,
+    'thinking-group': ThinkingGroupNode,
     tokenusage: TokenUsageNode,
     image: ImageNode,
     link: LinkNode
@@ -576,5 +578,5 @@ onUnmounted(() => {
   background: var(--border-color-hover);
 }
 .avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
-.assistant-box {background: rgba(255,255,255,.06);border-radius: 8px;margin-bottom:12px;padding-top:24px;}
+.assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:24px;}
 </style>

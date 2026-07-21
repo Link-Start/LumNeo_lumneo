@@ -8,7 +8,8 @@ import viteCompression from 'vite-plugin-compression'
 const CHUNK_GROUPS: Record<string, string[]> = {
   'vendor-base': ['vue', 'vue-router', 'pinia', '@vue', '@vicons', 
     '@tanstack/virtual-core', 'naive-ui', 'vueuc', 'css-render', 'seemly', 'treemate', 
-    'marked', 'markdown-it', 'markstream-vue', 'katex'],
+    'marked', 'markdown-it', 'markstream-vue', 'katex'
+  ],
   'vendor-virtual': ['@tanstack/vue-virtual'],
   'vendor-monaco': ['monaco-editor', 'stream-monaco'],
   'vendor-mermaid-infographic': ['mermaid', 'infographic'],
