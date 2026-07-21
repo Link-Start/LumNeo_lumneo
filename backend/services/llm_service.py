@@ -334,6 +334,22 @@ class LLMService:
                 reasoning_buffer = ""
                 in_reasoning = False
 
+            # ===== 当前 step 的文本立即落盘到 segments =====
+            if final_answer_content:
+                try:
+                    parsed = json.loads(final_answer_content)
+                    if isinstance(parsed, list):
+                        logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
+                        final_answer_content = ""
+                except Exception:
+                    pass
+
+                if final_answer_content:
+                    segments.append({
+                        "type": "text",
+                        "content": final_answer_content
+                    })
+
             if step_usage_record:
                 last_step_usage = step_usage_record
 
@@ -508,25 +524,6 @@ class LLMService:
 
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 force_final = True
-
-        # ---------- 最后，将所有文本内容加入 segments ----------
-        if final_answer_content:
-            try:
-                # 尝试解析，如果是一个以 [ 开头的 JSON 数组，说明是错误的数据，不要作为 text 落盘
-                parsed = json.loads(final_answer_content)
-                if isinstance(parsed, list):
-                    logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
-                    final_answer_content = None  # 置空，防止将中间状态当成文本写入
-            except Exception:
-                # 说明不是 JSON，是正常纯文本，保留
-                pass
-
-            # 正常追加文本
-            if final_answer_content:
-                segments.append({
-                    "type": "text",
-                    "content": final_answer_content
-                })
 
         # ---------- 最终 token 统计 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:

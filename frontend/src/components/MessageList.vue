@@ -79,10 +79,7 @@
                   </template>
 
                   <!-- 操作按钮 -->
-                  <div
-                    :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')"
-                    v-if="!isLoading || msg !== regeneratingMsg"
-                  >
+                  <div v-if="!isLoading" :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')">
                     <n-button text class="icon-btn" size="small" title="复制" @click="$emit('copy', msg)">
                       <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
                     </n-button>
@@ -578,5 +575,5 @@ onUnmounted(() => {
   background: var(--border-color-hover);
 }
 .avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
-.assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:24px;}
+.assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:14px;}
 </style>
