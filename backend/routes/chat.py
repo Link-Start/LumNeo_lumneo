@@ -28,12 +28,25 @@ BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT.replace("{{uploads_dir}}", str(config.up
 disabled_tools = ['system_write_file', 'system_patch_file', 'system_create_project_tree', 'system_read_file_list']
 default_tools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
 
+ # 需要转义 reasoning_effort 的模型名称列表
+REASONING_EFFORT_MAPPING_MODELS = [
+    "agnes-2.0-flash",
+    # 可继续添加
+]
+
+# 转义映射规则
+REASONING_EFFORT_MAP = {
+    "high": "low",
+    "max": "high",
+}
+
 class ModelConfig(BaseModel):
     type: str
     model_name: str
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     thinking: str = 'enabled'
+    reasoning_effort: str = 'high'
 
 class ChatRequest(BaseModel):
     messages: List[Dict[str, Any]]
@@ -57,17 +70,25 @@ async def chat(
         # 创建 LLM 服务实例
         if request.llm_config:
             cfg = request.llm_config
+            reasoning_effort = cfg.reasoning_effort
+            if cfg.model_name and any(
+                re.search(pattern, cfg.model_name, re.IGNORECASE) 
+                for pattern in REASONING_EFFORT_MAPPING_MODELS
+            ):
+                reasoning_effort = REASONING_EFFORT_MAP.get(
+                    reasoning_effort, reasoning_effort
+                )
             if cfg.type == "local":
                 service = LLMService(
                     model_type="local", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking
+                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
                 )
             else:
                 if not cfg.api_key:
                     raise HTTPException(status_code=400, detail="线上模型必须提供 API Key")
                 service = LLMService(
                     model_type="online", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking
+                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
                 )
         else:
             service = LLMService.instance

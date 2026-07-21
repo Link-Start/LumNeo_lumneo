@@ -177,6 +177,7 @@
         v-if="chatStore.activeChatId"
         v-model="currentInput"
         v-model:selected="selected"
+        v-model:thinking-mode="thinkingMode"
         v-model:file-list="uploadFileList"
         :is-loading="isLoading"
         :disabled="isLoading || !chatStore.activeChatId || !activeModelId"
@@ -295,6 +296,11 @@ function checkMobile() {
 }
 
 const selected = ref(localStorage.getItem('thinking') === 'true')
+
+// 思考模式：'high' | 'max'，默认从 localStorage 恢复，否则 'high'
+const thinkingMode = ref<'high' | 'max'>(
+  (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
+)
 
 const { activeModelId, modelOptions, switchActiveModel } = useModel()
 const { uploadFileList, uploadedFiles, isDragging, onDragEnter, onDragOver,
@@ -464,6 +470,11 @@ const openChat = (chatId: string) => {
 
 watch(() => selected.value, (newVal) => {
   localStorage.setItem('thinking', newVal ? 'true' : 'false')
+})
+
+// 监听 thinkingMode 变化，写入 localStorage
+watch(thinkingMode, (newVal) => {
+  localStorage.setItem('thinkingMode', newVal)
 })
 
 async function waitForBackend() {

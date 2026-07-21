@@ -156,7 +156,8 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
-          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
+          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
@@ -244,7 +245,8 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
-          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
+          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
@@ -318,7 +320,8 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
-          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled'
+          thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,

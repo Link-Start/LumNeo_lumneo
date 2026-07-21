@@ -21,10 +21,12 @@ class LLMService:
                  model_name: str,
                  api_key: str = "",
                  base_url: str = None,
-                 thinking: str = 'enabled'):
+                 thinking: str = 'enabled',
+                 reasoning_effort: str = 'high'):
         self.model_type = model_type
         self.model_name = model_name
         self.thinking = thinking
+        self.reasoning_effort = reasoning_effort
         self.client = AsyncOpenAI(api_key=api_key or None, base_url=base_url)
 
     async def generate_response(
@@ -130,6 +132,7 @@ class LLMService:
                 "model": self.model_name,
                 "messages": current_messages,
                 "stream": True,
+                "reasoning_effort": self.reasoning_effort,
                 "temperature": params.get('temperature', 1.0),
                 "top_p": params.get('top_p', 0.95),
                 "frequency_penalty": params.get('frequency_penalty', 0.0),
@@ -139,7 +142,8 @@ class LLMService:
 
             extra_body = {
                 "top_k": params.get('top_k', 20),
-                "chat_template_kwargs": {}
+                "chat_template_kwargs": {},
+                "thinking": {"type": self.thinking}
             }
 
             if self.thinking == "enabled":
