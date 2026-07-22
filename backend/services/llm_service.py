@@ -21,11 +21,13 @@ class LLMService:
                  model_name: str,
                  api_key: str = "",
                  base_url: str = None,
-                 thinking: str = 'enabled'):
+                 thinking: str = 'enabled',
+                 reasoning_effort: str = 'high'):
         self.model_type = model_type
         self.model_name = model_name
         self.thinking = thinking
-        self.client = AsyncOpenAI(api_key=api_key or None, base_url=base_url)
+        self.reasoning_effort = reasoning_effort if thinking == 'enabled' else None
+        self.client = AsyncOpenAI(api_key=api_key or 'none', base_url=base_url)
 
     async def generate_response(
         self,
@@ -36,10 +38,12 @@ class LLMService:
         mcp_manager=None,
         params: Dict = None,
         profile_id:int = None,
+        model_id:str = None,
         chat_id: Optional[str] = None,
         turn_index: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
+        current_step_reasoning = ""
 
         # ---------- 图像生成分支（不变） ----------
         if "image" in self.model_name.lower():
@@ -130,6 +134,7 @@ class LLMService:
                 "model": self.model_name,
                 "messages": current_messages,
                 "stream": True,
+                "reasoning_effort": self.reasoning_effort,
                 "temperature": params.get('temperature', 1.0),
                 "top_p": params.get('top_p', 0.95),
                 "frequency_penalty": params.get('frequency_penalty', 0.0),
@@ -139,7 +144,8 @@ class LLMService:
 
             extra_body = {
                 "top_k": params.get('top_k', 20),
-                "chat_template_kwargs": {}
+                "chat_template_kwargs": {},
+                "thinking": {"type": self.thinking}
             }
 
             if self.thinking == "enabled":
@@ -249,6 +255,7 @@ class LLMService:
                 if in_reasoning and (delta_content or tool_calls_data):
                     reasoning_time = time.time() - reasoning_start_time
                     yield f"<!--reasoning:end:{reasoning_time:.2f}-->"
+                    current_step_reasoning = reasoning_buffer
                     # 将推理片段加入 segments
                     segments.append({
                         "type": "reasoning",
@@ -334,6 +341,22 @@ class LLMService:
                 reasoning_buffer = ""
                 in_reasoning = False
 
+            # ===== 当前 step 的文本立即落盘到 segments =====
+            if final_answer_content:
+                try:
+                    parsed = json.loads(final_answer_content)
+                    if isinstance(parsed, list):
+                        logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
+                        final_answer_content = ""
+                except Exception:
+                    pass
+
+                if final_answer_content:
+                    segments.append({
+                        "type": "text",
+                        "content": final_answer_content
+                    })
+
             if step_usage_record:
                 last_step_usage = step_usage_record
 
@@ -372,6 +395,8 @@ class LLMService:
                 "content": None,
                 "tool_calls": list(tool_calls.values())
             }
+            if current_step_reasoning:
+                assistant_msg["reasoning_content"] = current_step_reasoning
             current_messages.append(assistant_msg)
 
             # ---------- 执行工具 ----------
@@ -509,25 +534,6 @@ class LLMService:
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 force_final = True
 
-        # ---------- 最后，将所有文本内容加入 segments ----------
-        if final_answer_content:
-            try:
-                # 尝试解析，如果是一个以 [ 开头的 JSON 数组，说明是错误的数据，不要作为 text 落盘
-                parsed = json.loads(final_answer_content)
-                if isinstance(parsed, list):
-                    logger.warning("检测到异常的数据结构序列化，跳过 type:text 落盘")
-                    final_answer_content = None  # 置空，防止将中间状态当成文本写入
-            except Exception:
-                # 说明不是 JSON，是正常纯文本，保留
-                pass
-
-            # 正常追加文本
-            if final_answer_content:
-                segments.append({
-                    "type": "text",
-                    "content": final_answer_content
-                })
-
         # ---------- 最终 token 统计 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:
             tokens = last_step_usage["completion_tokens"]
@@ -558,6 +564,7 @@ class LLMService:
                 role="assistant",
                 content=segments_json,
                 profile_id=profile_id,
+                model_id=model_id,
                 file_ref=None,
                 turn_index=turn_index
             )

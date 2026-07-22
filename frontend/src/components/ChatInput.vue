@@ -54,16 +54,24 @@
 
     <!-- 工具栏 -->
     <div class="compose-tools-tar">
+      <n-dropdown
+      v-if="showDeepThink"
+      :value="thinkingMode"
+      trigger="hover"
+      placement="top"
+      :options="thinkOptions"
+      @select="handleThinkSelect"
+    >
       <n-button
-        v-if="showDeepThink"
         round
         secondary
         class="compose-thinking"
         :type="selected ? 'primary' : 'default'"
-        @click="$emit('update:selected', !selected)"
+        @click="handleSelect"
       >
-        深度思考
+        {{ thinkButtonLabel }}
       </n-button>
+    </n-dropdown>
 
       <n-upload
         :disabled="disabled"
@@ -97,8 +105,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, PropType } from 'vue'
-import { NButton, NInput, NUpload, NIcon, type UploadFileInfo } from 'naive-ui'
+import { ref, PropType, computed } from 'vue'
+import { NButton, NInput, NDropdown, NUpload, NIcon, type UploadFileInfo } from 'naive-ui'
+import type { DropdownOption } from 'naive-ui'
 import { ArrowDownOutline, DocumentOutline } from '@vicons/ionicons5'
 import mSvg from '@/components/MSvg.vue'
 
@@ -109,6 +118,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   uploadedFiles: { type: Array<{ filename: string; type: string; url: string }>, default: () => [] },
   selected: { type: Boolean, default: false },
+  thinkingMode: { type: String as PropType<'high' | 'xhigh'>, default: 'high' },
   showScrollBtn: { type: Boolean, default: false },
   showRegenerateHint: { type: Boolean, default: false },
   showDeepThink: { type: Boolean, default: false },
@@ -129,12 +139,19 @@ const emit = defineEmits<{
   removeFile: [index: number]
   regenerateCurrent: []
   'update:selected': [value: boolean]
+  'update:thinkingMode': [value: 'high' | 'xhigh']
   'filesPaste': [files: File[]]
   'uploadChange': [options: { file: UploadFileInfo; fileList: UploadFileInfo[] }]
   'update:fileList': [files: UploadFileInfo[]]
 }>()
 
-// 内部 n-upload 文件列表（不暴露给父组件）
+const thinkButtonLabel = computed(() => {
+  if (props.thinkingMode === 'high') return '标准思考'
+  if (props.thinkingMode === 'xhigh') return '深度思考'
+  return '思考模式'
+})
+
+// 内部 n-upload 文件列表
 const internalFileList = ref<UploadFileInfo[]>([])
 
 function handleUploadChange(options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) {
@@ -149,6 +166,31 @@ function handleSend() {
   setTimeout(() => {
     isSendMsg.value = false
   }, 1000)
+}
+
+const thinkOptions = computed<DropdownOption[]>(() => [
+  {
+    label: '标准思考',
+    key: 'high',
+  },
+  {
+    label:'深度思考',
+    key: 'xhigh',
+  }
+])
+
+function handleSelect() {
+  emit('update:selected', !props.selected)
+  if (props.thinkingMode) {
+    emit('update:thinkingMode', props.thinkingMode)
+  }
+}
+
+// 切换思考模式
+function handleThinkSelect(key: string) {
+  const newMode = key as 'high' | 'xhigh'
+  emit('update:thinkingMode', newMode)
+  emit('update:selected', true)
 }
 
 // 粘贴处理
@@ -198,7 +240,7 @@ function triggerJelly() {
 
 .rotate-circle {
     opacity: 1;
-    background-image: url(data:image/png;base64,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);
+    background-image: url(data:image/png;base64,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);
     background-size: cover;
     width: 100%;
     height: 100%;

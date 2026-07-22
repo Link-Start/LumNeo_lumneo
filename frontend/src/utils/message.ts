@@ -7,7 +7,7 @@ export const localIP = ref('')
 export const uploadDir = ref('')
 
 // ============================================================
-// 第一部分：实时流式渲染（原封不动，保证流式预览标签正常）
+// 第一部分：实时流式渲染
 // ============================================================
 /** 解析思考块和工具调用，输出 markstream-vue 自定义标签格式 */
 export function processMessageContent(text: string, isStreaming = false): string {
@@ -116,8 +116,13 @@ export function processMessageContent(text: string, isStreaming = false): string
   return processedText.trim()
 }
 
+// 检查缓冲区是否全是 tool_call（用于决定是否直接输出 toolcalls）
+function isAllToolCalls(items: any[]): boolean {
+  return items.length > 0 && items.every(seg => seg.type === 'tool_call')
+}
+
 // ============================================================
-// 第二部分：历史记录渲染（新增，根据 JSON 数组转标签）
+// 第二部分：历史记录渲染（根据 JSON 数组转标签）
 // ============================================================
 /**
  * 解析后端返回的结构化 JSON 数组，并转换为 markstream-vue 自定义标签字符串
@@ -127,80 +132,153 @@ export function processMessageContent(text: string, isStreaming = false): string
 export function renderStructuredContent(input: string | any[]): string {
   let segments: any[] = []
 
-  // 1. 如果传入的是字符串，尝试 JSON.parse
+  // 1. 解析输入
   if (typeof input === 'string') {
     try {
       const parsed = JSON.parse(input)
       if (Array.isArray(parsed)) {
         segments = parsed
       } else {
-        // 如果是对象但不是数组（比如有可能是之前单个对象的遗留数据），按纯文本返回
-        return input 
+        return input
       }
     } catch (e) {
-      // JSON解析失败，说明是旧版的纯文本标签或普通文本，直接原样返回给前端渲染
       return input
     }
-  } 
-  // 2. 如果传入的本身就是数组
-  else if (Array.isArray(input)) {
+  } else if (Array.isArray(input)) {
     segments = input
-  } 
-  // 3. 其它情况（null/undefined/非数组对象）
-  else {
+  } else {
     return String(input || '')
   }
 
-  // 4. 遍历 segments 生成标签
-  let resultHtml = ''
-  for (const seg of segments) {
-    
-    const { type, content, duration } = seg
+  // 2. 用于暂存连续的 reasoning / tool_call
+  const thinkingItems: any[] = []
 
-    switch (type) {
-      case 'reasoning':
-        resultHtml += `\n\n<reasoning time="${duration || 0}">${content}</reasoning>\n\n`
-        break
+  // 3. 将暂存的一组思考项输出为一个标签
+  const flushThinkingGroup = (): string => {
+    if (thinkingItems.length === 0) return ''
 
-      case 'tool_call':
-        const toolTagContent = JSON.stringify({
+    // 只有一个项时，保持原有独立标签输出，不额外包裹
+    if (thinkingItems.length === 1) {
+      const seg = thinkingItems[0]
+      thinkingItems.length = 0
+      if (seg.type === 'reasoning') {
+        return `\n\n<reasoning time="${seg.duration || 0}">${seg.content}</reasoning>\n\n`
+      } else if (seg.type === 'tool_call') {
+        // 单个工具调用也用 toolcalls 标签展示
+        const tagContent = JSON.stringify({
           tools: [{
-            call_id: content?.id,
-            name: content?.name,
+            call_id: seg.content?.id,
+            name: seg.content?.name || '工具',
             streaming: false,
-            status: content?.status || 'success',
-            error_message: content?.error_message || null
+            status: seg.content?.status || 'success',
+            error_message: seg.content?.error_message || null
           }],
           count: 1,
           loading: false
         })
-        resultHtml += `\n\n<toolcalls>${toolTagContent}</toolcalls>\n\n`
-        break
+        return `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
+      }
+      return ''
+    }
 
-      case 'text':
-        resultHtml += content
-        break
+    // 全是 tool_call → 合并成一个 toolcalls 标签
+    if (isAllToolCalls(thinkingItems)) {
+      const allTools = thinkingItems.map(seg => ({
+        call_id: seg.content?.id,
+        name: seg.content?.name || '工具',
+        streaming: false,
+        status: seg.content?.status || 'success',
+        error_message: seg.content?.error_message || null
+      }))
 
-      case 'token_usage':
+      const tagContent = JSON.stringify({
+        tools: allTools,
+        count: allTools.length,
+        loading: false
+      })
+      thinkingItems.length = 0
+      return `\n\n<toolcalls>${tagContent}</toolcalls>\n\n`
+    }
+
+    // 多个项：合并为统一结构，便于 thinking-group 组件渲染
+    const mergedNodes: any[] = []
+    let tempTools: any[] = []
+
+    // 将连续的 tool_call 合并成一个 toolcalls 节点，reasoning 单独保留
+    const pushToolCalls = () => {
+      if (tempTools.length > 0) {
+        mergedNodes.push({
+          type: 'toolcalls',
+          tools: tempTools,
+          count: tempTools.length,
+          loading: false
+        })
+        tempTools = []
+      }
+    }
+
+    for (const seg of thinkingItems) {
+      if (seg.type === 'reasoning') {
+        pushToolCalls() // 先输出积累的工具调用
+        mergedNodes.push({
+          type: 'reasoning',
+          time: seg.duration || 0,
+          content: seg.content
+        })
+      } else if (seg.type === 'tool_call') {
+        tempTools.push({
+          call_id: seg.content?.id,
+          name: seg.content?.name || '工具',
+          streaming: false,
+          status: seg.content?.status || 'success',
+          error_message: seg.content?.error_message || null
+        })
+      }
+    }
+    pushToolCalls() // 尾部剩余的工具调用
+
+    const jsonStr = JSON.stringify(mergedNodes)
+    const encoded = btoa(unescape(encodeURIComponent(jsonStr)))
+    thinkingItems.length = 0
+    return `\n\n<thinking-group items='${encoded}'></thinking-group>\n\n`
+  }
+
+  // 4. 遍历所有片段，构建结果字符串
+  let resultHtml = ''
+  for (const seg of segments) {
+    const { type } = seg
+
+    if (type === 'reasoning' || type === 'tool_call') {
+      // 收集到连续思考链
+      thinkingItems.push(seg)
+    } else {
+      // 先输出之前积攒的思考链
+      resultHtml += flushThinkingGroup()
+
+      // 再处理当前非思考片段
+      if (type === 'text') {
+        resultHtml += seg.content
+      } else if (type === 'token_usage') {
         const tokenTagContent = JSON.stringify({
-          speed: content.speed || '0 token/s',
-          completion_tokens: content.final_answer_usage?.completion_tokens ?? 0
+          speed: seg.content.speed || '0 token/s',
+          completion_tokens: seg.content.final_answer_usage?.completion_tokens ?? 0
         })
         resultHtml += `\n\n<tokenusage>${tokenTagContent}</tokenusage>\n\n`
-        break
-
-      default:
-        resultHtml += content || ''
-        break
+      } else {
+        resultHtml += seg.content || ''
+      }
     }
   }
+
+  // 处理末尾可能遗留的思考链
+  resultHtml += flushThinkingGroup()
 
   // 清理多余换行
   return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
 }
 
 // ============================================================
-// 第三部分：图像处理工具（保持不变）
+// 第三部分：图像处理工具
 // ============================================================
 export async function urlToBase64(url: string): Promise<string> {
   const response = await fetch(url)
@@ -321,13 +399,20 @@ async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arg
   return finalResult
 }
 
+interface ResponseType { 
+  role: string
+  content: string | any[]
+  tool_calls?: any[]
+  tool_call_id?: string
+  reasoning_content?: string 
+}
 /**
  * 将包含文件引用的消息列表转换为适合发送给模型的消息格式
  * - 图片文件：转为 base64
- * - 新结构 assistant：解析 JSON 并补全工具调用
- * - 兼容旧结构：按老方法提取纯文本
+ * - 新结构 assistant：解析 JSON，提取 reasoning、text 和 tool_call 片段
+ * - 工具调用场景下，将 reasoning_content 附加到第一条 assistant 消息
  */
-export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[]; tool_calls?: any[]; tool_call_id?: string }[]> {
+export async function cleanMessages(msgs: Message[]): Promise<ResponseType[]> {
   const finalMessages: any[] = []
 
   for (const msg of msgs) {
@@ -383,10 +468,17 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
         }
       } catch (e) { /* 不是新格式，走下面的兜底逻辑 */ }
 
+      // 提取 reasoning 内容（仅当为结构化格式时）
+      let reasoningContent = ''
+      if (isStructured && Array.isArray(segments)) {
+        const reasoningSegments = segments.filter((s: any) => s.type === 'reasoning')
+        reasoningContent = reasoningSegments.map((s: any) => s.content).filter(Boolean).join('\n')
+      }
+
       // 2.1 旧格式兜底
       if (!isStructured) {
         const text = typeof msg.content === 'string' ? extractFinalContent(msg.content) : ''
-        finalMessages.push({ role: 'assistant', content: text })
+        finalMessages.push({ role: 'assistant', content: text, ...(reasoningContent && { reasoning_content: reasoningContent }) })
         continue
       }
 
@@ -394,7 +486,6 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       // 提取纯文本片段
       const textSegments = segments.filter((s: any) => s.type === 'text')
       const fullText = textSegments.map((s: any) => s.content).join('')
-
       // 提取工具调用片段
       const toolSegments = segments.filter((s: any) => s.type === 'tool_call')
       
@@ -414,14 +505,14 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
         }
       } catch (e) {
         console.warn('获取工具详情失败，降级为仅发文本', e)
-        finalMessages.push({ role: 'assistant', content: fullText || null })
+        finalMessages.push({ role: 'assistant', content: fullText || null, ...(reasoningContent && { reasoning_content: reasoningContent }) })
         continue
       }
 
-      // 步骤 A：标准 OpenAI 必须的第一条 assistant 消息（带上参数）
+      // 步骤 A：第一条 assistant 消息（带 tool_calls），必须携带推理内容
       finalMessages.push({
         role: 'assistant',
-        content: '', // 标准协议规定：有 tool_calls 时，content 可以为 null
+        content: '',
         tool_calls: toolSegments.map((s: any) => ({
           id: s.content.id,
           type: 'function',
@@ -432,7 +523,8 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
               return raw ? (typeof raw === 'string' ? raw : JSON.stringify(raw)) : '{}'
             })()
           }
-        }))
+        })),
+        ...(reasoningContent && { reasoning_content: reasoningContent })
       })
 
       // 步骤 B：紧跟其后的所有 role: tool 结果消息

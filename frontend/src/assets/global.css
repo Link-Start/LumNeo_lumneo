@@ -7,7 +7,9 @@
   --border-color: #333946;
   --border-color-hover: #5f6779;
   --border-glow: #895bf7;
-  --thinking-text: #9162db;
+  --message-bg-color: rgba(255,255,255,.06);
+  --reasoning-bg-color: rgba(250, 250, 250, 0.02);
+  --thinking-text: #b77bfc;
   --text-primary: #f9fafb;
   --text-secondary: #8b92a0;
   --accent: #b672f5;
@@ -19,20 +21,24 @@
 }
 
 [theme-mode="light"] {
-  --bg-primary: #f8f7fc;
-  --bg-secondary: #fcfcfc;
-  --bg-panel: rgba(223, 223, 223, 0.85);
-  --bg-tool: #e9ebf0be;
-  --border-color: #e2e5e9;
-  --border-color-hover: #d1d5db;
-  --border-glow: #895bf7;
-  --thinking-text: #a681e0;
-  --text-primary: #1a1f36;
-  --text-secondary: #5b6170;
-  --glass-bg: rgba(255, 255, 255, 0.7);
+  --bg-primary: #F1F5F9;           /* 主背景改为更护眼的极浅灰，避免纯白刺眼 */
+  --bg-secondary: #FFFFFF;         /* 侧边栏、卡片纯白背景 */
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --bg-tool: #E9ECF0;              /* 工具按钮悬浮背景色，略带灰 */
+  --border-color: #E2E8F0;         /* 边框颜色，比原版淡 */
+  --border-color-hover: #CBD5E1;   /* 悬浮边框加深 */
+  --border-glow: #8A5CF5;          /* 保持原紫色发光，更鲜亮 */
+  --message-bg-color: rgba(59, 130, 246, 0.04); /* 消息气泡背景极淡蓝 */
+  --reasoning-bg-color: rgba(100, 116, 139, 0.04); /* 推理框背景 */
+  --thinking-text: #27a5f8;         /* 思考提示文字颜色，加深 */
+  --text-primary: #0F172A;          /* 主标题文字（深蓝黑） */
+  --text-secondary: #475569;        /* 副标题文字（中灰） */
+  --accent: #7C3AED;                /* 品牌强调色 */
+  --accent-gradient: linear-gradient(120deg, #5F8FF5, #8F5FFF); /* 保持原渐变 */
+  --glass-bg: rgba(255, 255, 255, 0.6);
   --glass-bg-hover: rgba(255, 255, 255, 0.9);
-  --glass-border: 1px solid rgba(99, 102, 241, 0.2);
-  --shadow-glow: 0 0 10px rgba(99, 102, 241, 0.08);
+  --glass-border: 1px solid rgba(99, 102, 241, 0.15);
+  --shadow-glow: 0 0 10px rgba(99, 102, 241, 0.08); /* 浅色模式阴影更淡 */
 }
 .no-select {
   -webkit-user-select: none;

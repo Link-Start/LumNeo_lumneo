@@ -52,11 +52,15 @@
                   <!-- 助手消息 Markdown -->
                   <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
                     <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
+                      <div v-if="msg.model?.type==='online'" style="position:absolute;left:-6px;top:-7px;"><m-svg name="hat" :size="20"/></div>
                       <n-popover trigger="hover">
                         <template #trigger>
                           <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${getLatestProfile(msg).avatar}`" @click="handleShowModal(getLatestProfile(msg).id)"/>
                         </template>
-                        <span>{{ msg.profile?.name }}</span>
+                        <div style="text-align: center;">{{ msg.profile?.name }}</div>
+                        <div v-if="msg.model" style="font-size:12px;color:rgba(125,125,125,0.8)">
+                          {{ msg.model?.type === 'local' ? '本地' : '云端' }}: {{ msg.model?.modelName }}
+                        </div>
                       </n-popover>
                     </div>
                     <div class="message-content assistant-box" :data-theme="isDark">
@@ -79,10 +83,7 @@
                   </template>
 
                   <!-- 操作按钮 -->
-                  <div
-                    :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')"
-                    v-if="!isLoading || msg !== regeneratingMsg"
-                  >
+                  <div v-if="!isLoading" :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')">
                     <n-button text class="icon-btn" size="small" title="复制" @click="$emit('copy', msg)">
                       <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
                     </n-button>
@@ -163,6 +164,7 @@ import svgWelcomeDark from '@/components-svg/svgWelcomeDark.vue'
 import svgWelcomeLight from '@/components-svg/svgWelcomeLight.vue'
 import svgLoading from '@/components-svg/svgLoading.vue'
 import mSvg from '@/components/MSvg.vue'
+import ThinkingGroupNode from '@/components/CustomNodes/ThinkingGroupNode.vue'
 import ReasoningNode from '@/components/CustomNodes/ReasoningNode.vue'
 import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
@@ -172,7 +174,7 @@ import MessageToc from '@/components/MessageToc.vue'
 import ProfilePanel from '@/components/ProfilePanel.vue'
 
 
-const customHtmlTags = ['reasoning', 'toolcalls', 'tokenusage']
+const customHtmlTags = ['thinking-group', 'reasoning', 'toolcalls', 'tokenusage']
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
@@ -401,6 +403,7 @@ onMounted(() => {
   setCustomComponents('chat', {
     reasoning: ReasoningNode,
     toolcalls: ToolCallsNode,
+    'thinking-group': ThinkingGroupNode,
     tokenusage: TokenUsageNode,
     image: ImageNode,
     link: LinkNode
@@ -575,6 +578,6 @@ onUnmounted(() => {
 .msg-file-other:hover {
   background: var(--border-color-hover);
 }
-.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
-.assistant-box {background: rgba(255,255,255,.06);border-radius: 8px;margin-bottom:12px;padding-top:24px;}
+.avatar {box-shadow: 0 0 3px rgba(128,128,128,.8);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
+.assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:14px;}
 </style>

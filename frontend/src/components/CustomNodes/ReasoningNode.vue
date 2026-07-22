@@ -53,7 +53,7 @@ watch(() => isOpen.value, (newVal) => {
 })
 const timeStr = computed(() => {
   const attrs = props.node.attrs || {}  
-  if (attrs[0][1]) {
+  if (attrs[0] && attrs[0][1]) {
     return ` (${attrs[0][1]}秒)`
   }
   return ''
@@ -74,7 +74,7 @@ function toggle() {
 <style scoped>
 /* 思考块 */
 .reasoning-block {
-  background: rgba(250, 250, 250, 0.02);
+  background: var(--reasoning-bg-color);
   border-radius: 6px;
   overflow: hidden;
 }
