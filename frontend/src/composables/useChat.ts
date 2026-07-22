@@ -153,11 +153,12 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
           thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
-          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
@@ -242,11 +243,12 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
           thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
-          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
@@ -317,11 +319,12 @@ async function readStream(response: Response): Promise<{ finalSegments?: any[] }
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
           thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
-          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high'
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,

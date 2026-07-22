@@ -7,13 +7,13 @@ router = APIRouter(prefix="/api", tags=["model"])
 
 class ModelQuery(BaseModel):
     base_url: str
-    api_key: str = ""
+    api_key: str
 
 
 @router.post("/model")
 async def list_models(query: ModelQuery):
     try:
-        temp_client = AsyncOpenAI(api_key=query.api_key or None, base_url=query.base_url)
+        temp_client = AsyncOpenAI(api_key=query.api_key or 'none', base_url=query.base_url)
         models = await temp_client.models.list()
         return [m.id for m in models.data]
     except Exception as e:

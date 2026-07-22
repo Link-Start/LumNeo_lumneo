@@ -399,13 +399,20 @@ async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arg
   return finalResult
 }
 
+interface ResponseType { 
+  role: string
+  content: string | any[]
+  tool_calls?: any[]
+  tool_call_id?: string
+  reasoning_content?: string 
+}
 /**
  * 将包含文件引用的消息列表转换为适合发送给模型的消息格式
  * - 图片文件：转为 base64
- * - 新结构 assistant：解析 JSON 并补全工具调用
- * - 兼容旧结构：按老方法提取纯文本
+ * - 新结构 assistant：解析 JSON，提取 reasoning、text 和 tool_call 片段
+ * - 工具调用场景下，将 reasoning_content 附加到第一条 assistant 消息
  */
-export async function cleanMessages(msgs: Message[]): Promise<{ role: string; content: string | any[]; tool_calls?: any[]; tool_call_id?: string }[]> {
+export async function cleanMessages(msgs: Message[]): Promise<ResponseType[]> {
   const finalMessages: any[] = []
 
   for (const msg of msgs) {
@@ -461,10 +468,17 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
         }
       } catch (e) { /* 不是新格式，走下面的兜底逻辑 */ }
 
+      // 提取 reasoning 内容（仅当为结构化格式时）
+      let reasoningContent = ''
+      if (isStructured && Array.isArray(segments)) {
+        const reasoningSegments = segments.filter((s: any) => s.type === 'reasoning')
+        reasoningContent = reasoningSegments.map((s: any) => s.content).filter(Boolean).join('\n')
+      }
+
       // 2.1 旧格式兜底
       if (!isStructured) {
         const text = typeof msg.content === 'string' ? extractFinalContent(msg.content) : ''
-        finalMessages.push({ role: 'assistant', content: text })
+        finalMessages.push({ role: 'assistant', content: text, ...(reasoningContent && { reasoning_content: reasoningContent }) })
         continue
       }
 
@@ -472,7 +486,6 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
       // 提取纯文本片段
       const textSegments = segments.filter((s: any) => s.type === 'text')
       const fullText = textSegments.map((s: any) => s.content).join('')
-
       // 提取工具调用片段
       const toolSegments = segments.filter((s: any) => s.type === 'tool_call')
       
@@ -492,14 +505,14 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
         }
       } catch (e) {
         console.warn('获取工具详情失败，降级为仅发文本', e)
-        finalMessages.push({ role: 'assistant', content: fullText || null })
+        finalMessages.push({ role: 'assistant', content: fullText || null, ...(reasoningContent && { reasoning_content: reasoningContent }) })
         continue
       }
 
-      // 步骤 A：标准 OpenAI 必须的第一条 assistant 消息（带上参数）
+      // 步骤 A：第一条 assistant 消息（带 tool_calls），必须携带推理内容
       finalMessages.push({
         role: 'assistant',
-        content: '', // 标准协议规定：有 tool_calls 时，content 可以为 null
+        content: '',
         tool_calls: toolSegments.map((s: any) => ({
           id: s.content.id,
           type: 'function',
@@ -510,7 +523,8 @@ export async function cleanMessages(msgs: Message[]): Promise<{ role: string; co
               return raw ? (typeof raw === 'string' ? raw : JSON.stringify(raw)) : '{}'
             })()
           }
-        }))
+        })),
+        ...(reasoningContent && { reasoning_content: reasoningContent })
       })
 
       // 步骤 B：紧跟其后的所有 role: tool 结果消息

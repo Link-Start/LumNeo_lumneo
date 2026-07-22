@@ -26,8 +26,8 @@ class LLMService:
         self.model_type = model_type
         self.model_name = model_name
         self.thinking = thinking
-        self.reasoning_effort = reasoning_effort
-        self.client = AsyncOpenAI(api_key=api_key or None, base_url=base_url)
+        self.reasoning_effort = reasoning_effort if thinking == 'enabled' else None
+        self.client = AsyncOpenAI(api_key=api_key or 'none', base_url=base_url)
 
     async def generate_response(
         self,
@@ -38,10 +38,12 @@ class LLMService:
         mcp_manager=None,
         params: Dict = None,
         profile_id:int = None,
+        model_id:str = None,
         chat_id: Optional[str] = None,
         turn_index: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
+        current_step_reasoning = ""
 
         # ---------- 图像生成分支（不变） ----------
         if "image" in self.model_name.lower():
@@ -253,6 +255,7 @@ class LLMService:
                 if in_reasoning and (delta_content or tool_calls_data):
                     reasoning_time = time.time() - reasoning_start_time
                     yield f"<!--reasoning:end:{reasoning_time:.2f}-->"
+                    current_step_reasoning = reasoning_buffer
                     # 将推理片段加入 segments
                     segments.append({
                         "type": "reasoning",
@@ -392,6 +395,8 @@ class LLMService:
                 "content": None,
                 "tool_calls": list(tool_calls.values())
             }
+            if current_step_reasoning:
+                assistant_msg["reasoning_content"] = current_step_reasoning
             current_messages.append(assistant_msg)
 
             # ---------- 执行工具 ----------
@@ -559,6 +564,7 @@ class LLMService:
                 role="assistant",
                 content=segments_json,
                 profile_id=profile_id,
+                model_id=model_id,
                 file_ref=None,
                 turn_index=turn_index
             )

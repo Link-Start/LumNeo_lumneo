@@ -37,11 +37,12 @@ REASONING_EFFORT_MAPPING_MODELS = [
 # 转义映射规则
 REASONING_EFFORT_MAP = {
     "high": "low",
-    "max": "high",
+    "xhigh": "high",
 }
 
 class ModelConfig(BaseModel):
     type: str
+    model_id: str
     model_name: str
     base_url: Optional[str] = None
     api_key: Optional[str] = None
@@ -215,6 +216,7 @@ async def chat(
                     'presence_penalty': profile.presence_penalty,
                 } if profile else {},
                 profile_id=profile.id if profile else None,
+                model_id=request.llm_config.model_id,
                 chat_id=request.chat_id,
                 turn_index=request.turn_index
             ),

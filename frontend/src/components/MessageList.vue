@@ -52,11 +52,15 @@
                   <!-- 助手消息 Markdown -->
                   <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
                     <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
+                      <div v-if="msg.model?.type==='online'" style="position:absolute;left:-6px;top:-7px;"><m-svg name="hat" :size="20"/></div>
                       <n-popover trigger="hover">
                         <template #trigger>
                           <n-avatar class="avatar" round :size="40" :src="`./images/avatars/${getLatestProfile(msg).avatar}`" @click="handleShowModal(getLatestProfile(msg).id)"/>
                         </template>
-                        <span>{{ msg.profile?.name }}</span>
+                        <div style="text-align: center;">{{ msg.profile?.name }}</div>
+                        <div v-if="msg.model" style="font-size:12px;color:rgba(125,125,125,0.8)">
+                          {{ msg.model?.type === 'local' ? '本地' : '云端' }}: {{ msg.model?.modelName }}
+                        </div>
                       </n-popover>
                     </div>
                     <div class="message-content assistant-box" :data-theme="isDark">
@@ -574,6 +578,6 @@ onUnmounted(() => {
 .msg-file-other:hover {
   background: var(--border-color-hover);
 }
-.avatar {box-shadow: 0 0 2px rgba(128,128,128,.3);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
+.avatar {box-shadow: 0 0 3px rgba(128,128,128,.8);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
 .assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:14px;}
 </style>

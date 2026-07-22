@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, PropType, computed, h } from 'vue'
+import { ref, PropType, computed } from 'vue'
 import { NButton, NInput, NDropdown, NUpload, NIcon, type UploadFileInfo } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { ArrowDownOutline, DocumentOutline } from '@vicons/ionicons5'
@@ -118,7 +118,7 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   uploadedFiles: { type: Array<{ filename: string; type: string; url: string }>, default: () => [] },
   selected: { type: Boolean, default: false },
-  thinkingMode: { type: String as PropType<'high' | 'max' | null>, default: null },
+  thinkingMode: { type: String as PropType<'high' | 'xhigh'>, default: 'high' },
   showScrollBtn: { type: Boolean, default: false },
   showRegenerateHint: { type: Boolean, default: false },
   showDeepThink: { type: Boolean, default: false },
@@ -139,7 +139,7 @@ const emit = defineEmits<{
   removeFile: [index: number]
   regenerateCurrent: []
   'update:selected': [value: boolean]
-  'update:thinkingMode': [value: 'high' | 'max']
+  'update:thinkingMode': [value: 'high' | 'xhigh']
   'filesPaste': [files: File[]]
   'uploadChange': [options: { file: UploadFileInfo; fileList: UploadFileInfo[] }]
   'update:fileList': [files: UploadFileInfo[]]
@@ -147,11 +147,11 @@ const emit = defineEmits<{
 
 const thinkButtonLabel = computed(() => {
   if (props.thinkingMode === 'high') return '标准思考'
-  if (props.thinkingMode === 'max') return '深度思考'
+  if (props.thinkingMode === 'xhigh') return '深度思考'
   return '思考模式'
 })
 
-// 内部 n-upload 文件列表（不暴露给父组件）
+// 内部 n-upload 文件列表
 const internalFileList = ref<UploadFileInfo[]>([])
 
 function handleUploadChange(options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) {
@@ -175,7 +175,7 @@ const thinkOptions = computed<DropdownOption[]>(() => [
   },
   {
     label:'深度思考',
-    key: 'max',
+    key: 'xhigh',
   }
 ])
 
@@ -188,7 +188,7 @@ function handleSelect() {
 
 // 切换思考模式
 function handleThinkSelect(key: string) {
-  const newMode = key as 'high' | 'max'
+  const newMode = key as 'high' | 'xhigh'
   emit('update:thinkingMode', newMode)
   emit('update:selected', true)
 }

@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProfileStore } from './profiles'
+import { useConfigStore } from './config'
 
 export interface Message {
   id: number
@@ -9,6 +10,7 @@ export interface Message {
   content: any
   file_ref?: any
   profile?: any
+  model?: any
   turn_index: number
 }
 
@@ -23,6 +25,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeChatId = ref<string>('')
   const enableProfile = ref(localStorage.getItem('enableProfile') === 'true')
   const profileStore = useProfileStore()
+  const configStore = useConfigStore()
 
   // 从后端加载对话列表
   async function loadChats() {
@@ -115,6 +118,7 @@ export const useChatStore = defineStore('chat', () => {
         name: profileStore.activeProfile?.name,
         avatar: profileStore.activeProfile?.avatar
       },
+      model: configStore.activeModel,
       turn_index: getNextTurnIndex() // 自动注入轮次
     }
     chat.messages.push(newMsg)
@@ -157,6 +161,7 @@ export const useChatStore = defineStore('chat', () => {
             ? { filename: msg.file_ref.filename, type: msg.file_ref.type, url: msg.file_ref.url }
             : null,
         profile_id: profileStore.activeProfile?.id,
+        model_id: localStorage.getItem('llm_active_model_id'),
         turn_index: msg.turn_index
       })
     })

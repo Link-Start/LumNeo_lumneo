@@ -297,9 +297,9 @@ function checkMobile() {
 
 const selected = ref(localStorage.getItem('thinking') === 'true')
 
-// 思考模式：'high' | 'max'，默认从 localStorage 恢复，否则 'high'
-const thinkingMode = ref<'high' | 'max'>(
-  (localStorage.getItem('thinkingMode') as 'high' | 'max') || 'high'
+// 思考模式：'high' | 'xhigh'，默认从 localStorage 恢复，否则 'high'
+const thinkingMode = ref<'high' | 'xhigh'>(
+  (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high'
 )
 
 const { activeModelId, modelOptions, switchActiveModel } = useModel()

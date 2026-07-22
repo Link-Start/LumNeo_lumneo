@@ -35,6 +35,7 @@ async def init_db():
             role TEXT NOT NULL,
             content TEXT DEFAULT NULL,
             profile_id INTEGER DEFAULT NULL,
+            model_id TEXT DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
             turn_index INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -151,3 +152,5 @@ async def migrate_db(db):
         # 添加 avatar 字段
         if 'profile_id' not in column_names:
             await db.execute("ALTER TABLE messages ADD COLUMN profile_id TEXT DEFAULT ''")
+        if 'model_id' not in column_names:
+            await db.execute("ALTER TABLE messages ADD COLUMN model_id TEXT DEFAULT ''")

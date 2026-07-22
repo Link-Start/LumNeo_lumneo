@@ -33,6 +33,8 @@ class MessageResponse(BaseModel):
     content: Any
     profile_id: Optional[int] = None
     profile: Optional[Dict[str, Any]] = None
+    model_id: Optional[str] = None
+    model: Optional[Dict[str, Any]] = None
     file_ref: Optional[Union[dict, list]] = None
     turn_index: int
     created_at: Optional[str] = None
@@ -45,6 +47,7 @@ class AddMessageRequest(BaseModel):
     role: str
     content: Any
     profile_id: Optional[int] = None
+    model_id: Optional[str] = None
     file_ref: Optional[Union[dict, list]] = None
     turn_index: Optional[int] = None  # 如果没传，后端会自动分配下一轮
 
@@ -94,6 +97,7 @@ async def add_message_route(chat_id: str, req: AddMessageRequest):
         role=req.role,
         content=req.content,
         profile_id=req.profile_id,
+        model_id=req.model_id,
         file_ref=req.file_ref,
         turn_index=req.turn_index
     )
@@ -106,7 +110,8 @@ async def update_message_route(chat_id: str, message_id: int, req: UpdateMessage
         message_id=message_id,
         chat_id=chat_id,
         content=req.content,
-        file_ref=req.file_ref
+        file_ref=req.file_ref,
+        model_id=req.model_id
     )
     if not success:
         raise HTTPException(status_code=404, detail="Message not found")
