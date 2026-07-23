@@ -24,7 +24,7 @@
               @click.stop="openDetail(tool.call_id)"
             >
               <span class="item-status" :class="getStatusClass(tool)">
-                <m-svg :name="getStatusIcon(tool)" :size="tool.status === 'error' ? 20 : 16"/>
+                <m-svg :name="getStatusIcon(tool)" :size="['error', 'rejected'].includes(tool.status) ? 22 : 20"/>
               </span>
               <span class="item-name">{{ toolStore.toolsInfo[tool.name]?.title || tool.name }} #{{ (index as number)+1 }}</span>
               <span class="item-arrow">
@@ -95,7 +95,7 @@ const isLoading = computed(() => {
 
 // 标题动态显示
 const title = computed(() => {
-  // ✅ 新增兜底：如果正在 loading，但列表为空，说明参数还在生成中
+  // 如果正在 loading，但列表为空，说明参数还在生成中
   if (isLoading.value && toolsList.value.length === 0) {
     return '正在准备调用工具...'
   }
@@ -262,8 +262,8 @@ function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean
 }
 
 .item-status {
-  width: 18px;
-  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
