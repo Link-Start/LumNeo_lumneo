@@ -131,6 +131,7 @@ function openDetail(callId: string) {
 function getStatusClass(tool: { call_id: string; name: string; streaming: boolean; status?: string }) {
   if (tool.streaming) return 'status-calling'
   if (tool.status === 'error') return 'status-error'
+  if (tool.status === 'rejected') return 'status-rejected'
   return 'status-success'
 }
 
@@ -138,6 +139,7 @@ function getStatusClass(tool: { call_id: string; name: string; streaming: boolea
 function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean, status?: string }) {
   if (tool.streaming) return 'spinner'
   if (tool.status === 'error') return 'error'
+  if (tool.status === 'rejected') return 'ban'
   return 'check'
 }
 </script>
@@ -274,6 +276,9 @@ function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean
 .item-status.status-calling { 
   color: var(--primary-color, #1890ff);
   animation: spin 1s linear infinite;
+}
+.item-status.status-rejected { 
+  color: #faad14; /* 橙色表示警告/取消 */
 }
 
 @keyframes spin {

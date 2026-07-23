@@ -3,11 +3,13 @@ import os
 import uuid
 import json
 import time
+import asyncio
 from fastapi import Request
 from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
-from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments
+from backend.services.tools import is_dangerous_tool
+from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments, update_tool_call_status, get_tool_call_status
 from backend.db.messages import add_message
 from config_loader import config
 from backend.bootstrap import logger
@@ -426,6 +428,62 @@ class LLMService:
                         await update_tool_call_arguments(local_call_id, args)
                     except Exception as e:
                         logger.error(f"[数据库] 更新参数失败：{e}")
+
+                if is_dangerous_tool(func_name):
+                    # 1. 写入 pending_confirmation 状态
+                    await update_tool_call_status(local_call_id, "pending_confirmation")
+
+                    # 2. 通过流通知前端弹框
+                    args_preview = json.dumps(args, ensure_ascii=False)
+                    if len(args_preview) > 2000:
+                        args_preview = args_preview[:2000] + "...(已截断)"
+                    yield f"<!--tool_confirm_required:{local_call_id}:{func_name}:{args_preview}-->"
+
+                    # 3. 轮询等待用户响应（最多等 120 秒）
+                    confirmed = False
+                    for _ in range(120):
+                        if request and await request.is_disconnected():
+                            break
+                        status = await get_tool_call_status(local_call_id)
+                        if status == "confirmed":
+                            confirmed = True
+                            break
+                        if status == "cancelled":
+                            confirmed = False
+                            break
+                        await asyncio.sleep(1)
+
+                    # 4. 用户取消（或超时）→ 跳过执行
+                    if not confirmed:
+                        yield f"<!--tool_status:{local_call_id}:rejected-->"
+                        yield f"<!--tool_preview:end:{local_call_id}-->"
+
+                        # 更新 segments 内的状态
+                        for seg in segments:
+                            if seg.get('type') == 'tool_call' and seg.get('content', {}).get('id') == local_call_id:
+                                seg['content']['status'] = 'rejected'
+                                seg['content']['error_message'] = '用户拒绝了此工具调用'
+                                break
+
+                        # 记录数据库最终状态
+                        await update_tool_call(
+                            call_id=local_call_id,
+                            arguments=args,
+                            result="用户拒绝了此工具调用",
+                            status="rejected",
+                            execution_time=0,
+                            error_message="用户拒绝",
+                            meta_data={}
+                        )
+
+                        # 向模型回写拒绝消息
+                        current_messages.append({
+                            "role": "tool",
+                            "tool_call_id": local_call_id,
+                            "content": "用户拒绝了此工具调用，请直接回答工具被拒绝，无法执行。"
+                        })
+                        del tool_preview_active[idx]
+                        continue  # 跳过下方真实的 execute_tool
 
                 # 执行工具
                 start_time = time.time()

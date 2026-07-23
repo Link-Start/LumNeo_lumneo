@@ -72,7 +72,7 @@ export function processMessageContent(text: string, isStreaming = false): string
       const status = statusMatch[2]
       if (toolsMap.has(call_id)) {
         toolsMap.get(call_id)!.status = status
-        if (status === 'success' || status === 'error') {
+        if (status === 'success' || status === 'error' || status === 'rejected') {
           toolsMap.get(call_id)!.streaming = false
         }
       }
@@ -165,13 +165,14 @@ export function renderStructuredContent(input: string | any[]): string {
         return `\n\n<reasoning time="${seg.duration || 0}">${seg.content}</reasoning>\n\n`
       } else if (seg.type === 'tool_call') {
         // 单个工具调用也用 toolcalls 标签展示
+        const isRejected = seg.content?.status === 'rejected'
         const tagContent = JSON.stringify({
           tools: [{
             call_id: seg.content?.id,
             name: seg.content?.name || '工具',
             streaming: false,
             status: seg.content?.status || 'success',
-            error_message: seg.content?.error_message || null
+            error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
           }],
           count: 1,
           loading: false
@@ -183,13 +184,16 @@ export function renderStructuredContent(input: string | any[]): string {
 
     // 全是 tool_call → 合并成一个 toolcalls 标签
     if (isAllToolCalls(thinkingItems)) {
-      const allTools = thinkingItems.map(seg => ({
-        call_id: seg.content?.id,
-        name: seg.content?.name || '工具',
-        streaming: false,
-        status: seg.content?.status || 'success',
-        error_message: seg.content?.error_message || null
-      }))
+      const allTools = thinkingItems.map(seg => {
+        const isRejected = seg.content?.status === 'rejected'
+        return {
+          call_id: seg.content?.id,
+          name: seg.content?.name || '工具',
+          streaming: false,
+          status: seg.content?.status || 'success',
+          error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
+        }
+      })
 
       const tagContent = JSON.stringify({
         tools: allTools,
@@ -226,16 +230,17 @@ export function renderStructuredContent(input: string | any[]): string {
           content: seg.content
         })
       } else if (seg.type === 'tool_call') {
+        const isRejected = seg.content?.status === 'rejected'
         tempTools.push({
           call_id: seg.content?.id,
           name: seg.content?.name || '工具',
           streaming: false,
           status: seg.content?.status || 'success',
-          error_message: seg.content?.error_message || null
+          error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
         })
       }
     }
-    pushToolCalls() // 尾部剩余的工具调用
+    pushToolCalls()
 
     const jsonStr = JSON.stringify(mergedNodes)
     const encoded = btoa(unescape(encodeURIComponent(jsonStr)))

@@ -1,14 +1,18 @@
 // src/composables/useChat.ts
-import { ref } from 'vue'
+import { ref, h } from 'vue'
+import { useDialog } from 'naive-ui'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useMessage } from 'naive-ui'
 import { cleanMessages } from '@/utils/message'
+import { useToolStore } from '@/stores/tools'
 import type { UploadedFile } from '@/composables/useFileUpload'
+
 
 export function useChat() {
   const chatStore = useChatStore()
+  const toolStore = useToolStore()
   const configStore = useConfigStore()
   const profileStore = useProfileStore()
   const message = useMessage()
@@ -28,35 +32,123 @@ export function useChat() {
     }
   }
 
-type StreamEndCallback = (chatId: string, turnIndex: number) => void
-const onStreamEnd = ref<StreamEndCallback | null>(null)
+  type StreamEndCallback = (chatId: string, turnIndex: number) => void
+  const onStreamEnd = ref<StreamEndCallback | null>(null)
 
-async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
-  if (!response.ok || !response.body) throw new Error('网络响应失败')
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let fullText = ''
-  let finalSegments: any[] | undefined = undefined
+  const dialog = useDialog()
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = decoder.decode(value, { stream: true })
-    fullText += chunk
-    streamingContent.value = fullText
+  // 弹框确认并回写后端
+  function requestToolConfirm(callId: string, funcName: string, argsJson: string) {
+    let prettyArgs = argsJson
+    try {
+      prettyArgs = JSON.stringify(JSON.parse(argsJson), null, 2)
+    } catch (e) {}
+    const contentNode = h('div', {
+      style: { fontSize: '14px', lineHeight: '1.6' }
+    }, [
+      h('p', { style: { marginBottom: '12px' } }, [
+        '工具 「',
+        h('strong', { style: { color: 'var(--primary-color)' } }, toolStore.toolsInfo[funcName]?.title || funcName),
+        '」 即将执行，请确认调用参数：'
+      ]),
+      h('pre', {
+        style: {
+          background: 'var(--bg-secondary)', // 跟随暗黑/明亮模式
+          padding: '12px',
+          borderRadius: '6px',
+          maxHeight: '300px',
+          overflow: 'auto',
+          fontSize: '13px',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          margin: '0',
+          border: '1px solid var(--border-color)'
+        }
+      }, prettyArgs)
+    ])
 
-    // 尝试从流中提取最终的结构化 JSON
-    const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
-    if (match) {
-      try {
-        finalSegments = JSON.parse(match[1])
-      } catch (e) {
-        console.error('解析最终结构化数据失败', e)
+    let countdown = 30 // 设置倒计时秒数
+    let timer: number | null = null
+
+    const dialogInstance  = dialog.warning({
+      title: '⚠️ 危险工具调用确认',
+      content: () => contentNode,
+      positiveText: '确认执行',
+      negativeText: `取消执行 (${countdown}s)`,
+      maskClosable: false,
+      closeOnEsc: false,
+      onPositiveClick: () => {
+        if (timer) clearInterval(timer)
+        confirmTool(callId, true)
+      },
+      onNegativeClick: () => {
+        if (timer) clearInterval(timer)
+        confirmTool(callId, false)
+      },
+    })
+
+    timer = window.setInterval(() => {
+      countdown--
+      if (countdown <= 0) {
+        // 倒计时结束，自动触发取消并关闭弹框
+        if (timer) clearInterval(timer)
+        confirmTool(callId, false)
+        dialogInstance.destroy() // 销毁弹框
+      } else {
+        // 动态更新取消按钮的文字
+        const formattedTime = String(countdown).padStart(2, '0')
+        dialogInstance.negativeText = `取消执行 (${formattedTime}s)`
       }
+    }, 1000)
+  }
+
+  async function confirmTool(callId: string, confirmed: boolean) {
+    try {
+      await fetch('/api/tool-calls/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_id: callId, confirmed })
+      })
+    } catch (e) {
+      console.error('发送确认状态失败', e)
     }
   }
-  return { finalSegments }
-}
+
+  async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
+    if (!response.ok || !response.body) throw new Error('网络响应失败')
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullText = ''
+    let finalSegments: any[] | undefined = undefined
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = decoder.decode(value, { stream: true })
+      fullText += chunk
+      streamingContent.value = fullText
+
+      // 检测危险工具确认请求
+      const confirmMatch = chunk.match(
+        /<!--tool_confirm_required:([^:]+):([^:]*):([\s\S]*?)-->/
+      )
+      if (confirmMatch) {
+        const [, callId, funcName, argsJson] = confirmMatch
+        requestToolConfirm(callId, funcName, argsJson)
+      }
+
+      // 尝试从流中提取最终的结构化 JSON
+      const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
+      if (match) {
+        try {
+          finalSegments = JSON.parse(match[1])
+        } catch (e) {
+          console.error('解析最终结构化数据失败', e)
+        }
+      }
+    }
+    return { finalSegments }
+  }
 
 /**
    * 保存被中断的消息到本地和后端

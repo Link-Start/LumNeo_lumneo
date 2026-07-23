@@ -1,14 +1,16 @@
 <template>
   <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
-      <router-view />
+      <n-dialog-provider>
+        <router-view />
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <script setup lang="ts">
 import { watch } from 'vue'
-import { NConfigProvider, NMessageProvider, zhCN, dateZhCN } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN } from 'naive-ui'
 import { useTheme } from '@/composables/useTheme'
 import { useConfigStore } from '@/stores/config'
 
