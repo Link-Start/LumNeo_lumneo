@@ -6,7 +6,10 @@ import socket
 from pathlib import Path
 from datetime import datetime, timezone as tz
 from config_loader import config
+from typing import Optional, Tuple
 from backend.bootstrap import logger
+from backend.utils.validators import validate_path
+import backend
 
 
 def is_absolute(path: str) -> bool:
@@ -99,3 +102,24 @@ def delete_uploaded_files(file_ref_json: str):
     except Exception as e:
         # 避免解析错误导致主流程中断
         logger.warning(f"解析 file_ref 失败: {e}")
+
+
+def _get_allowed_dirs() -> list[Path]:
+    """获取允许操作的目录列表。"""
+    raw = backend.workspace_path
+    if not raw:
+        raise RuntimeError("backend.workspace_path 未配置")
+    if isinstance(raw, (list, tuple)):
+        return [Path(p).resolve() for p in raw if p]
+    return [Path(raw).resolve()]
+
+
+def _validate(path: str) -> Tuple[Optional[Path], Optional[str]]:
+    """统一路径校验，返回 (safe_path, error_message)。"""
+    if not is_absolute(path):
+        path = f"{os.getcwd()}/{path}"
+    try:
+        safe_path = validate_path(path, _get_allowed_dirs())
+        return safe_path, None
+    except (ValueError, RuntimeError) as e:
+        return None, str(e)

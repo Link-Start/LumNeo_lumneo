@@ -5,5 +5,6 @@ from . import creator
 from . import reader
 from . import weather
 from . import writer
+from . import delete
 from . import skills
 from . import executor

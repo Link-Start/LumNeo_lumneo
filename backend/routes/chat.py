@@ -25,7 +25,7 @@ with open(full_path, 'r', encoding="utf-8") as f:
     BASE_SYSTEM_PROMPT = f.read()
 BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT.replace("{{uploads_dir}}", str(config.uploads_dir))
 
-disabled_tools = ['system_write_file', 'system_patch_file', 'system_create_project_tree', 'system_read_file_list']
+disabled_tools = ['system_write_file', 'system_patch_file', 'system_delete_file', 'system_create_project_tree', 'system_read_file_list']
 default_tools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
 
  # 需要转义 reasoning_effort 的模型名称列表

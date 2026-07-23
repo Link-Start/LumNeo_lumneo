@@ -125,6 +125,27 @@ tools:
     module: backend.system_tools.writer
     function_name: file_patch
 
+  - name: system_delete_file
+    title: 删除文件
+    description: |
+      删除指定路径的文件。
+      若文件不存在且 `force` 为 true 则静默忽略，否则返回错误。
+      该操作不可逆，请谨慎使用。
+    parameters:
+      type: object
+      properties:
+        path:
+          type: string
+          description: 目标文件路径（支持相对路径或绝对路径），必须位于允许的目录内。
+        force:
+          type: boolean
+          description: 若为 true，当文件不存在时不会报错，返回成功状态；默认为 false，文件不存在则返回错误。
+      required: ["path"]
+    meta:
+      dangerous: true
+    module: backend.system_tools.delete
+    function_name: file_delete
+
   - name: system_create_project_tree
     title: 项目创建
     description: 根据目录树文本批量创建项目目录和文件。支持 tree 命令输出格式（├── └── │）、Markdown 代码块树形结构以及简单缩进格式。常用于项目初始化。

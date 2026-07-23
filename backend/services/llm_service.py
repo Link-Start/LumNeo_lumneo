@@ -351,7 +351,7 @@ class LLMService:
                 except Exception:
                     pass
 
-                if final_answer_content:
+                if final_answer_content and final_answer_content.strip():
                     segments.append({
                         "type": "text",
                         "content": final_answer_content
