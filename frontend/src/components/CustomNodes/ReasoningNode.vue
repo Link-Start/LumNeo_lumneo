@@ -100,7 +100,6 @@ function toggle() {
   background: rgba(252, 252, 252, 0.02);
 }
 .reasoning-content {
-  padding: 12px;
   font-size:14px!important;
 }
 .reasoning-content .paragraph-node {
@@ -131,7 +130,6 @@ function toggle() {
 
 .reasoning-container {
   font-size: 0.9rem;
-  padding:0 12px;
   color: var(--text-secondary);
   display: grid;
   grid-template-rows: 0fr;

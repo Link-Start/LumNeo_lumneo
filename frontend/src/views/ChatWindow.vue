@@ -62,7 +62,7 @@
             </n-list-item>
           </n-list>
         </n-scrollbar>
-        <div class="sidebar-footer">
+        <div class="sidebar-footer" v-if="!isMobile">
           <n-button text @click="showSettings = true">
             <template #icon>
               <n-icon><SettingsOutline /></n-icon>
@@ -562,7 +562,7 @@ onUnmounted(() => {
   padding: 16px 0;
   gap: 12px;
   overflow: hidden;
-  z-index: 40;
+  z-index: 1006;
   box-shadow: 2px 0 8px rgba(0,0,0,0.1);
 }
 
