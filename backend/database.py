@@ -121,6 +121,24 @@ async def init_db():
             FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
         )
     """)
+
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS user_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT NOT NULL,
+            turn_index INTEGER NOT NULL,
+            message TEXT DEFAULT NULL,
+            status TEXT DEFAULT 'pending',
+            timeout_seconds INTEGER DEFAULT 60,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+        )
+    """)
+    # 索引：按 chat_id 和 status 快速查询
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_chat ON user_decisions (chat_id)")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_status ON user_decisions (status)")
+    
     await migrate_db(db)
     await db.commit()
     await db.close()

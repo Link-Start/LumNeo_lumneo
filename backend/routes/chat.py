@@ -5,13 +5,14 @@ import traceback
 import os
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Literal, Any
 import backend
 from backend.services.llm_service import LLMService
 from backend.services.tools import get_local_tools, get_mcp_tools, get_all_tools
 from backend.db.profiles import get_profile_by_id
 from backend.db.skills import get_skills_by_profile
+from backend.db.decisions import update_decision_status, get_decision_status
 from backend.utils.base import resource_path, get_current_time, get_local_ip
 from config_loader import config
 from backend.bootstrap import logger
@@ -25,7 +26,7 @@ with open(full_path, 'r', encoding="utf-8") as f:
     BASE_SYSTEM_PROMPT = f.read()
 BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT.replace("{{uploads_dir}}", str(config.uploads_dir))
 
-disabled_tools = ['system_write_file', 'system_patch_file', 'system_delete_file', 'system_create_project_tree', 'system_read_file_list']
+disabled_tools = ['system_test_fail', 'system_write_file', 'system_patch_file', 'system_delete_file', 'system_create_project_tree', 'system_read_file_list']
 default_tools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
 
  # 需要转义 reasoning_effort 的模型名称列表
@@ -39,6 +40,21 @@ REASONING_EFFORT_MAP = {
     "high": "low",
     "xhigh": "high",
 }
+
+class StrategyParams(BaseModel):
+    """执行策略配置参数"""
+    blueprint_mode: bool = Field(default=False, description="蓝图模式")
+    approval_mode: bool = Field(default=True, description="审批模式")
+    auto_decision: bool = Field(default=False, description="自主决策（低风险免审批）")
+    max_iterations: int = Field(default=10, ge=1, le=100, description="最大迭代轮次")
+    max_parallel: int = Field(default=5, ge=1, le=20, description="最大并行数")
+    tool_timeout: int = Field(default=30, ge=5, le=600, description="工具超时（秒）")
+    retry_count: int = Field(default=2, ge=0, le=10, description="自动重试次数")
+    retry_delay: int = Field(default=1, ge=0, le=30, description="重试间隔（秒）")
+    failure_threshold: int = Field(default=3, ge=1, le=20, description="连续失败阈值")
+    failure_behavior: Literal['continue', 'stop', 'ask'] = Field(
+        default='continue', description="失败后行为"
+    )
 
 class ModelConfig(BaseModel):
     type: str
@@ -57,6 +73,11 @@ class ChatRequest(BaseModel):
     message_id: Optional[int] = None
     chat_id: Optional[str] = None
     turn_index: Optional[int] = None
+    params: Optional[StrategyParams] = None
+
+class DecisionUpdate(BaseModel):
+    decision_id: int
+    choice: str  # 'continue' 或 'stop'
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
@@ -115,7 +136,7 @@ async def chat(
                 if profile.profile_prompt:
                     system_prompt += f"\n\n ## 当前角色人设 \n\n{profile.profile_prompt}"
                 
-                # --- 核心：加载技能（懒加载） ---
+                # --- 加载技能（懒加载） ---
                 if request.enable_tools:
                     db_skills = await get_skills_by_profile(request.profile_id)
                     
@@ -197,6 +218,33 @@ async def chat(
                     # 但通常 user/assistant 不应出现 dict，若出现也转为字符串避免出错
                     msg["content"] = json.dumps(content, ensure_ascii=False) if content is not None else ""
 
+        base_params = {}
+        if profile:
+            base_params = {
+                'temperature': profile.temperature,
+                'top_p': profile.top_p,
+                'top_k': profile.top_k,
+                'frequency_penalty': profile.frequency_penalty,
+                'presence_penalty': profile.presence_penalty,
+            }
+        strategy_params = {}
+        if request.params:
+            strategy_params = request.params.model_dump(exclude_none=True)
+
+        final_params = {**base_params, **strategy_params}
+
+        if request.params and request.params.blueprint_mode:
+            # 注入蓝图模式的 System Prompt 指令（你的“隐身指令”）
+            blueprint_instruction = """
+            ## 蓝图模式
+            如果当前任务需要 ≥2 个工具协作（如多文件修改、项目重构、串联命令），
+            你输出的第一行必须是 `<<<PLAN_START>>>`，接着输出 JSON 格式的执行计划数组，
+            最后一行必须是 `<<<PLAN_END>>>`。在此协议标记之后，你可以正常输出给用户看的友好提示文字。
+            如果是简单任务（闲聊、知识问答、单次文件读取），请直接回复，不要添加任何特殊标记。
+            """
+            # 将蓝图指令追加到 System Prompt 中
+            system_prompt += blueprint_instruction
+
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
 
@@ -208,13 +256,7 @@ async def chat(
                 tools=final_tools,
                 request=fastapi_request,
                 mcp_manager=mcp_manager,
-                params={
-                    'temperature': profile.temperature,
-                    'top_p': profile.top_p,
-                    'top_k': profile.top_k,
-                    'frequency_penalty': profile.frequency_penalty,
-                    'presence_penalty': profile.presence_penalty,
-                } if profile else {},
+                params=final_params,
                 profile_id=profile.id if profile else None,
                 model_id=request.llm_config.model_id,
                 chat_id=request.chat_id,
@@ -255,3 +297,21 @@ async def get_system_info():
         "upload_dir": config.uploads_dir,
         "local_ip": get_local_ip(),
     }
+
+
+@router.post("/decisions/update")
+async def update_decision(decision: DecisionUpdate):
+    """用户决策回写接口"""
+    if decision.choice not in ['continue', 'stop']:
+        raise HTTPException(status_code=400, detail="无效的选择")
+    
+    status = await get_decision_status(decision.decision_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="决策不存在")
+    if status != 'pending':
+        raise HTTPException(status_code=400, detail="该决策已被处理")
+    
+    success = await update_decision_status(decision.decision_id, decision.choice)
+    if not success:
+        raise HTTPException(status_code=500, detail="更新失败")
+    return {"success": True}

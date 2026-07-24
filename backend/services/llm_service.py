@@ -9,6 +9,7 @@ from openai import AsyncOpenAI, APIError
 from typing import List, Dict, AsyncGenerator, Optional
 from backend.services.tools import get_all_tools, execute_tool
 from backend.services.tools import is_dangerous_tool
+from backend.db.decisions import create_decision, get_decision_status
 from backend.db.tool_calls import create_tool_call, update_tool_call, update_tool_call_arguments, update_tool_call_status, get_tool_call_status
 from backend.db.messages import add_message
 from config_loader import config
@@ -31,6 +32,293 @@ class LLMService:
         self.reasoning_effort = reasoning_effort if thinking == 'enabled' else None
         self.client = AsyncOpenAI(api_key=api_key or 'none', base_url=base_url)
 
+
+    async def _process_single_tool(
+        self,
+        idx: str,
+        tc: dict,
+        tool_preview_active: dict,
+        segments: list,
+        current_messages: list,
+        chat_id: Optional[str],
+        mcp_manager,
+        approval_mode: bool,
+        auto_decision: bool,
+        tool_timeout: int,
+        retry_count: int,
+        retry_delay: int,
+        request: Optional[Request],
+    ) -> dict:
+        """
+        处理单个工具调用，返回一个字典，包含所有需要 yield 的内容和其他状态。
+        """
+        outputs = []          # 本工具产生的所有输出字符串
+        new_segments = []     # 本工具新增/替换的 segments 条目
+        
+        if idx not in tool_preview_active:
+            outputs.append(f"⚠️ 跳过工具 {tc['function']['name']}，未找到预览状态\n")
+            return {
+                'outputs': outputs,
+                'new_segments': new_segments,
+                'call_id': None,
+                'failed': True,
+                'status': 'skipped',
+                'error_message': '预览状态缺失',
+                'result_str': '',
+                'exec_time_ms': 0,
+                'meta_data': {},
+                'tool_message_content': None
+            }
+
+        local_call_id = tool_preview_active[idx]['call_id']
+        func_name = tc["function"]["name"] or "未知工具"
+        raw_args = tc["function"]["arguments"]
+
+        # 确保预览已发送
+        if not tool_preview_active[idx].get('preview_sent', False):
+            outputs.append(f"<!--tool_preview:start:{local_call_id}:{func_name}-->")
+            tool_preview_active[idx]['preview_sent'] = True
+
+        # 解析参数
+        try:
+            args = json.loads(raw_args) if raw_args else {}
+        except json.JSONDecodeError as e:
+            error_detail = f"JSON 解析失败: {e}\n原始参数: {raw_args[:200]}"
+            outputs.append(f"\n❌ 工具 `{func_name}` 参数错误：{error_detail}\n")
+            args = {"raw": raw_args, "parse_error": str(e)}
+
+        if chat_id:
+            try:
+                await update_tool_call_arguments(local_call_id, args)
+            except Exception as e:
+                logger.error(f"[数据库] 更新参数失败：{e}")
+
+        # ---------- 审批逻辑 ----------
+        need_approval = False
+        if approval_mode:
+            if auto_decision:
+                need_approval = is_dangerous_tool(func_name)
+            else:
+                need_approval = True
+
+        if need_approval:
+            await update_tool_call_status(local_call_id, "pending_confirmation")
+
+            args_preview = json.dumps(args, ensure_ascii=False)
+            if len(args_preview) > 2000:
+                args_preview = args_preview[:2000] + "...(已截断)"
+            outputs.append(f"<!--tool_confirm_required:{local_call_id}:{func_name}:{args_preview}-->")
+
+            confirmed = False
+            for _ in range(50):
+                if request and await request.is_disconnected():
+                    break
+                status = await get_tool_call_status(local_call_id)
+                if status == "confirmed":
+                    confirmed = True
+                    break
+                if status == "cancelled":
+                    confirmed = False
+                    break
+                await asyncio.sleep(1)
+
+            if not confirmed:
+                outputs.append(f"<!--tool_status:{local_call_id}:rejected-->")
+                outputs.append(f"<!--tool_preview:end:{local_call_id}-->")
+
+                # 构造替换的 segments 片段（状态为 rejected）
+                new_segments.append({
+                    'type': 'tool_call',
+                    'content': {
+                        'id': local_call_id,
+                        'name': func_name,
+                        'status': 'rejected',
+                        'error_message': '用户拒绝了此工具调用'
+                    }
+                })
+
+                await update_tool_call(
+                    call_id=local_call_id,
+                    arguments=args,
+                    result="用户拒绝了此工具调用",
+                    status="rejected",
+                    execution_time=0,
+                    error_message="用户拒绝",
+                    meta_data={}
+                )
+
+                # 删除预览状态（避免后续误用）
+                if idx in tool_preview_active:
+                    del tool_preview_active[idx]
+
+                return {
+                    'outputs': outputs,
+                    'new_segments': new_segments,
+                    'call_id': local_call_id,
+                    'failed': False,
+                    'status': 'rejected',
+                    'error_message': '用户拒绝',
+                    'result_str': '',
+                    'exec_time_ms': 0,
+                    'meta_data': {},
+                    'tool_message_content': '用户拒绝了此工具调用，请直接回答工具被拒绝，无法执行。'
+                }
+
+        # ---------- 执行工具（带重试和超时） ----------
+        exec_time_ms = 0
+        failed = False
+        result = None
+
+        for attempt in range(retry_count + 1):
+            try:
+                start_time = time.time()
+                async with asyncio.timeout(tool_timeout):
+                    result = await execute_tool(func_name, args, mcp_manager)
+                exec_time_ms = int((time.time() - start_time) * 1000)
+
+                # ===== 检查逻辑失败 =====
+                is_logical_failure = False
+                if isinstance(result, dict) and result.get("success") is False:
+                    is_logical_failure = True
+                elif isinstance(result, str):
+                    try:
+                        parsed = json.loads(result)
+                        if isinstance(parsed, dict) and parsed.get("success") is False:
+                            is_logical_failure = True
+                    except json.JSONDecodeError:
+                        pass
+
+                # 如果是逻辑失败，且还有重试次数，则重试
+                if is_logical_failure and attempt < retry_count:
+                    outputs.append(f"\n🔄 工具 `{func_name}` 逻辑执行失败（返回 success=false），{retry_delay}秒后重试（{attempt + 1}/{retry_count}）...\n")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                elif is_logical_failure:
+                    # 最后一次尝试，标记为失败并退出循环
+                    failed = True
+                    break
+
+                # 正常成功，跳出重试循环
+                break
+
+            except asyncio.TimeoutError:
+                result = f"工具执行超时（{tool_timeout}秒）"
+                failed = True
+                if attempt < retry_count:
+                    outputs.append(f"\n⏱️ 工具 `{func_name}` 执行超时，{retry_delay}秒后重试（{attempt + 1}/{retry_count}）...\n")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    outputs.append(f"\n❌ 工具 `{func_name}` 执行超时（{tool_timeout}秒），已达最大重试次数\n")
+                    break
+            except Exception as e:
+                error_msg = str(e)
+                if len(error_msg) > 1000:
+                    error_msg = error_msg[:1000] + "...(错误信息过长已截断)"
+                result = f"工具执行出错: {error_msg}"
+                failed = True
+                if attempt < retry_count:
+                    outputs.append(f"\n🔄 工具 `{func_name}` 执行出错，{retry_delay}秒后重试（{attempt + 1}/{retry_count}）...\n")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    outputs.append(f"\n❌ 工具 `{func_name}` 执行出错，已达最大重试次数\n")
+                    break
+
+        # 检查结果是否标记为失败
+        if result is not None and not failed:
+            if isinstance(result, str):
+                try:
+                    result_obj = json.loads(result)
+                    if isinstance(result_obj, dict) and result_obj.get("success") is False:
+                        failed = True
+                except json.JSONDecodeError:
+                    if result.startswith("工具执行出错:"):
+                        failed = True
+            elif isinstance(result, dict) and result.get("success") is False:
+                failed = True
+
+        # 格式化结果
+        if result is None:
+            result = "工具执行未返回任何结果"
+        if isinstance(result, dict):
+            result_str = json.dumps(result, ensure_ascii=False)
+        else:
+            result_str = str(result)
+
+        # 大文件落盘
+        MAX_DB_LEN = 20000
+        meta_data = {}
+        final_db_result = ""
+        if len(result_str) > MAX_DB_LEN:
+            file_dir = f"{chat_id}/{local_call_id}.txt" if chat_id else f"unknown/{local_call_id}.txt"
+            file_path = f"{config.cache_dir}/{file_dir}"
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(result_str)
+            meta_data = {
+                "storage_type": "file",
+                "file_path": file_dir,
+                "size": len(result_str),
+                "preview": result_str[:1000]
+            }
+            final_db_result = f"[数据量过大(共{len(result_str)}字)，完整内容已保存至本地文件]"
+        else:
+            final_db_result = result_str
+
+        # 更新数据库
+        if chat_id:
+            try:
+                await update_tool_call(
+                    call_id=local_call_id,
+                    arguments=args,
+                    result=final_db_result,
+                    status="error" if failed else "success",
+                    execution_time=exec_time_ms,
+                    error_message=result if failed else None,
+                    meta_data=meta_data
+                )
+            except Exception as e:
+                logger.error(f"[数据库] 更新结果失败：{e}")
+
+        # 准备返回数据
+        status_val = "error" if failed else "success"
+        err_msg = result if failed else None
+
+        # 构造状态输出
+        outputs.append(f"<!--tool_status:{local_call_id}:{status_val}-->")
+        outputs.append(f"<!--tool_preview:end:{local_call_id}-->")
+
+        # 构造替换的 segments 片段
+        seg_content = {
+            'id': local_call_id,
+            'name': func_name,
+            'status': status_val
+        }
+        if err_msg:
+            seg_content['error_message'] = err_msg
+        new_segments.append({
+            'type': 'tool_call',
+            'content': seg_content
+        })
+
+        # 删除预览状态
+        if idx in tool_preview_active:
+            del tool_preview_active[idx]
+
+        return {
+            'outputs': outputs,
+            'new_segments': new_segments,
+            'call_id': local_call_id,
+            'failed': failed,
+            'status': status_val,
+            'error_message': err_msg,
+            'result_str': result_str,
+            'exec_time_ms': exec_time_ms,
+            'meta_data': meta_data,
+            'tool_message_content': result_str
+        }
+
     async def generate_response(
         self,
         messages: List[Dict[str, str]],
@@ -47,7 +335,20 @@ class LLMService:
         params = params or {}
         current_step_reasoning = ""
 
-        # ---------- 图像生成分支（不变） ----------
+        max_steps = params.get('max_iterations', 10)
+        max_consecutive_failures = params.get('failure_threshold', 3)
+        tool_timeout = params.get('tool_timeout', 30)
+        retry_count = params.get('retry_count', 2)
+        retry_delay = params.get('retry_delay', 1)
+        failure_behavior = params.get('failure_behavior', 'continue')  # continue / stop / ask
+        max_parallel = params.get('max_parallel', 5)
+        approval_mode = params.get('approval_mode', True)
+        auto_decision = params.get('auto_decision', False)
+
+        # 只有审批模式关闭时，才启用并行执行
+        enable_parallel = not approval_mode and max_parallel > 1
+
+        # ---------- 图像生成分支 ----------
         if "image" in self.model_name.lower():
             prompt = ""
             for msg in reversed(messages):
@@ -118,12 +419,10 @@ class LLMService:
         last_step_usage = None
         last_step_generation_time = 0.0
 
-        MAX_STEPS = 60
-        MAX_CONSECUTIVE_FAILURES = 3
         consecutive_failures = 0
         force_final = False
 
-        for step in range(MAX_STEPS):
+        for step in range(max_steps):
             final_answer_content = ""   # 强制在每次循环开始前声明
             if request and await request.is_disconnected():
                 break
@@ -164,17 +463,25 @@ class LLMService:
             kwargs["extra_body"] = extra_body
 
             # 强制总结逻辑
-            if force_final or step == MAX_STEPS - 1:
+            if force_final or step == max_steps - 1:
+                # 根据触发原因选择不同的提示
                 if force_final:
-                    yield "\n⚠️ 工具连续调用失败次数过多，正在基于已收集信息生成最终总结...\n"
+                    yield "\n⚠️ 工具调用遇到了一些阻碍，正在基于已有信息生成最终总结...\n"
+                    system_instruction = (
+                        "【系统提示】工具调用遇到了一些阻碍，暂时无法继续执行。"
+                        "请基于目前已获取的信息，为用户提供最有帮助的回答。"
+                        "如果信息不足以完成任务，请友好地告知用户并给出建议。"
+                    )
                 else:
-                    yield "\n⚠️ 工具调用次数已达上限，正在基于已收集信息生成最终总结...\n"
+                    yield "\n⚠️ 工具调用次数已达上限，正在基于已有信息生成最终总结...\n"
+                    system_instruction = (
+                        "【系统提示】本轮工具调用次数已用完，接下来将基于已有信息回答。"
+                        "请综合已经收集到的上下文，为用户提供全面、准确的回应。"
+                    )
 
                 current_messages.append({
                     "role": "user",
-                    "content": ("【系统指令】你的工具调用已达限制或连续多次失败。"
-                                "请立即放弃尝试调用工具，根据上面已经收集到的上下文信息，"
-                                "直接回答我的问题并进行最终总结。")
+                    "content": system_instruction
                 })
                 kwargs["messages"] = current_messages
                 tools = None
@@ -366,7 +673,7 @@ class LLMService:
                 step_generation_time = time.time() - first_token_time
                 last_step_generation_time = step_generation_time
 
-            # ---------- 构建工具调用列表（内存中） ----------
+            # ---------- 构建工具调用列表 ----------
             tool_calls = {}
             for idx, tc in tool_calls_by_index.items():
                 tool_calls[tc["id"]] = tc
@@ -402,195 +709,150 @@ class LLMService:
             current_messages.append(assistant_msg)
 
             # ---------- 执行工具 ----------
+            # 先构建任务列表
+            tool_tasks = []
+            tool_infos = []  # 保存原始顺序
             for idx, tc in valid_calls.items():
-                if idx not in tool_preview_active:
-                    logger.warning(f"跳过工具 {tc['function']['name']}，因为未找到预览状态")
-                    continue
+                # 将每个工具的处理封装为异步任务
+                task = self._process_single_tool(
+                    idx=idx,
+                    tc=tc,
+                    tool_preview_active=tool_preview_active,
+                    segments=segments,
+                    current_messages=current_messages,
+                    chat_id=chat_id,
+                    mcp_manager=mcp_manager,
+                    approval_mode=approval_mode,
+                    auto_decision=auto_decision,
+                    tool_timeout=tool_timeout,
+                    retry_count=retry_count,
+                    retry_delay=retry_delay,
+                    request=request
+                )
+                tool_tasks.append(task)
+                tool_infos.append((idx, tc))
 
-                local_call_id = tool_preview_active[idx]['call_id']
-                func_name = tc["function"]["name"] or "未知工具"
-                raw_args = tc["function"]["arguments"]
+            # 执行所有任务（根据 enable_parallel 决定串/并行）
+            if enable_parallel and len(tool_tasks) > 1:
+                # 并行执行，使用 Semaphore 控制并发数
+                semaphore = asyncio.Semaphore(max_parallel)
+                async def run_with_semaphore(task):
+                    async with semaphore:
+                        return await task
+                # 所有任务并发执行
+                results = await asyncio.gather(
+                    *[run_with_semaphore(task) for task in tool_tasks],
+                    return_exceptions=False
+                )
+            else:
+                # 串行执行
+                results = []
+                for task in tool_tasks:
+                    results.append(await task)
 
-                if not tool_preview_active[idx].get('preview_sent', False):
-                    yield f"<!--tool_preview:start:{local_call_id}:{func_name}-->"
-                    tool_preview_active[idx]['preview_sent'] = True
+            # 处理结果（按原始顺序）
+            for (idx, tc), result in zip(tool_infos, results):
+                # 如果结果异常
+                if isinstance(result, Exception):
+                    outputs = [f"\n❌ 工具 `{tc['function']['name']}` 处理异常: {str(result)}\n"]
+                    new_segments = []
+                    call_id = None
+                    failed = True
+                    status = 'error'
+                    err_msg = str(result)
+                    result_str = ''
+                    tool_msg = f"工具处理异常: {str(result)}"
+                else:
+                    outputs = result['outputs']
+                    new_segments = result['new_segments']
+                    call_id = result['call_id']
+                    failed = result['failed']
+                    status = result['status']
+                    err_msg = result['error_message']
+                    result_str = result['result_str']
+                    tool_msg = result['tool_message_content']
 
-                try:
-                    args = json.loads(raw_args) if raw_args else {}
-                except json.JSONDecodeError as e:
-                    error_detail = f"JSON 解析失败: {e}\n原始参数: {raw_args[:200]}"
-                    yield f"\n❌ 工具 `{func_name}` 参数错误：{error_detail}\n"
-                    args = {"raw": raw_args, "parse_error": str(e)}
+                # 1. 依次 yield 本工具的所有输出（保证顺序）
+                for out in outputs:
+                    yield out
 
-                # 更新数据库中的参数
-                if chat_id:
-                    try:
-                        await update_tool_call_arguments(local_call_id, args)
-                    except Exception as e:
-                        logger.error(f"[数据库] 更新参数失败：{e}")
+                # 2. 更新 segments（替换或新增）
+                for seg in new_segments:
+                    if seg.get('type') == 'tool_call':
+                        seg_id = seg['content'].get('id')
+                        if seg_id:
+                            # 在 segments 中查找并更新
+                            found = False
+                            for i, existing in enumerate(segments):
+                                if existing.get('type') == 'tool_call' and existing.get('content', {}).get('id') == seg_id:
+                                    segments[i] = seg
+                                    found = True
+                                    break
+                            if not found:
+                                segments.append(seg)
+                    else:
+                        segments.append(seg)
 
-                if is_dangerous_tool(func_name):
-                    # 1. 写入 pending_confirmation 状态
-                    await update_tool_call_status(local_call_id, "pending_confirmation")
+                # 3. 更新连续失败计数（注意：并行时仍按顺序更新，保证连续性判断正确）
+                if failed:
+                    consecutive_failures += 1
+                else:
+                    consecutive_failures = 0
 
-                    # 2. 通过流通知前端弹框
-                    args_preview = json.dumps(args, ensure_ascii=False)
-                    if len(args_preview) > 2000:
-                        args_preview = args_preview[:2000] + "...(已截断)"
-                    yield f"<!--tool_confirm_required:{local_call_id}:{func_name}:{args_preview}-->"
+                # 4. 向 current_messages 追加工具结果（用于下一轮）
+                if call_id and tool_msg:
+                    current_messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": tool_msg
+                    })
 
-                    # 3. 轮询等待用户响应（最多等 120 秒）
+            # 所有工具执行完成后，输出结束标记
+            yield "<!--tool_calls:end-->"
+
+            # 连续失败阈值判断
+            if consecutive_failures >= max_consecutive_failures:
+                # 根据失败行为配置决定处理方式
+                if failure_behavior == 'stop':
+                    yield f"\n❌ 工具连续失败 {consecutive_failures} 次，已停止执行（失败行为：停止）\n"
+                    break
+                elif failure_behavior == 'ask':
+                    # 1. 创建决策记录
+                    msg = f"⚠️ 工具连续失败 {consecutive_failures} 次，是否继续执行？"
+                    decision_id = await create_decision(
+                        chat_id=chat_id,
+                        turn_index=turn_index,
+                        message=msg,
+                        timeout_seconds=50
+                    )
+                    # 2. 向前端发送询问标记
+                    yield f"<!--ask_decision:{decision_id}:{msg}-->"
+                    
+                    # 3. 轮询等待用户响应（最多 50 秒）
                     confirmed = False
-                    for _ in range(120):
+                    for _ in range(50):
                         if request and await request.is_disconnected():
                             break
-                        status = await get_tool_call_status(local_call_id)
-                        if status == "confirmed":
+                        status = await get_decision_status(decision_id)
+                        if status == "continue":
                             confirmed = True
                             break
-                        if status == "cancelled":
+                        elif status == "stop":
                             confirmed = False
                             break
                         await asyncio.sleep(1)
-
-                    # 4. 用户取消（或超时）→ 跳过执行
+                    
+                    # 4. 超时或断开，视为 stop
                     if not confirmed:
-                        yield f"<!--tool_status:{local_call_id}:rejected-->"
-                        yield f"<!--tool_preview:end:{local_call_id}-->"
-
-                        # 更新 segments 内的状态
-                        for seg in segments:
-                            if seg.get('type') == 'tool_call' and seg.get('content', {}).get('id') == local_call_id:
-                                seg['content']['status'] = 'rejected'
-                                seg['content']['error_message'] = '用户拒绝了此工具调用'
-                                break
-
-                        # 记录数据库最终状态
-                        await update_tool_call(
-                            call_id=local_call_id,
-                            arguments=args,
-                            result="用户拒绝了此工具调用",
-                            status="rejected",
-                            execution_time=0,
-                            error_message="用户拒绝",
-                            meta_data={}
-                        )
-
-                        # 向模型回写拒绝消息
-                        current_messages.append({
-                            "role": "tool",
-                            "tool_call_id": local_call_id,
-                            "content": "用户拒绝了此工具调用，请直接回答工具被拒绝，无法执行。"
-                        })
-                        del tool_preview_active[idx]
-                        continue  # 跳过下方真实的 execute_tool
-
-                # 执行工具
-                start_time = time.time()
-                failed = False
-                try:
-                    result = await execute_tool(func_name, args, mcp_manager)
-                    if isinstance(result, str):
-                        try:
-                            result_obj = json.loads(result)
-                            if isinstance(result_obj, dict) and result_obj.get("success") is False:
-                                failed = True
-                        except json.JSONDecodeError:
-                            if result.startswith("工具执行出错:"):
-                                failed = True
-                    elif isinstance(result, dict) and result.get("success") is False:
-                        failed = True
-                except Exception as e:
-                    error_msg = str(e)
-                    if len(error_msg) > 1000:
-                        error_msg = error_msg[:1000] + "...(错误信息过长已截断)"
-                    result = f"工具执行出错: {error_msg}"
-                    failed = True
-
-                exec_time_ms = int((time.time() - start_time) * 1000)
-
-                # 统一格式化工具返回内容
-                if isinstance(result, dict):
-                    result_str = json.dumps(result, ensure_ascii=False)
-                else:
-                    result_str = str(result)
-
-                # ===== 新增：大文件落盘逻辑 =====
-                MAX_DB_LEN = 20000  # 设定一个阈值，比如超过2万字符就落盘
-                meta_data = {}
-                final_db_result = ""
-
-                if len(result_str) > MAX_DB_LEN:
-                    # 1. 落盘写入文件
-                    file_dir = f"{chat_id}/{local_call_id}.txt"
-                    file_path = f"{config.cache_dir}/{file_dir}"
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.write(result_str)
-
-                    # 2. 准备元数据（存入数据库的 meta_data 字段）
-                    meta_data = {
-                        "storage_type": "file",
-                        "file_path": file_dir,
-                        "size": len(result_str),
-                        "preview": result_str[:1000]  # 截取前1000字用于前端展示摘要
-                    }
-                    # 3. 数据库实际的 result 字段只存一个简短提示，不存巨大文本
-                    final_db_result = f"[数据量过大(共{len(result_str)}字)，完整内容已保存至本地文件]"
-                else:
-                    # 小数据直接存
-                    final_db_result = result_str
-                # ===================================
-
-                # 更新结果和状态 (存入数据库，同时带上 meta_data)
-                if chat_id:
-                    try:
-                        await update_tool_call(
-                            call_id=local_call_id,
-                            arguments=args,
-                            result=final_db_result,    # 存入截断提示/小数据
-                            status="error" if failed else "success",
-                            execution_time=exec_time_ms,
-                            error_message=result if failed else None,
-                            meta_data=meta_data        # 🟢 关键：存入文件路径和预览
-                        )
-                    except Exception as e:
-                        logger.error(f"[数据库] 更新结果失败：{e}")
-
-                # ===== 将状态同步写入到 segments 列表中 =====
-                status_val = "error" if failed else "success"
-                err_msg = result if failed else None
-                
-                # 遍历已经记录在 segments 里的 tool_call 片段，把状态填进去
-                for seg in segments:
-                    if seg.get('type') == 'tool_call' and seg.get('content', {}).get('id') == local_call_id:
-                        seg['content']['status'] = status_val
-                        if err_msg:
-                            seg['content']['error_message'] = err_msg  # 把失败信息也带上前端渲染
+                        yield f"\n⚠️ 用户停止执行或未响应，已终止。\n"
                         break
-
-                # 更新连续失败计数
-                if failed:
-                    consecutive_failures += 1
-                    yield f"<!--tool_status:{local_call_id}:error-->"
-                else:
+                    
+                    # 5. 用户选择继续
+                    yield f"\n✅ 用户选择继续执行，正在重试工具调用...\n"
                     consecutive_failures = 0
-                    yield f"<!--tool_status:{local_call_id}:success-->"
-
-                yield f"<!--tool_preview:end:{local_call_id}-->"
-                del tool_preview_active[idx]
-
-                # 将工具结果加入内存（用于下一轮）
-                current_messages.append({
-                    "role": "tool",
-                    "tool_call_id": local_call_id,
-                    "content": result_str
-                })
-
-            yield "<!--tool_calls:end-->"
-
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                force_final = True
+                    max_steps += 3  # 增加重试步骤数
+                else:
+                    force_final = True
 
         # ---------- 最终 token 统计 ----------
         if last_step_usage and last_step_usage["completion_tokens"] > 0:

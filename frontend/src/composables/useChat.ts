@@ -4,6 +4,7 @@ import { useDialog } from 'naive-ui'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
+import { useStrategyStore } from '@/stores/strategy'
 import { useMessage } from 'naive-ui'
 import { cleanMessages } from '@/utils/message'
 import { useToolStore } from '@/stores/tools'
@@ -15,6 +16,8 @@ export function useChat() {
   const toolStore = useToolStore()
   const configStore = useConfigStore()
   const profileStore = useProfileStore()
+  const strategyStore = useStrategyStore()
+
   const message = useMessage()
 
   const currentInput = ref('')
@@ -67,7 +70,7 @@ export function useChat() {
       }, prettyArgs)
     ])
 
-    let countdown = 30 // 设置倒计时秒数
+    let countdown = 45 // 设置倒计时秒数
     let timer: number | null = null
 
     const dialogInstance  = dialog.warning({
@@ -129,12 +132,63 @@ export function useChat() {
       streamingContent.value = fullText
 
       // 检测危险工具确认请求
-      const confirmMatch = chunk.match(
-        /<!--tool_confirm_required:([^:]+):([^:]*):([\s\S]*?)-->/
-      )
+      const confirmMatch = chunk.match(/<!--tool_confirm_required:([^:]+):([^:]*):([\s\S]*?)-->/)
       if (confirmMatch) {
         const [, callId, funcName, argsJson] = confirmMatch
         requestToolConfirm(callId, funcName, argsJson)
+      }
+
+      const decisionMatch = chunk.match(/<!--ask_decision:(\d+):([^:]*?)-->/)
+      if (decisionMatch) {
+          const decisionId = parseInt(decisionMatch[1])
+          const message = decisionMatch[2]
+          let countdown = 45 // 设置倒计时秒数
+          let timer: number | null = null
+
+          const dialogInstance = dialog.warning({
+              title: '⚠️ 需要您的决策',
+              content: message,
+              positiveText: '继续执行',
+              negativeText: `停止执行 (${countdown}s)`,
+              maskClosable: false,
+              closeOnEsc: false,
+              onPositiveClick: () => {
+                  if (timer) clearInterval(timer)
+                  // 用户选择继续
+                  fetch('/api/decisions/update', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ decision_id: decisionId, choice: 'continue' })
+                  }).catch(err => console.error('更新决策失败', err))
+              },
+              onNegativeClick: () => {
+                  if (timer) clearInterval(timer)
+                  // 用户手动停止
+                  fetch('/api/decisions/update', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+                  }).catch(err => console.error('更新决策失败', err))
+              }
+          })
+
+          // 启动倒计时
+          timer = window.setInterval(() => {
+              countdown--
+              if (countdown <= 0) {
+                  if (timer) clearInterval(timer)
+                  // 超时自动停止
+                  fetch('/api/decisions/update', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+                  }).catch(err => console.error('更新决策失败', err))
+                  dialogInstance.destroy()
+              } else {
+                  // 动态更新按钮文字
+                  dialogInstance.negativeText = `停止执行 (${countdown}s)`
+              }
+          }, 1000)
       }
 
       // 尝试从流中提取最终的结构化 JSON
@@ -254,7 +308,8 @@ export function useChat() {
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
-        turn_index: assistantTurnIndex
+        turn_index: assistantTurnIndex,
+        params: strategyStore.getBackendParams()
       })
 
       setTimeout(() => scrollToBottom(), 160)
@@ -344,7 +399,8 @@ export function useChat() {
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
-        turn_index: assistantTurnIndex
+        turn_index: assistantTurnIndex,
+        params: strategyStore.getBackendParams()
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
@@ -420,16 +476,17 @@ export function useChat() {
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
-        turn_index: assistantMsg.turn_index
+        turn_index: assistantMsg.turn_index,
+        params: strategyStore.getBackendParams()
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      // ✅ 流式读取，解构出 finalSegments
+      // 流式读取，解构出 finalSegments
       const { finalSegments } = await readStream(response)
 
       if (chatStore.activeChatId === chatId) {
         if (finalSegments) {
-          // ✅ 精准更新本地占位消息
+          // 精准更新本地占位消息
           const chat = chatStore.chats.find(c => c.id === chatId)
           if (chat) {
             const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')

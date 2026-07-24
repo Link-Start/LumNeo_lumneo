@@ -10,72 +10,74 @@
         此处仅用于查看、编辑或遗忘已习得的技能。
       </div>
     </n-alert>
-
-    <!-- 技能列表 -->
-    <n-list hoverable clickable :show-divider="false" v-if="allSkillItems.length">
-      <n-list-item v-for="skill in allSkillItems" :key="skill.id" style="background-color: rgba(125,125,125,.2);margin-bottom:4px;">
-        <template #suffix>
-          <n-space>
-            <n-button text size="small" @click="openEditDialog(skill)">
-              <template #icon><n-icon><create-outline /></n-icon></template>
-              编辑
-            </n-button>
-            <n-popconfirm
-              @positive-click="() => deleteSkill(skill.id)"
-              negative-text="取消"
-              positive-text="确定遗忘"
-              :negative-button-props="{ size: 'tiny' }"
-              :positive-button-props="{ size: 'tiny', type: 'error' }"
-            >
-              <template #trigger>
-                <n-button text size="small" type="error">
-                  <template #icon><n-icon><trash-outline /></n-icon></template>
-                  遗忘
-                </n-button>
-              </template>
-              <div style="max-width: 300px">
-                <p style="margin-bottom: 8px">确定让所有角色遗忘技能「{{ skill.name }}」吗？</p>
-                <p style="color: #999; font-size: 12px; margin: 0">
-                  此操作将永久移除此技能，相关角色将失去该能力。
-                </p>
-              </div>
-            </n-popconfirm>
-          </n-space>
-        </template>
-        <div class="skill-item-content">
-          <div class="skill-header">
-            <n-text strong style="font-size:16px">{{ skill.name }}</n-text>
-            <n-tag v-if="skill.isGlobal" size="small" type="success" :bordered="false" style="margin-left: 8px;">
-              全角色可见
-            </n-tag>
-          </div>
-          <n-text depth="3" style="font-size: 0.8rem">
-            <n-ellipsis :line-clamp="2" :tooltip="{delay: 500}">
-                {{ skill.description || '暂无描述' }}
-            </n-ellipsis>
-          </n-text>
-          <div v-if="skill.usedByProfiles?.length" style="margin-top: 4px">
-            <n-space :size="4" style="margin-top: 2px">
-              <n-tag
-                v-for="p in skill.usedByProfiles"
-                :key="p.id"
-                size="small"
-                :bordered="false"
-                type="info"
+    <n-skeleton v-if="loading" height="133px" width="100%" :sharp="false"/>
+    <div v-else>
+      <!-- 技能列表 -->
+      <n-list hoverable clickable :show-divider="false" v-if="allSkillItems.length">
+        <n-list-item v-for="skill in allSkillItems" :key="skill.id" style="background-color: rgba(125,125,125,.2);margin-bottom:4px;">
+          <template #suffix>
+            <n-space>
+              <n-button text size="small" @click="openEditDialog(skill)">
+                <template #icon><n-icon><create-outline /></n-icon></template>
+                编辑
+              </n-button>
+              <n-popconfirm
+                @positive-click="() => deleteSkill(skill.id)"
+                negative-text="取消"
+                positive-text="确定遗忘"
+                :negative-button-props="{ size: 'tiny' }"
+                :positive-button-props="{ size: 'tiny', type: 'error' }"
               >
-                {{ p.name }}
-              </n-tag>
+                <template #trigger>
+                  <n-button text size="small" type="error">
+                    <template #icon><n-icon><trash-outline /></n-icon></template>
+                    遗忘
+                  </n-button>
+                </template>
+                <div style="max-width: 300px">
+                  <p style="margin-bottom: 8px">确定让所有角色遗忘技能「{{ skill.name }}」吗？</p>
+                  <p style="color: #999; font-size: 12px; margin: 0">
+                    此操作将永久移除此技能，相关角色将失去该能力。
+                  </p>
+                </div>
+              </n-popconfirm>
             </n-space>
+          </template>
+          <div class="skill-item-content">
+            <div class="skill-header">
+              <n-text strong style="font-size:16px">{{ skill.name }}</n-text>
+              <n-tag v-if="skill.isGlobal" size="small" type="success" :bordered="false" style="margin-left: 8px;">
+                全角色可见
+              </n-tag>
+            </div>
+            <n-text depth="3" style="font-size: 0.8rem">
+              <n-ellipsis :line-clamp="2" :tooltip="{delay: 500}">
+                  {{ skill.description || '暂无描述' }}
+              </n-ellipsis>
+            </n-text>
+            <div v-if="skill.usedByProfiles?.length" style="margin-top: 4px">
+              <n-space :size="4" style="margin-top: 2px">
+                <n-tag
+                  v-for="p in skill.usedByProfiles"
+                  :key="p.id"
+                  size="small"
+                  :bordered="false"
+                  type="info"
+                >
+                  {{ p.name }}
+                </n-tag>
+              </n-space>
+            </div>
           </div>
-        </div>
-      </n-list-item>
-    </n-list>
+        </n-list-item>
+      </n-list>
 
-    <n-empty v-else description="尚无角色习得任何技能" style="padding: 24px 0">
-      <template #extra>
-        <n-text depth="3">前往功能设置 → 角色管理 → 习得技能，踏上修行之路</n-text>
-      </template>
-    </n-empty>
+      <n-empty v-else description="尚无角色习得任何技能" style="padding: 24px 0">
+        <template #extra>
+          <n-text depth="3">前往功能设置 → 角色管理 → 习得技能，踏上修行之路</n-text>
+        </template>
+      </n-empty>
+    </div>
   </n-space>
 
   <!-- 编辑技能对话框 -->
@@ -125,12 +127,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import {
-  NList, NListItem, NButton, NSpace, NText, NTag, NPopconfirm, NEmpty, NModal,
-  NForm, NFormItem, NInput, NRadioGroup, NRadio, NIcon, NDivider, NAlert, NEllipsis,
-  useMessage
-} from 'naive-ui'
+import { NList, NListItem, NButton, NSpace, NText, NTag, NPopconfirm, NEmpty, NModal, NSkeleton,
+  NForm, NFormItem, NInput, NRadioGroup, NRadio, NIcon, NDivider, NAlert, NEllipsis, useMessage } from 'naive-ui'
 import { CreateOutline, TrashOutline } from '@vicons/ionicons5'
+
 
 interface ProfileInfo {
   id: number
@@ -148,6 +148,7 @@ interface SkillItem {
 const message = useMessage()
 const formRef = ref()
 const showTip = ref(true)
+const loading = ref(false)
 
 const editRules = {
   name: { required: true, message: '请输入技能名称', trigger: ['blur', 'input'] }
@@ -163,6 +164,7 @@ const editForm = reactive({
 })
 
 async function loadSkills() {
+  loading.value = true
   try {
     const res = await fetch('/api/skills/list?include_profiles=true')
     const data = await res.json()
@@ -173,8 +175,10 @@ async function loadSkills() {
       isGlobal: item.is_global,
       usedByProfiles: item.used_by_profiles || []
     }))
+    loading.value = false
   } catch (e) {
     message.error('加载技能列表失败')
+    loading.value = false
   }
 }
 

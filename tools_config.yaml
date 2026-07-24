@@ -1,4 +1,15 @@
 tools:
+  - name: system_test_fail
+    title: "测试工具"
+    description: "时间验证器"
+    parameters:
+      type: object
+      properties: {}
+    meta:
+      dangerous: false
+    module: backend.system_tools.test_tool
+    function_name: test_fail
+
   - name: system_get_weather
     title: 获取天气
     description: 获取指定城市的当前或未来天气信息。

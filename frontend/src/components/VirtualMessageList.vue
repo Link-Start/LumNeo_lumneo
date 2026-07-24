@@ -507,7 +507,7 @@ onUnmounted(() => {
 }
 .streaming {
   border: 1px solid var(--accent);
-  padding: 12px;
+  padding-top: 12px;
   animation: breathe 0.8s ease-in-out infinite;
 }
 @keyframes breathe {
