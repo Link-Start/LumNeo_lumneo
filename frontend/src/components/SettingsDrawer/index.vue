@@ -1,7 +1,7 @@
 <template>
   <n-drawer :show="show" :auto-focus="false" @update:show="(val: boolean) => emit('update:show', val)" width="470">
     <n-drawer-content title="系统设置" closable>
-      <n-tabs default-value="model">
+      <n-tabs v-model:value="activeTab">
         <n-tab-pane name="model" tab="模型管理">
           <ModelManager/>
         </n-tab-pane>
@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui'
 import ModelManager from './ModelManager.vue'
 import StrategyManager from './StrategyManager.vue'
@@ -37,6 +38,7 @@ import SettingsManager from './SettingsManager.vue'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ 'update:show': [value: boolean] }>()
+const activeTab = ref('model')
 </script>
 
 <style scoped>

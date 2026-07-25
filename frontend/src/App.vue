@@ -1,6 +1,6 @@
 <template>
   <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme="naiveTheme" :theme-overrides="themeOverrides">
-    <n-message-provider>
+    <n-message-provider :max="3">
       <n-dialog-provider>
         <router-view />
       </n-dialog-provider>

@@ -1,11 +1,11 @@
 // src/composables/useChat.ts
 import { ref, h } from 'vue'
-import { useDialog } from 'naive-ui'
+import { useDialog, useMessage, NIcon } from 'naive-ui'
+import { Warning } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useStrategyStore } from '@/stores/strategy'
-import { useMessage } from 'naive-ui'
 import { cleanMessages } from '@/utils/message'
 import { useToolStore } from '@/stores/tools'
 import type { UploadedFile } from '@/composables/useFileUpload'
@@ -74,7 +74,8 @@ export function useChat() {
     let timer: number | null = null
 
     const dialogInstance  = dialog.warning({
-      title: '⚠️ 危险工具调用确认',
+      icon: () => h(NIcon, {component: Warning, color: 'var(--warning-color)' }),
+      title: '工具调用确认',
       content: () => contentNode,
       positiveText: '确认执行',
       negativeText: `取消执行 (${countdown}s)`,
@@ -105,6 +106,69 @@ export function useChat() {
     }, 1000)
   }
 
+  // 调用后端接口确认工具调用
+  function showDecisionDialog(decisionId: number, data: any) {
+    let countdown = 45
+    let timer: number | null = null
+
+    // 构建内容 VNode
+    const contentNode = h('div', { style: { fontSize: '14px', lineHeight: '1.6' } }, [
+        h('p', { style: { marginBottom: '8px' } }, [
+            '❌ 工具调用失败，详细信息如下：'
+        ]),
+        h('ul', { style: { listStyle: 'none', padding: '0', margin: '0 0 12px 0' } }, [
+            h('li', {}, [`工具：`, h('strong', {}, data.tool_name || '未知')]),
+            h('li', {}, [`失败原因：`, h('span', { style: { color: 'var(--error-color)' } }, data.reason || '未知')]),
+            h('li', {}, [`已尝试次数：${data.attempts || 0} 次`]),
+            h('li', {}, [`已耗时：${data.elapsed || 0} 秒`]),
+            data.suggestion ? h('li', {}, [`建议：`, h('span', { style: { color: 'var(--info-color)' } }, data.suggestion)]) : null
+        ].filter(Boolean)),
+        h('p', { style: { marginTop: '12px', fontSize: '13px', color: 'var(--text-color-secondary)' } }, 
+            '是否继续尝试其他方法？')
+    ])
+
+    const dialogInstance = dialog.warning({
+        icon: () => h(NIcon, { component: Warning, color: 'var(--warning-color)' }),
+        title: '⏳ 工具执行遇阻',
+        content: () => contentNode,
+        positiveText: '继续',
+        negativeText: `停止 (${countdown}s)`,
+        maskClosable: false,
+        closeOnEsc: false,
+        onPositiveClick: () => {
+            if (timer) clearInterval(timer)
+            fetch('/api/decisions/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision_id: decisionId, choice: 'continue' })
+            }).catch(err => console.error('更新失败', err))
+        },
+        onNegativeClick: () => {
+            if (timer) clearInterval(timer)
+            fetch('/api/decisions/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+            }).catch(err => console.error('更新失败', err))
+        }
+    })
+
+    timer = window.setInterval(() => {
+        countdown--
+        if (countdown <= 0) {
+            if (timer) clearInterval(timer)
+            fetch('/api/decisions/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+            }).catch(err => console.error('更新决策失败', err))
+            dialogInstance.destroy()
+        } else {
+            dialogInstance.negativeText = `停止 (${countdown}s)`
+        }
+    }, 1000)
+  }
+
   async function confirmTool(callId: string, confirmed: boolean) {
     try {
       await fetch('/api/tool-calls/confirm', {
@@ -131,66 +195,54 @@ export function useChat() {
       fullText += chunk
       streamingContent.value = fullText
 
-      // 检测危险工具确认请求
+      // 检测工具确认请求
       const confirmMatch = chunk.match(/<!--tool_confirm_required:([^:]+):([^:]*):([\s\S]*?)-->/)
       if (confirmMatch) {
         const [, callId, funcName, argsJson] = confirmMatch
         requestToolConfirm(callId, funcName, argsJson)
       }
-
-      const decisionMatch = chunk.match(/<!--ask_decision:(\d+):([^:]*?)-->/)
+      // 检测决策请求
+      const decisionMatch = chunk.match(/<!--ask_decision:(\d+):([\s\S]*?)-->/)
       if (decisionMatch) {
           const decisionId = parseInt(decisionMatch[1])
-          const message = decisionMatch[2]
-          let countdown = 45 // 设置倒计时秒数
-          let timer: number | null = null
-
-          const dialogInstance = dialog.warning({
-              title: '⚠️ 需要您的决策',
-              content: message,
-              positiveText: '继续执行',
-              negativeText: `停止执行 (${countdown}s)`,
-              maskClosable: false,
-              closeOnEsc: false,
-              onPositiveClick: () => {
-                  if (timer) clearInterval(timer)
-                  // 用户选择继续
-                  fetch('/api/decisions/update', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ decision_id: decisionId, choice: 'continue' })
-                  }).catch(err => console.error('更新决策失败', err))
-              },
-              onNegativeClick: () => {
-                  if (timer) clearInterval(timer)
-                  // 用户手动停止
-                  fetch('/api/decisions/update', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
-                  }).catch(err => console.error('更新决策失败', err))
-              }
-          })
-
-          // 启动倒计时
-          timer = window.setInterval(() => {
-              countdown--
-              if (countdown <= 0) {
-                  if (timer) clearInterval(timer)
-                  // 超时自动停止
-                  fetch('/api/decisions/update', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
-                  }).catch(err => console.error('更新决策失败', err))
-                  dialogInstance.destroy()
-              } else {
-                  // 动态更新按钮文字
-                  dialogInstance.negativeText = `停止执行 (${countdown}s)`
-              }
-          }, 1000)
+          const rawMessage = decisionMatch[2]
+          let decisionData: any = { message: rawMessage }
+          try {
+              decisionData = JSON.parse(rawMessage)
+          } catch (e) {
+              // 兼容旧版纯文本，降级处理
+              decisionData = { message: rawMessage, options: [{ label: '继续', value: 'continue' }, { label: '停止', value: 'stop' }] }
+          }
+          showDecisionDialog(decisionId, decisionData)
+      }
+      // 检测工具重试开始（<!--tool_retry:start:funcName-->）
+      const retryStartMatch = chunk.match(/<!--tool_retry:start:([^:]+)-->/)
+      if (retryStartMatch) {
+        const [, funcName] = retryStartMatch
+        message.info(
+          `正在尝试工具：${toolStore.toolsInfo[funcName]?.title || funcName}，请稍等...`,
+          { duration: 5000 }
+        )
       }
 
+      // 检测工具重试结束（<!--tool_retry:end:funcName-->）
+      const retryEndMatch = chunk.match(/<!--tool_retry:end:([^:]+)-->/)
+      if (retryEndMatch) {
+        const [, funcName] = retryEndMatch
+        message.success(
+          `已切换至工具：${toolStore.toolsInfo[funcName]?.title || funcName}，继续执行...`,
+          { duration: 5000 }
+        )
+      }
+      // 检测工具重试次数
+      const retryMatch = chunk.match(/<!--tool_retry:([^:]+):([^:]+):(\d+)\/(\d+):([^:]+)-->/)
+      if (retryMatch) {
+        const [, callId, funcName, attempt, maxRetries, reason] = retryMatch
+        message.warning(
+          `工具 「${toolStore.toolsInfo[funcName]?.title || funcName}」 第 ${attempt}/${maxRetries} 次重试，原因：（${reason}）`,
+          { duration: 5000 }
+        )
+      }
       // 尝试从流中提取最终的结构化 JSON
       const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
       if (match) {
