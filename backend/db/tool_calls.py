@@ -233,3 +233,22 @@ async def delete_tool_calls_by_chat_id(chat_id: str) -> int:
         return cursor.rowcount
     finally:
         await db.close()
+
+async def update_tool_call_status(call_id: str, status: str):
+    """仅更新状态字段，用于 pending_confirmation / confirmed / cancelled"""
+    db = await get_db()
+    try:
+        await db.execute("UPDATE tool_calls SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE call_id = ?", (status, call_id))
+        await db.commit()
+    finally:
+        await db.close()
+
+async def get_tool_call_status(call_id: str) -> Optional[str]:
+    """轻量级查询：仅获取工具调用的当前状态（用于轮询）"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT status FROM tool_calls WHERE call_id = ?", (call_id,))
+        row = await cursor.fetchone()
+        return row['status'] if row else None
+    finally:
+        await db.close()

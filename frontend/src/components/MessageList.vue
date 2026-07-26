@@ -170,11 +170,12 @@ import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
 import TokenUsageNode from '@/components/CustomNodes/TokenUsageNode.vue'
 import ImageNode from '@/components/CustomNodes/ImageNode.vue'
 import LinkNode from '@/components/CustomNodes/LinkNode.vue'
+import PlanNode from '@/components/CustomNodes/PlanNode.vue'
 import MessageToc from '@/components/MessageToc.vue'
 import ProfilePanel from '@/components/ProfilePanel.vue'
 
 
-const customHtmlTags = ['thinking-group', 'reasoning', 'toolcalls', 'tokenusage']
+const customHtmlTags = ['thinking-group', 'reasoning', 'toolcalls', 'tokenusage', 'plan']
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
@@ -406,7 +407,8 @@ onMounted(() => {
     'thinking-group': ThinkingGroupNode,
     tokenusage: TokenUsageNode,
     image: ImageNode,
-    link: LinkNode
+    link: LinkNode,
+    plan: PlanNode
   })
   // 初始化时滚动到底部
   nextTick(() => scrollToLatest())

@@ -24,7 +24,7 @@
               @click.stop="openDetail(tool.call_id)"
             >
               <span class="item-status" :class="getStatusClass(tool)">
-                <m-svg :name="getStatusIcon(tool)" :size="tool.status === 'error' ? 20 : 16"/>
+                <m-svg :name="getStatusIcon(tool)" :size="['error', 'rejected'].includes(tool.status) ? 22 : 20"/>
               </span>
               <span class="item-name">{{ toolStore.toolsInfo[tool.name]?.title || tool.name }} #{{ (index as number)+1 }}</span>
               <span class="item-arrow">
@@ -95,7 +95,7 @@ const isLoading = computed(() => {
 
 // 标题动态显示
 const title = computed(() => {
-  // ✅ 新增兜底：如果正在 loading，但列表为空，说明参数还在生成中
+  // 如果正在 loading，但列表为空，说明参数还在生成中
   if (isLoading.value && toolsList.value.length === 0) {
     return '正在准备调用工具...'
   }
@@ -131,6 +131,7 @@ function openDetail(callId: string) {
 function getStatusClass(tool: { call_id: string; name: string; streaming: boolean; status?: string }) {
   if (tool.streaming) return 'status-calling'
   if (tool.status === 'error') return 'status-error'
+  if (tool.status === 'rejected') return 'status-rejected'
   return 'status-success'
 }
 
@@ -138,6 +139,7 @@ function getStatusClass(tool: { call_id: string; name: string; streaming: boolea
 function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean, status?: string }) {
   if (tool.streaming) return 'spinner'
   if (tool.status === 'error') return 'error'
+  if (tool.status === 'rejected') return 'ban'
   return 'check'
 }
 </script>
@@ -260,8 +262,8 @@ function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean
 }
 
 .item-status {
-  width: 18px;
-  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -274,6 +276,9 @@ function getStatusIcon(tool: { call_id: string; name: string; streaming: boolean
 .item-status.status-calling { 
   color: var(--primary-color, #1890ff);
   animation: spin 1s linear infinite;
+}
+.item-status.status-rejected { 
+  color: #faad14; /* 橙色表示警告/取消 */
 }
 
 @keyframes spin {

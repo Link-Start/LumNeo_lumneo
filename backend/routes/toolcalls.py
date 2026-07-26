@@ -8,6 +8,7 @@ from backend.db.tool_calls import (
     get_tool_call_by_id,
     get_tool_calls_by_call_ids,
     delete_tool_calls_by_call_ids,
+    update_tool_call_status,
 )
 from config_loader import config
 
@@ -17,6 +18,10 @@ router = APIRouter(prefix="/api/tool-calls", tags=["tool-calls"])
 # ---------- 请求体模型 ----------
 class BatchRequest(BaseModel):
     call_ids: List[str]
+
+class ConfirmRequest(BaseModel):
+    call_id: str
+    confirmed: bool
 
 # ---------- 接口 ----------
 @router.get("/{call_id}")
@@ -111,3 +116,23 @@ async def batch_delete_tool_calls(request: BatchRequest):
         "message": "Tool calls deleted successfully",
         "deleted_count": deleted_count
     }
+
+@router.post("/confirm")
+async def confirm_tool_call(request: ConfirmRequest):
+    """
+    前端用于确认或取消危险工具调用
+    """
+    record = await get_tool_call_by_id(request.call_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Tool call not found")
+        
+    # 如果已经不是等待确认状态，说明可能超时被后端自动取消了
+    if record.status != "pending_confirmation":
+        raise HTTPException(status_code=400, detail=f"操作无效，当前状态为: {record.status}")
+
+    status = "confirmed" if request.confirmed else "cancelled"
+    
+    # 仅更新状态字段
+    await update_tool_call_status(request.call_id, status)
+    
+    return {"message": f"Tool call {status}", "call_id": request.call_id}

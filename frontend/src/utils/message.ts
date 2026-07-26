@@ -72,7 +72,7 @@ export function processMessageContent(text: string, isStreaming = false): string
       const status = statusMatch[2]
       if (toolsMap.has(call_id)) {
         toolsMap.get(call_id)!.status = status
-        if (status === 'success' || status === 'error') {
+        if (status === 'success' || status === 'error' || status === 'rejected') {
           toolsMap.get(call_id)!.streaming = false
         }
       }
@@ -98,6 +98,23 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = toolCallsResult
   processedText = processedText.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
   processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
+
+  // 处理计划块 (流式)
+  let planMatch = processedText.match(/<<<PLAN_START>>>([\s\S]*?)(?:<<<PLAN_END>>>|$)/)
+  if (planMatch) {
+    const fullMatch = planMatch[0]
+    const inner = planMatch[1]
+    const hasEnd = fullMatch.includes('<<<PLAN_END>>>')
+    // 构造标签：未闭合时添加 loading，闭合后去掉
+    const tag = hasEnd
+      ? `<plan>${inner}</plan>`
+      : `<plan loading="true">${inner}</plan>`
+    // 替换整个匹配区间，并保留前后文本
+    processedText = processedText.replace(
+      /<<<PLAN_START>>>[\s\S]*?(?:<<<PLAN_END>>>|$)/,
+      tag
+    )
+  }
   // 3. 处理 Token 用量
   processedText = processedText.replace(
     /<!--token_usage:(.*?)-->/g,
@@ -165,13 +182,14 @@ export function renderStructuredContent(input: string | any[]): string {
         return `\n\n<reasoning time="${seg.duration || 0}">${seg.content}</reasoning>\n\n`
       } else if (seg.type === 'tool_call') {
         // 单个工具调用也用 toolcalls 标签展示
+        const isRejected = seg.content?.status === 'rejected'
         const tagContent = JSON.stringify({
           tools: [{
             call_id: seg.content?.id,
             name: seg.content?.name || '工具',
             streaming: false,
             status: seg.content?.status || 'success',
-            error_message: seg.content?.error_message || null
+            error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
           }],
           count: 1,
           loading: false
@@ -183,13 +201,16 @@ export function renderStructuredContent(input: string | any[]): string {
 
     // 全是 tool_call → 合并成一个 toolcalls 标签
     if (isAllToolCalls(thinkingItems)) {
-      const allTools = thinkingItems.map(seg => ({
-        call_id: seg.content?.id,
-        name: seg.content?.name || '工具',
-        streaming: false,
-        status: seg.content?.status || 'success',
-        error_message: seg.content?.error_message || null
-      }))
+      const allTools = thinkingItems.map(seg => {
+        const isRejected = seg.content?.status === 'rejected'
+        return {
+          call_id: seg.content?.id,
+          name: seg.content?.name || '工具',
+          streaming: false,
+          status: seg.content?.status || 'success',
+          error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
+        }
+      })
 
       const tagContent = JSON.stringify({
         tools: allTools,
@@ -226,16 +247,17 @@ export function renderStructuredContent(input: string | any[]): string {
           content: seg.content
         })
       } else if (seg.type === 'tool_call') {
+        const isRejected = seg.content?.status === 'rejected'
         tempTools.push({
           call_id: seg.content?.id,
           name: seg.content?.name || '工具',
           streaming: false,
           status: seg.content?.status || 'success',
-          error_message: seg.content?.error_message || null
+          error_message: seg.content?.error_message || (isRejected ? '用户已拒绝执行' : null)
         })
       }
     }
-    pushToolCalls() // 尾部剩余的工具调用
+    pushToolCalls()
 
     const jsonStr = JSON.stringify(mergedNodes)
     const encoded = btoa(unescape(encodeURIComponent(jsonStr)))
@@ -274,7 +296,7 @@ export function renderStructuredContent(input: string | any[]): string {
   resultHtml += flushThinkingGroup()
 
   // 清理多余换行
-  return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
+  return convertPlanTags(resultHtml.replace(/\n{3,}/g, '\n\n').trim())
 }
 
 // ============================================================
@@ -397,6 +419,28 @@ async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arg
   await fetchPromise
 
   return finalResult
+}
+
+// ============================================================
+// 第五部分：蓝图计划标签转换
+// ============================================================
+
+/**
+ * 将流式中的 <<<PLAN_START>>>...<<<PLAN_END>>> 转换为 <plan> 自定义标签
+ * @param text 原始文本
+ * @returns 转换后的文本
+ */
+function convertPlanTags(text: string): string {
+  if (!text) return text
+  
+  return text.replace(/<<<PLAN_START>>>([\s\S]*?)<<<PLAN_END>>>/g, (match, jsonStr) => {
+    try {
+      JSON.parse(jsonStr)
+      return `<plan>${jsonStr}</plan>`
+    } catch {
+      return match
+    }
+  })
 }
 
 interface ResponseType { 
