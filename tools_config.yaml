@@ -1,15 +1,4 @@
 tools:
-  - name: system_test_fail
-    title: "测试工具"
-    description: "时间验证器"
-    parameters:
-      type: object
-      properties: {}
-    meta:
-      dangerous: false
-    module: backend.system_tools.test_tool
-    function_name: test_fail
-
   - name: system_get_weather
     title: 获取天气
     description: 获取指定城市的当前或未来天气信息。
@@ -21,7 +10,7 @@ tools:
           description: 城市名称，例如：北京、上海
         days:
           type: integer
-          description: 查询天数范围。0表示当前时刻天气，1表示今日全天天气，2表示包含今日的两天天气。
+          description: 查询天数范围。0表示当前时刻天气，1表示今日全天天气，2表示包含今日的两天天气，以此类推。
       required: ["location", "days"]
     module: backend.system_tools.weather
     function_name: get_weather

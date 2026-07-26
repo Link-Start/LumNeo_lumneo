@@ -164,6 +164,26 @@ class LLMService:
         except Exception as e:
             logger.error(f"[数据库] 更新工具调用结果失败：{e}")
 
+    def _generate_suggestion(self, error_message: str) -> str:
+        """根据错误信息生成用户友好的建议"""
+        error_lower = error_message.lower()
+        
+        if "timeout" in error_lower or "timed out" in error_lower or "超时" in error_message:
+            return "工具执行超时，可尝试延长超时时间或检查网络延迟"
+        if "connection" in error_lower or "network" in error_lower or "无法连接" in error_message:
+            return "网络连接异常，请检查网络或后端服务是否可达"
+        if "permission" in error_lower or "denied" in error_lower or "权限" in error_message:
+            return "权限不足，请检查工具认证或授权配置"
+        if "argument" in error_lower or "parameter" in error_lower or "参数" in error_message:
+            return "工具参数错误，请检查输入格式或联系管理员"
+        if "not found" in error_lower or "不存在" in error_message:
+            return "目标资源不存在，请确认工具所需的前置条件"
+        if "internal" in error_lower or "server" in error_lower or "内部" in error_message:
+            return "工具后端服务异常，请稍后重试或联系管理员"
+        
+        # 兜底
+        return "工具执行失败，请检查工具参数、网络连接，或查看详细错误信息后重试"
+
     async def _handle_approval_flow(
         self, idx: str, tc: dict, tool_preview_active: dict, context: ToolExecutionContext
     ) -> Optional[ToolResult]:
@@ -707,13 +727,14 @@ class LLMService:
                     yield f"\n❌ 工具调用失败 {consecutive_failures} 次，已停止\n"
                     break
                 elif failure_behavior == 'ask':
+                    suggestion = self._generate_suggestion(last_failed_reason or "")
                     # 构建丰富的决策信息
                     decision_info = {
                         "reason": last_failed_reason or f"连续失败 {consecutive_failures} 次",
                         "tool_name": last_failed_tool or "未知工具",
                         "attempts": last_failed_attempts or consecutive_failures,
                         "elapsed": round(last_failed_elapsed, 1) or round(time.time() - start_time, 1),
-                        "suggestion": "检查网络或考虑延长工具超时时间",
+                        "suggestion": suggestion,
                         "threshold": max_consecutive_failures,
                         "total_attempts": consecutive_failures
                     }

@@ -132,7 +132,7 @@ export function useChat() {
         title: '⏳ 工具执行遇阻',
         content: () => contentNode,
         positiveText: '继续',
-        negativeText: `停止 (${countdown}s)`,
+        negativeText: `终止 (${countdown}s)`,
         maskClosable: false,
         closeOnEsc: false,
         onPositiveClick: () => {
@@ -164,7 +164,7 @@ export function useChat() {
             }).catch(err => console.error('更新决策失败', err))
             dialogInstance.destroy()
         } else {
-            dialogInstance.negativeText = `停止 (${countdown}s)`
+            dialogInstance.negativeText = `终止 (${countdown}s)`
         }
     }, 1000)
   }
@@ -211,7 +211,7 @@ export function useChat() {
               decisionData = JSON.parse(rawMessage)
           } catch (e) {
               // 兼容旧版纯文本，降级处理
-              decisionData = { message: rawMessage, options: [{ label: '继续', value: 'continue' }, { label: '停止', value: 'stop' }] }
+              decisionData = { message: rawMessage, options: [{ label: '继续', value: 'continue' }, { label: '终止', value: 'stop' }] }
           }
           showDecisionDialog(decisionId, decisionData)
       }
@@ -239,7 +239,7 @@ export function useChat() {
       if (retryMatch) {
         const [, callId, funcName, attempt, maxRetries, reason] = retryMatch
         message.warning(
-          `工具 「${toolStore.toolsInfo[funcName]?.title || funcName}」 第 ${attempt}/${maxRetries} 次重试，原因：（${reason}）`,
+          `第 ${attempt}/${maxRetries} 次重试 调用「${toolStore.toolsInfo[funcName]?.title || funcName}」工具，重试原因：${reason}`,
           { duration: 5000 }
         )
       }

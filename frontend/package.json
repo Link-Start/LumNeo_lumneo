@@ -12,13 +12,14 @@
     "@tanstack/vue-virtual": "^3.13.28",
     "@vicons/ionicons5": "^0.13.0",
     "katex": "^0.17.0",
-    "markstream-vue": "^1.0.7-beta.4",
+    "markstream-vue": "^1.0.7",
     "mermaid": "^11.16.0",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "stream-diffs": "^0.0.2",
     "vue": "^3.5.39",
+    "vue-draggable-plus": "^0.6.1",
     "vue-router": "^5.1.0"
   },
   "devDependencies": {

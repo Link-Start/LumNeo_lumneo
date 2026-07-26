@@ -1,8 +1,7 @@
 <template>
     <n-card title="调度控制" hoverable size="small">
         <n-form inline label-placement="left" label-width="auto" label-align="right">
-            <!-- 三个开关保持原样，已在 #label 中使用 tooltip -->
-            <n-form-item>
+            <!-- <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">
                         <template #trigger>
@@ -12,7 +11,7 @@
                     </n-tooltip>
                 </template>
                 <n-switch v-model:value="strategyStore.blueprintMode" />
-            </n-form-item>
+            </n-form-item> -->
             <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">
@@ -124,7 +123,7 @@
                         </template>
                         <pre style="font-family: 'v-sans, system-ui, -apple-system, BlinkMacSystemFont">当连续失败达到阈值时，系统采取的应对策略：
 - 继续：忽略该次失败，继续执行后续步骤（适合非关键路径）；
-- 停止：立即终止整个任务，标记为失败状态。后续所有步骤均不再执行；
+- 终止：立即终止整个任务，标记为失败状态。后续所有步骤均不再执行；
 - 询问我：暂停任务执行，向用户发出告警并请求下一步指令。用户可选择继续或终止；</pre>
                     </n-tooltip>
                 </template>
@@ -209,7 +208,7 @@ const failureThresholdOptions = [
 
 const behaviorOptions = [
     { label: '继续', value: 'continue' },
-    { label: '停止', value: 'stop' },
+    { label: '终止', value: 'stop' },
     { label: '询问我', value: 'ask' }
 ]
 </script>

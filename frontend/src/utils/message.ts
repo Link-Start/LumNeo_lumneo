@@ -98,6 +98,23 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = toolCallsResult
   processedText = processedText.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
   processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
+
+  // 处理计划块 (流式)
+  let planMatch = processedText.match(/<<<PLAN_START>>>([\s\S]*?)(?:<<<PLAN_END>>>|$)/)
+  if (planMatch) {
+    const fullMatch = planMatch[0]
+    const inner = planMatch[1]
+    const hasEnd = fullMatch.includes('<<<PLAN_END>>>')
+    // 构造标签：未闭合时添加 loading，闭合后去掉
+    const tag = hasEnd
+      ? `<plan>${inner}</plan>`
+      : `<plan loading="true">${inner}</plan>`
+    // 替换整个匹配区间，并保留前后文本
+    processedText = processedText.replace(
+      /<<<PLAN_START>>>[\s\S]*?(?:<<<PLAN_END>>>|$)/,
+      tag
+    )
+  }
   // 3. 处理 Token 用量
   processedText = processedText.replace(
     /<!--token_usage:(.*?)-->/g,
@@ -279,7 +296,7 @@ export function renderStructuredContent(input: string | any[]): string {
   resultHtml += flushThinkingGroup()
 
   // 清理多余换行
-  return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
+  return convertPlanTags(resultHtml.replace(/\n{3,}/g, '\n\n').trim())
 }
 
 // ============================================================
@@ -402,6 +419,28 @@ async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arg
   await fetchPromise
 
   return finalResult
+}
+
+// ============================================================
+// 第五部分：蓝图计划标签转换
+// ============================================================
+
+/**
+ * 将流式中的 <<<PLAN_START>>>...<<<PLAN_END>>> 转换为 <plan> 自定义标签
+ * @param text 原始文本
+ * @returns 转换后的文本
+ */
+function convertPlanTags(text: string): string {
+  if (!text) return text
+  
+  return text.replace(/<<<PLAN_START>>>([\s\S]*?)<<<PLAN_END>>>/g, (match, jsonStr) => {
+    try {
+      JSON.parse(jsonStr)
+      return `<plan>${jsonStr}</plan>`
+    } catch {
+      return match
+    }
+  })
 }
 
 interface ResponseType { 

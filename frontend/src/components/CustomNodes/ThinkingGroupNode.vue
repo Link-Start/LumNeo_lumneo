@@ -59,7 +59,6 @@ const props = defineProps<{
 }>()
 
 const isExpanded = ref(false)
-const isHovering = ref(false)
 
 const steps = computed(() => {
   try {

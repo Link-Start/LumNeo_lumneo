@@ -234,13 +234,24 @@ async def chat(
         final_params = {**base_params, **strategy_params}
 
         if request.params and request.params.blueprint_mode:
-            # 注入蓝图模式的 System Prompt 指令（你的“隐身指令”）
+            # 注入蓝图模式的 System Prompt 指令
             blueprint_instruction = """
             ## 蓝图模式
-            如果当前任务需要 ≥2 个工具协作（如多文件修改、项目重构、串联命令），
-            你输出的第一行必须是 `<<<PLAN_START>>>`，接着输出 JSON 格式的执行计划数组，
-            最后一行必须是 `<<<PLAN_END>>>`。在此协议标记之后，你可以正常输出给用户看的友好提示文字。
-            如果是简单任务（闲聊、知识问答、单次文件读取），请直接回复，不要添加任何特殊标记。
+            触发：任务需 ≥2 个工具协作时，输出以下 JSON 计划。
+
+            **严格规则**：
+            1. 只输出一个 JSON 数组，不要调用任何工具。
+            2. 计划必须包含步骤：`step_id`、`description`、`tool`。
+            3. 回复以 `<<<PLAN_START>>>` 开头，以 `<<<PLAN_END>>>` 结尾。
+            4. 输出计划后，立即停止生成，不要添加任何额外文字、解释或工具调用。
+
+            示例（下载 Node.js 源码并统计文件数量）：
+            <<<PLAN_START>>>
+            [
+            {"step_id":1,"description":"克隆 Node.js 仓库","tool":"execute_command"},
+            {"step_id":2,"description":"统计文件数量","tool":"execute_command"}
+            ]
+            <<<PLAN_END>>>
             """
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction
