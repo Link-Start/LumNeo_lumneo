@@ -33,6 +33,13 @@ def load_tools_from_config(config_path: str):
 
     return tools_definition, available_tools
 
+def is_dangerous_tool(func_name: str) -> bool:
+    for tool in TOOLS_DEFINITION:
+        fn = tool.get("function", {})
+        if fn.get("name") == func_name:
+            return fn.get("meta", {}).get("dangerous", False)
+    return False
+
 
 TOOLS_DEFINITION, AVAILABLE_TOOLS = load_tools_from_config("tools_config.yaml")
 

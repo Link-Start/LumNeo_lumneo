@@ -3,40 +3,11 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
-
-from backend.utils.validators import validate_path
-from backend.utils.base import is_absolute
-import backend
+from typing import Any, Dict, Optional
+from backend.utils.base import _validate
 
 # 最大允许写入的文件大小，防止误写超大内容撑爆磁盘
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
-
-
-# ──────────────────────── 路径校验（统一出口） ────────────────────────
-
-def _get_allowed_dirs() -> list[Path]:
-    """获取允许写入的目录列表。"""
-    raw = backend.workspace_path
-    if not raw:
-        raise RuntimeError("backend.workspace_path 未配置")
-    if isinstance(raw, (list, tuple)):
-        return [Path(p).resolve() for p in raw if p]
-    return [Path(raw).resolve()]
-
-
-def _validate(path: str) -> Tuple[Optional[Path], Optional[str]]:
-    """统一路径校验，返回 (safe_path, error_message)。"""
-    if not is_absolute(path):
-        path = f"{os.getcwd()}/{path}"
-    try:
-        safe_path = validate_path(path, _get_allowed_dirs())
-        return safe_path, None
-    except (ValueError, RuntimeError) as e:
-        return None, str(e)
-
-
-# ──────────────────────── 公开接口 ────────────────────────
 
 async def file_write(
     path: str,

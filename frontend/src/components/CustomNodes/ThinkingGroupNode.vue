@@ -110,6 +110,17 @@ function toggle() {
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
 }
 
+.summary-icon {
+  transition: transform 0.6s ease;
+}
+.thinking-group:hover .summary-icon {
+  transform: scale(1.25);
+}
+
+.thinking-group:hover .summary-arrow {
+  transform: translateX(4px);
+}
+
 /* ========== 头部摘要 ========== */
 .thinking-summary {
   cursor: pointer;

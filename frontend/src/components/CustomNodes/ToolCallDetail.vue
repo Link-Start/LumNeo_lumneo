@@ -111,6 +111,7 @@ const statusType = computed(() => {
     case 'success': return 'success'
     case 'error': return 'error'
     case 'calling': return 'warning'
+    case 'rejected': return 'warning'
     default: return 'default'
   }
 })
@@ -120,7 +121,8 @@ const statusText = computed(() => {
   const map: Record<string, string> = {
     success: '执行成功',
     error: '执行失败',
-    calling: '执行中...'
+    calling: '执行中...',
+    rejected: '已拒绝'
   }
   return map[data.value.status] || data.value.status
 })

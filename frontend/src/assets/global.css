@@ -7,6 +7,9 @@
   --border-color: #333946;
   --border-color-hover: #5f6779;
   --border-glow: #895bf7;
+  --bg-hover: #38393a91;
+  --warning-color: #f2c97d;
+  --bg-disabled: #96939352;
   --message-bg-color: rgba(255,255,255,.06);
   --reasoning-bg-color: rgba(250, 250, 250, 0.02);
   --thinking-text: #b77bfc;
@@ -28,6 +31,7 @@
   --border-color: #E2E8F0;         /* 边框颜色，比原版淡 */
   --border-color-hover: #CBD5E1;   /* 悬浮边框加深 */
   --border-glow: #8A5CF5;          /* 保持原紫色发光，更鲜亮 */
+  --warning-color: #f8bd51;
   --message-bg-color: rgba(59, 130, 246, 0.04); /* 消息气泡背景极淡蓝 */
   --reasoning-bg-color: rgba(100, 116, 139, 0.04); /* 推理框背景 */
   --thinking-text: #27a5f8;         /* 思考提示文字颜色，加深 */

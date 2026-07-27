@@ -7,7 +7,11 @@
      <Transition name="sidebar">
       <aside v-if="!sidebarCollapsed" class="sidebar-panel border-marquee-right" :class="{ collapsed: sidebarCollapsed, 'sidebar-open': sidebarOpen }">
         <div class="sidebar-header">
-          <span class="logo-text"><m-svg name="star" style="position: absolute;left:120px;top:18px;"/>✨ LumNeo</span>
+          <div class="logo-text">
+            <m-svg name="star" style="position: absolute;left:120px;top:18px;"/>✨ LumNeo
+            <!-- 版本号 -->
+            <span style="font-size:.56rem;">{{ version }}</span>
+          </div>
           <n-button v-if="!isMobile" text class="icon-btn" @click="sidebarCollapsed = true" title="收起侧栏">
             <template #icon>
               <n-icon :size="22">
@@ -261,7 +265,7 @@ import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
-import SettingsDrawer from '@/components/SettingsDrawer.vue'
+import SettingsDrawer from '@/components/SettingsDrawer/index.vue'
 import Introduction from '@/components/Introduction.vue'
 import mSvg from '@/components/MSvg.vue'
 import MessageList from '@/components/MessageList.vue'
@@ -288,6 +292,7 @@ const showQRCode = ref(true)
 const showPanelModal = ref(false)
 
 const isDark = computed(() => configStore.themeMode === 'dark')
+const version = ref(import.meta.env.VITE_APP_VERSION)
 
 function checkMobile() {
   isMobile.value = window.innerWidth <= 768
@@ -494,6 +499,7 @@ async function waitForBackend() {
 
 onMounted(async () => {
   checkMobile()
+  configStore.loadModels()
   let resizeTimer: ReturnType<typeof setTimeout>
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer)
@@ -623,7 +629,7 @@ onUnmounted(() => {
 }
 .sidebar-footer {
   position: fixed;
-  bottom:40px; left:20px; right:0;
+  bottom:60px; left:30px; right:0;
   z-index:100;
 }
 
