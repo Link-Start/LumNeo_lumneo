@@ -116,7 +116,7 @@
               </div>
             </template>
 
-            <!-- 流式输出占位（列表最后一项） -->
+            <!-- 流式输出占位 -->
             <template v-else>
               <div class="streaming-after-item message-row assistant">
                 <div v-if="streamingContent" class="bubble streaming">

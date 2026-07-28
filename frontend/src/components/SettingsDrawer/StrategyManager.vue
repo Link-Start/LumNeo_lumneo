@@ -1,7 +1,7 @@
 <template>
     <n-card title="调度控制" hoverable size="small">
         <n-form inline label-placement="left" label-width="auto" label-align="right">
-            <!-- <n-form-item>
+            <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">
                         <template #trigger>
@@ -11,7 +11,7 @@
                     </n-tooltip>
                 </template>
                 <n-switch v-model:value="strategyStore.blueprintMode" />
-            </n-form-item> -->
+            </n-form-item>
             <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">

@@ -256,7 +256,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
@@ -319,6 +319,10 @@ const { showEditModal, editContent, copySvgName, copyContent,
 } = useMessageActions()
 
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
+
+provide('scrollToBottom', () => {
+  messageListRef.value?.scrollToLatest()
+})
 
 const currentMessages = computed(() => chatStore.currentChatMessages)
 

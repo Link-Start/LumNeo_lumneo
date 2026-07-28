@@ -10,8 +10,12 @@ import { cleanMessages } from '@/utils/message'
 import { useToolStore } from '@/stores/tools'
 import type { UploadedFile } from '@/composables/useFileUpload'
 
+// ---------- 单例 ----------
+let singleton: any | null = null
 
 export function useChat() {
+  if (singleton) return singleton
+
   const chatStore = useChatStore()
   const toolStore = useToolStore()
   const configStore = useConfigStore()
@@ -19,6 +23,7 @@ export function useChat() {
   const strategyStore = useStrategyStore()
 
   const message = useMessage()
+  const dialog = useDialog()
 
   const currentInput = ref('')
   const isLoading = ref(false)
@@ -26,21 +31,10 @@ export function useChat() {
   const abortController = ref<AbortController | null>(null)
   const regeneratingMsg = ref<Message | null>(null)
 
-  function stopGeneration() {
-    if (abortController.value) {
-      abortController.value.abort()
-    } else {
-      isLoading.value = false
-      regeneratingMsg.value = null
-    }
-  }
-
   type StreamEndCallback = (chatId: string, turnIndex: number) => void
   const onStreamEnd = ref<StreamEndCallback | null>(null)
 
-  const dialog = useDialog()
-
-  // 弹框确认并回写后端
+  // ---------- 工具函数：确认弹窗 ----------
   function requestToolConfirm(callId: string, funcName: string, argsJson: string) {
     let prettyArgs = argsJson
     try {
@@ -56,7 +50,7 @@ export function useChat() {
       ]),
       h('pre', {
         style: {
-          background: 'var(--bg-secondary)', // 跟随暗黑/明亮模式
+          background: 'var(--bg-secondary)',
           padding: '12px',
           borderRadius: '6px',
           maxHeight: '300px',
@@ -70,11 +64,11 @@ export function useChat() {
       }, prettyArgs)
     ])
 
-    let countdown = 45 // 设置倒计时秒数
+    let countdown = 45
     let timer: number | null = null
 
-    const dialogInstance  = dialog.warning({
-      icon: () => h(NIcon, {component: Warning, color: 'var(--warning-color)' }),
+    const dialogInstance = dialog.warning({
+      icon: () => h(NIcon, { component: Warning, color: 'var(--warning-color)' }),
       title: '工具调用确认',
       content: () => contentNode,
       positiveText: '确认执行',
@@ -94,78 +88,13 @@ export function useChat() {
     timer = window.setInterval(() => {
       countdown--
       if (countdown <= 0) {
-        // 倒计时结束，自动触发取消并关闭弹框
         if (timer) clearInterval(timer)
         confirmTool(callId, false)
-        dialogInstance.destroy() // 销毁弹框
+        dialogInstance.destroy()
       } else {
-        // 动态更新取消按钮的文字
         const formattedTime = String(countdown).padStart(2, '0')
         dialogInstance.negativeText = `取消执行 (${formattedTime}s)`
       }
-    }, 1000)
-  }
-
-  // 调用后端接口确认工具调用
-  function showDecisionDialog(decisionId: number, data: any) {
-    let countdown = 45
-    let timer: number | null = null
-
-    // 构建内容 VNode
-    const contentNode = h('div', { style: { fontSize: '14px', lineHeight: '1.6' } }, [
-        h('p', { style: { marginBottom: '8px' } }, [
-            '❌ 工具调用失败，详细信息如下：'
-        ]),
-        h('ul', { style: { listStyle: 'none', padding: '0', margin: '0 0 12px 0' } }, [
-            h('li', {}, [`工具：`, h('strong', {}, data.tool_name || '未知')]),
-            h('li', {}, [`失败原因：`, h('span', { style: { color: 'var(--error-color)' } }, data.reason || '未知')]),
-            h('li', {}, [`已尝试次数：${data.attempts || 0} 次`]),
-            h('li', {}, [`已耗时：${data.elapsed || 0} 秒`]),
-            data.suggestion ? h('li', {}, [`建议：`, h('span', { style: { color: 'var(--info-color)' } }, data.suggestion)]) : null
-        ].filter(Boolean)),
-        h('p', { style: { marginTop: '12px', fontSize: '13px', color: 'var(--text-color-secondary)' } }, 
-            '是否继续尝试其他方法？')
-    ])
-
-    const dialogInstance = dialog.warning({
-        icon: () => h(NIcon, { component: Warning, color: 'var(--warning-color)' }),
-        title: '⏳ 工具执行遇阻',
-        content: () => contentNode,
-        positiveText: '继续',
-        negativeText: `终止 (${countdown}s)`,
-        maskClosable: false,
-        closeOnEsc: false,
-        onPositiveClick: () => {
-            if (timer) clearInterval(timer)
-            fetch('/api/decisions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ decision_id: decisionId, choice: 'continue' })
-            }).catch(err => console.error('更新失败', err))
-        },
-        onNegativeClick: () => {
-            if (timer) clearInterval(timer)
-            fetch('/api/decisions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
-            }).catch(err => console.error('更新失败', err))
-        }
-    })
-
-    timer = window.setInterval(() => {
-        countdown--
-        if (countdown <= 0) {
-            if (timer) clearInterval(timer)
-            fetch('/api/decisions/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
-            }).catch(err => console.error('更新决策失败', err))
-            dialogInstance.destroy()
-        } else {
-            dialogInstance.negativeText = `终止 (${countdown}s)`
-        }
     }, 1000)
   }
 
@@ -181,6 +110,69 @@ export function useChat() {
     }
   }
 
+  // ---------- 决策弹窗 ----------
+  function showDecisionDialog(decisionId: number, data: any) {
+    let countdown = 45
+    let timer: number | null = null
+
+    const contentNode = h('div', { style: { fontSize: '14px', lineHeight: '1.6' } }, [
+      h('p', { style: { marginBottom: '8px' } }, [
+        '❌ 工具调用失败，详细信息如下：'
+      ]),
+      h('ul', { style: { listStyle: 'none', padding: '0', margin: '0 0 12px 0' } }, [
+        h('li', {}, [`工具：`, h('strong', {}, data.tool_name || '未知')]),
+        h('li', {}, [`失败原因：`, h('span', { style: { color: 'var(--error-color)' } }, data.reason || '未知')]),
+        h('li', {}, [`已尝试次数：${data.attempts || 0} 次`]),
+        h('li', {}, [`已耗时：${data.elapsed || 0} 秒`]),
+        data.suggestion ? h('li', {}, [`建议：`, h('span', { style: { color: 'var(--info-color)' } }, data.suggestion)]) : null
+      ].filter(Boolean)),
+      h('p', { style: { marginTop: '12px', fontSize: '13px', color: 'var(--text-color-secondary)' } },
+        '是否继续尝试其他方法？')
+    ])
+
+    const dialogInstance = dialog.warning({
+      icon: () => h(NIcon, { component: Warning, color: 'var(--warning-color)' }),
+      title: '⏳ 工具执行遇阻',
+      content: () => contentNode,
+      positiveText: '继续',
+      negativeText: `终止 (${countdown}s)`,
+      maskClosable: false,
+      closeOnEsc: false,
+      onPositiveClick: () => {
+        if (timer) clearInterval(timer)
+        fetch('/api/decisions/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision_id: decisionId, choice: 'continue' })
+        }).catch(err => console.error('更新失败', err))
+      },
+      onNegativeClick: () => {
+        if (timer) clearInterval(timer)
+        fetch('/api/decisions/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+        }).catch(err => console.error('更新失败', err))
+      }
+    })
+
+    timer = window.setInterval(() => {
+      countdown--
+      if (countdown <= 0) {
+        if (timer) clearInterval(timer)
+        fetch('/api/decisions/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision_id: decisionId, choice: 'stop' })
+        }).catch(err => console.error('更新决策失败', err))
+        dialogInstance.destroy()
+      } else {
+        dialogInstance.negativeText = `终止 (${countdown}s)`
+      }
+    }, 1000)
+  }
+
+  // ---------- 流读取 ----------
   async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
     if (!response.ok || !response.body) throw new Error('网络响应失败')
     const reader = response.body.getReader()
@@ -204,18 +196,17 @@ export function useChat() {
       // 检测决策请求
       const decisionMatch = chunk.match(/<!--ask_decision:(\d+):([\s\S]*?)-->/)
       if (decisionMatch) {
-          const decisionId = parseInt(decisionMatch[1])
-          const rawMessage = decisionMatch[2]
-          let decisionData: any = { message: rawMessage }
-          try {
-              decisionData = JSON.parse(rawMessage)
-          } catch (e) {
-              // 兼容旧版纯文本，降级处理
-              decisionData = { message: rawMessage, options: [{ label: '继续', value: 'continue' }, { label: '终止', value: 'stop' }] }
-          }
-          showDecisionDialog(decisionId, decisionData)
+        const decisionId = parseInt(decisionMatch[1])
+        const rawMessage = decisionMatch[2]
+        let decisionData: any = { message: rawMessage }
+        try {
+          decisionData = JSON.parse(rawMessage)
+        } catch (e) {
+          decisionData = { message: rawMessage, options: [{ label: '继续', value: 'continue' }, { label: '终止', value: 'stop' }] }
+        }
+        showDecisionDialog(decisionId, decisionData)
       }
-      // 检测工具重试开始（<!--tool_retry:start:funcName-->）
+      // 检测工具重试开始
       const retryStartMatch = chunk.match(/<!--tool_retry:start:([^:]+)-->/)
       if (retryStartMatch) {
         const [, funcName] = retryStartMatch
@@ -224,8 +215,7 @@ export function useChat() {
           { duration: 5000 }
         )
       }
-
-      // 检测工具重试结束（<!--tool_retry:end:funcName-->）
+      // 检测工具重试结束
       const retryEndMatch = chunk.match(/<!--tool_retry:end:([^:]+)-->/)
       if (retryEndMatch) {
         const [, funcName] = retryEndMatch
@@ -243,7 +233,7 @@ export function useChat() {
           { duration: 5000 }
         )
       }
-      // 尝试从流中提取最终的结构化 JSON
+      // 提取最终结构化数据
       const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
       if (match) {
         try {
@@ -256,17 +246,12 @@ export function useChat() {
     return { finalSegments }
   }
 
-/**
-   * 保存被中断的消息到本地和后端
-   */
+  // ---------- 保存中断消息 ----------
   async function saveAbortedMessage(chatId: string, turnIndex: number, streamingText: string) {
     const chat = chatStore.chats.find(c => c.id === chatId)
     if (!chat) return
 
-    // 1. 获取当前轮次的占位消息（它必然存在于 Store 中，因为我们一开始就插入了空占位）
     let targetMsg = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
-    
-    // 极端兜底：如果还没插入，手动补一个（极少数情况）
     if (!targetMsg) {
       targetMsg = {
         id: Date.now(),
@@ -277,7 +262,6 @@ export function useChat() {
       chatStore.addMessageToLocal(targetMsg)
     }
 
-    // 2. 构造最终显示的文本（追加停止标记）
     const suffix = '\n\n[用户停止了生成]'
     let displayContent = streamingText.trim()
     if (displayContent) {
@@ -286,19 +270,19 @@ export function useChat() {
       displayContent = '用户停止了生成'
     }
 
-    // 3. 将纯文本封装成合法的结构化 JSON 数组落盘
     const finalSegments = [{ type: "text", content: displayContent }]
     targetMsg.content = JSON.stringify(finalSegments)
-
-    // 4. 调用后端接口，将当前轮次的消息真正保存到数据库！
     await chatStore.saveMessageToBackend(targetMsg)
   }
 
-  /**
-   * 发送新消息
-   */
-  async function sendMessage(uploadedFiles: UploadedFile[], scrollToBottom: () => void) {
-    if (!currentInput.value.trim() || isLoading.value || !chatStore.activeChatId) return
+  // ---------- 核心发送内部函数 ----------
+  async function sendMessageInternal(
+    content: string,
+    files: UploadedFile[] = [],
+    scrollToBottom?: () => void,
+    close_blueprint?: boolean
+  ) {
+    if (!content.trim() || isLoading.value || !chatStore.activeChatId) return
 
     const currentModel = configStore.activeModel
     if (!currentModel) {
@@ -307,45 +291,42 @@ export function useChat() {
     }
 
     const chatId = chatStore.activeChatId
-    const displayContent = currentInput.value.trim()
-    currentInput.value = ''
-
-    // 1. 获取并计算当前对话的轮次索引（让后端严格按顺序落盘）
     const userTurnIndex = chatStore.getNextTurnIndex()
+
+    // 1. 用户消息
     const userMsg: Message = {
       id: Date.now(),
       role: 'user',
-      content: displayContent,
-      file_ref: uploadedFiles.length > 0 ? uploadedFiles.map((f) => ({ filename: f.filename, type: f.type, url: f.url })) : null,
-      turn_index: userTurnIndex
+      content: content,
+      file_ref: files.length > 0 ? files.map((f) => ({ filename: f.filename, type: f.type, url: f.url })) : null,
+      turn_index: userTurnIndex,
     }
-
     chatStore.addMessageToLocal(userMsg)
     await chatStore.saveMessageToBackend(userMsg)
 
-    // 2. 预先在本地插入一个空的助手占位符，用于展示流式输出
+    // 2. 助手占位
     const assistantTurnIndex = chatStore.getNextTurnIndex()
     const assistantMsg: Message = {
       id: Date.now() + 1,
       role: 'assistant',
       content: '',
-      turn_index: assistantTurnIndex
+      turn_index: assistantTurnIndex,
     }
     chatStore.addMessageToLocal(assistantMsg)
 
     isLoading.value = true
     streamingContent.value = ''
-
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
 
     try {
       const allMessages = chatStore.getActiveMessages()
-      // 剔除最后一个我们刚加的助手占位符（因为实际发送给模型的上下文不需要这个空占位）
-      allMessages.pop()
-      
+      allMessages.pop() // 移除占位
+
       const apiMessages = await cleanMessages(allMessages)
+      const params = strategyStore.getBackendParams()
+      if (close_blueprint) params.blueprint_mode = false
       const body = JSON.stringify({
         messages: apiMessages,
         enable_tools: chatStore.enableProfile,
@@ -356,32 +337,31 @@ export function useChat() {
           base_url: currentModel.baseUrl,
           api_key: currentModel.apiKey,
           thinking: localStorage.getItem('thinking') === 'true' ? 'enabled' : 'disabled',
-          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high'
+          reasoning_effort: (localStorage.getItem('thinkingMode') as 'high' | 'xhigh') || 'high',
         },
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
         turn_index: assistantTurnIndex,
-        params: strategyStore.getBackendParams()
+        params: params,
       })
 
-      setTimeout(() => scrollToBottom(), 160)
+      if (scrollToBottom) setTimeout(scrollToBottom, 160)
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
-        signal: controller.signal
+        signal: controller.signal,
       })
-      
+
       const { finalSegments } = await readStream(response)
 
-      if (chatStore.activeChatId === chatId) {
-        if (finalSegments) {
-          const chat = chatStore.chats.find(c => c.id === chatId)
-          if (chat) {
-            const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
-            if (targetMsg) {
-              targetMsg.content = JSON.stringify(finalSegments) 
-            }
+      if (chatStore.activeChatId === chatId && finalSegments) {
+        const chat = chatStore.chats.find(c => c.id === chatId)
+        if (chat) {
+          const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+          if (targetMsg) {
+            targetMsg.content = JSON.stringify(finalSegments)
           }
         }
         streamingContent.value = ''
@@ -393,32 +373,47 @@ export function useChat() {
         }
         return
       }
-      if (chatStore.activeChatId === chatId) {
-        console.error('发送失败:', error)
-        const errorContent = `**错误：** ${error.message}`
-        const localMsg = chatStore.currentChatMessages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
-        if (localMsg) localMsg.content = errorContent
-      }
+      console.error('发送失败:', error)
+      const errorContent = `**错误：** ${error.message}`
+      const localMsg = chatStore.currentChatMessages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
+      if (localMsg) localMsg.content = errorContent
     } finally {
       abortController.value = null
       isLoading.value = false
       if (onStreamEnd.value && chatStore.activeChatId === chatId) {
-        // 由于已经重载过数据，此处仅用于外部回调通知
         onStreamEnd.value(chatId, assistantTurnIndex)
       }
     }
   }
 
-  /**
-   * 强制重新生成当前对话的最后一条回答
-   */
+  // ---------- 对外方法 ----------
+  async function sendMessage(uploadedFiles: UploadedFile[], scrollToBottom: () => void) {
+    if (!currentInput.value.trim() || isLoading.value || !chatStore.activeChatId) return
+    await sendMessageInternal(currentInput.value.trim(), uploadedFiles, scrollToBottom)
+    currentInput.value = ''
+  }
+
+  async function sendTextMessage(content: string, files: UploadedFile[] = [], scrollToBottom?: () => void) {
+    if (!content.trim() || isLoading.value || !chatStore.activeChatId) return
+    await sendMessageInternal(content.trim(), files, scrollToBottom, true)
+  }
+
+  function stopGeneration() {
+    if (abortController.value) {
+      abortController.value.abort()
+    } else {
+      isLoading.value = false
+      regeneratingMsg.value = null
+    }
+  }
+
+  // 重新生成当前对话的最后一条回答
   async function regenerateFromCurrentHistory() {
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
     if (!currentModel) { message.error('请先选择一个模型'); return }
 
     const chatId = chatStore.activeChatId
-    // 获取最新的占位轮次
     const assistantTurnIndex = chatStore.getNextTurnIndex()
     const assistantMsg: Message = {
       id: Date.now() + 1,
@@ -480,9 +475,7 @@ export function useChat() {
     }
   }
 
-  /**
-   * 针对某条具体的助手消息进行重新生成（替换/截断后续内容）
-   */
+  // 重新生成特定消息（替换截断）
   async function regenerateResponse(assistantMsg: Message) {
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
@@ -491,16 +484,13 @@ export function useChat() {
     const chatId = chatStore.activeChatId
     regeneratingMsg.value = assistantMsg
 
-    // 1. 截断该条助手消息及之后的所有消息
     await chatStore.truncateAtTurn(assistantMsg.turn_index)
 
-    // 2. 开始一个新的流式生成 (复用原本的轮次 turn_index)
     isLoading.value = true
     if (abortController.value) abortController.value.abort()
     const controller = new AbortController()
     abortController.value = controller
 
-    // 3. 插入新的占位消息
     const newMsg: Message = {
       id: Date.now() + 1,
       role: 'assistant',
@@ -511,7 +501,6 @@ export function useChat() {
 
     try {
       const allMessages = chatStore.getActiveMessages()
-      // 注意：这里要去掉我们刚加的占位符，因为发请求时不需要它
       allMessages.pop()
 
       const body = JSON.stringify({
@@ -533,18 +522,14 @@ export function useChat() {
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      // 流式读取，解构出 finalSegments
       const { finalSegments } = await readStream(response)
 
-      if (chatStore.activeChatId === chatId) {
-        if (finalSegments) {
-          // 精准更新本地占位消息
-          const chat = chatStore.chats.find(c => c.id === chatId)
-          if (chat) {
-            const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
-            if (targetMsg) {
-              targetMsg.content = JSON.stringify(finalSegments)
-            }
+      if (chatStore.activeChatId === chatId && finalSegments) {
+        const chat = chatStore.chats.find(c => c.id === chatId)
+        if (chat) {
+          const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
+          if (targetMsg) {
+            targetMsg.content = JSON.stringify(finalSegments)
           }
         }
         streamingContent.value = ''
@@ -570,15 +555,20 @@ export function useChat() {
     }
   }
 
-  return {
+  // 构建单例结果
+  const result = {
     currentInput,
     isLoading,
     streamingContent,
     regeneratingMsg,
     onStreamEnd,
     sendMessage,
+    sendTextMessage,
     regenerateResponse,
     regenerateFromCurrentHistory,
     stopGeneration,
   }
+
+  singleton = result
+  return result
 }

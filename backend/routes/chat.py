@@ -79,6 +79,15 @@ class DecisionUpdate(BaseModel):
     decision_id: int
     choice: str  # 'continue' 或 'stop'
 
+class ExecutePlanRequest(BaseModel):
+    chat_id: str
+    turn_index: int
+    plan: List[Dict[Any, Any]]       # 用户编辑后的计划
+    messages: List[Dict[str, Any]]   # 当前的对话历史
+    profile_id: Optional[int] = None
+    llm_config: Optional[ModelConfig] = None
+    params: Optional[Dict[str, Any]] = None
+
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
 
@@ -234,22 +243,31 @@ async def chat(
         final_params = {**base_params, **strategy_params}
 
         if request.params and request.params.blueprint_mode:
-            # 注入蓝图模式的 System Prompt 指令
+            # 注入蓝图模式的 System Prompt 指令（要求包含 arguments）
             blueprint_instruction = """
             ## 蓝图模式
-            触发：任务需 ≥2 个工具协作时，输出以下 JSON 计划。
 
-            **严格规则**：
+            **触发条件**：
+            - 任务需 ≥2 个工具协作时，进入规划模式。
+            - 若用户明确要求"执行计划"，**直接执行**已有计划，不再输出计划。
+
+            **规划模式输出**：
             1. 只输出一个 JSON 数组，不要调用任何工具。
-            2. 计划必须包含步骤：`step_id`、`description`、`tool`。
+            2. 每个步骤必须包含：`step_id`、`description`、`tool`。
             3. 回复以 `<<<PLAN_START>>>` 开头，以 `<<<PLAN_END>>>` 结尾。
-            4. 输出计划后，立即停止生成，不要添加任何额外文字、解释或工具调用。
+            4. 输出计划后立即停止，不要添加任何额外文字、解释或工具调用。
 
-            示例（下载 Node.js 源码并统计文件数量）：
+            **执行模式**：
+            - 用户说"执行计划"时，按顺序调用计划中的工具。
+            - 无计划时收到执行指令，请回复："请先描述任务，我来生成计划。"
+
+            **例外**：单工具任务直接执行，不输出计划。
+
+            示例（查询天气并写入文件）：
             <<<PLAN_START>>>
             [
-            {"step_id":1,"description":"克隆 Node.js 仓库","tool":"execute_command"},
-            {"step_id":2,"description":"统计文件数量","tool":"execute_command"}
+            {"step_id":1,"description":"查询北京的天气","tool":"system_get_weather"},
+            {"step_id":2,"description":"将天气结果写入文件","tool":"system_write_file"}
             ]
             <<<PLAN_END>>>
             """
@@ -271,7 +289,8 @@ async def chat(
                 profile_id=profile.id if profile else None,
                 model_id=request.llm_config.model_id,
                 chat_id=request.chat_id,
-                turn_index=request.turn_index
+                turn_index=request.turn_index,
+                blueprint_mode=request.params.blueprint_mode if request.params else False,
             ),
             media_type="text/event-stream"
         )

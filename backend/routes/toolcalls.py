@@ -1,6 +1,7 @@
 # backend/routes/toolcalls.py
 import os
 import asyncio
+import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
@@ -12,7 +13,6 @@ from backend.db.tool_calls import (
 )
 from config_loader import config
 
-
 router = APIRouter(prefix="/api/tool-calls", tags=["tool-calls"])
 
 # ---------- 请求体模型 ----------
@@ -23,6 +23,20 @@ class ConfirmRequest(BaseModel):
     call_id: str
     confirmed: bool
 
+# ---------- 辅助函数 ----------
+def _get_meta_dict(meta_data):
+    """将 meta_data 从 JSON 字符串转为字典，若已是字典则直接返回"""
+    if meta_data is None:
+        return {}
+    if isinstance(meta_data, dict):
+        return meta_data
+    if isinstance(meta_data, str):
+        try:
+            return json.loads(meta_data)
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
 # ---------- 接口 ----------
 @router.get("/{call_id}")
 async def get_tool_call(call_id: str):
@@ -32,9 +46,12 @@ async def get_tool_call(call_id: str):
     
     data = record.to_dict()
     
+    # 获取 meta_data 字典
+    meta = _get_meta_dict(record.meta_data)
+    
     # 检查是否为存于磁盘的大文件
-    if record.meta_data and record.meta_data.get("storage_type") == "file":
-        file_path = f"{config.cache_dir}/{record.meta_data.get("file_path")}"
+    if meta.get("storage_type") == "file":
+        file_path = f"{config.cache_dir}/{meta.get('file_path')}"
         if os.path.exists(file_path):
             try:
                 # 使用 asyncio.to_thread 将同步的文件读取操作放到后台线程，不堵塞主线程
@@ -49,7 +66,6 @@ async def get_tool_call(call_id: str):
             
     return data
 
-
 @router.post("/batch")
 async def batch_get_tool_calls(request: BatchRequest):
     if not request.call_ids:
@@ -59,9 +75,10 @@ async def batch_get_tool_calls(request: BatchRequest):
     result_map = {}
     
     for r in records:
+        meta = _get_meta_dict(r.meta_data)
         # 检查是否为存于磁盘的大文件
-        if r.meta_data and r.meta_data.get("storage_type") == "file":
-            file_path = f"{config.cache_dir}/{r.meta_data.get("file_path")}"
+        if meta.get("storage_type") == "file":
+            file_path = f"{config.cache_dir}/{meta.get('file_path')}"
             try:
                 if os.path.exists(file_path):
                     # 使用 asyncio.to_thread 后台读取
