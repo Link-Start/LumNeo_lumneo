@@ -71,7 +71,7 @@
                         :themes="['vitesse-light', 'vitesse-dark']"
                         code-block-dark-theme="vitesse-dark"
                         code-block-light-theme="vitesse-light"
-                        :content="renderStructuredContent(msg.content?.trim())"
+                        :content="renderStructuredContent(msg.content?.trim(), msg.plan_id, msg.plan)"
                         :final="true"
                         :fade="false"
                         :typewriter="false"
@@ -94,7 +94,7 @@
                     >
                       <template #icon><n-icon><m-svg name="refresh" /></n-icon></template>
                     </n-button>
-                    <n-button text class="icon-btn" size="small" title="编辑" @click="$emit('edit', msg)">
+                    <n-button v-if="!msg.plan_id" text class="icon-btn" size="small" title="编辑" @click="$emit('edit', msg)">
                       <template #icon><n-icon :size="20"><m-svg name="edit" /></n-icon></template>
                     </n-button>
                     <n-popconfirm

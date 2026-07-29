@@ -104,7 +104,7 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = processedText.replace(/<!--plan_ready:([\s\S]*?)-->/g, (_, jsonStr) => {
     try {
       const planData = JSON.parse(jsonStr)
-      return `\n\n<plan status="pending">${JSON.stringify(planData.content)}</plan>\n\n`
+      return `\n\n<plan>${JSON.stringify(planData.content)}</plan>\n\n`
     } catch (e) {
       console.error('解析 Plan Ready 失败', e)
       return ''
@@ -141,10 +141,9 @@ function isAllToolCalls(items: any[]): boolean {
  * @param input - 后端返回的 JSON 字符串或已解析的数组 (例如: [{"type": "reasoning", ...}, {"type": "text", ...}])
  * @returns 渲染好的 HTML 标签字符串
  */
-export function renderStructuredContent(input: string | any[]): string {
+export function renderStructuredContent(input: string | any[], plan_id: string, plan: any[]): string {
   let segments: any[] = []
   
-
   // 1. 解析输入
   if (typeof input === 'string') {
     try {
@@ -273,6 +272,10 @@ export function renderStructuredContent(input: string | any[]): string {
       // 先输出之前积攒的思考链
       resultHtml += flushThinkingGroup()
 
+      if (plan && plan.length > 0) {
+        resultHtml += `\n\n<plan plan_id=${plan_id}>${JSON.stringify(plan)}</plan>\n\n`
+      }
+
       // 再处理当前非思考片段
       if (type === 'text') {
         resultHtml += seg.content
@@ -282,10 +285,6 @@ export function renderStructuredContent(input: string | any[]): string {
           completion_tokens: seg.content.final_answer_usage?.completion_tokens ?? 0
         })
         resultHtml += `\n\n<tokenusage>${tokenTagContent}</tokenusage>\n\n`
-      } else if (type === 'plan') {
-        const jsonStr = JSON.stringify(seg.content)
-        resultHtml += `\n\n<plan status="${seg.status || 'pending'}">${jsonStr}</plan>\n\n`
-        continue
       } else {
         resultHtml += seg.content || ''
       }

@@ -132,14 +132,6 @@
           <n-tag v-if="step.disabled" size="tiny" type="warning" :bordered="false">
             已禁用
           </n-tag>
-          <n-tag
-            v-if="step.status"
-            size="tiny"
-            :type="step.status === 'success' ? 'success' : step.status === 'error' ? 'error' : 'info'"
-            :bordered="false"
-          >
-            {{ step.status }}
-          </n-tag>
         </template>
         <template #default>
           <div class="step-detail">
@@ -245,7 +237,7 @@ const props = defineProps<{
 const profileStore = useProfileStore()
 const toolStore = useToolStore()
 const message = useMessage()
-const { sendTextMessage } = useChat()
+const { sendPlanMessage } = useChat()
 const scrollToBottom = inject<() => void>('scrollToBottom', () => {})
 
 // ---------- 状态 ----------
@@ -279,8 +271,13 @@ const toolOptions = computed(() => {
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
+const planId = computed(() => {
+  const attrs = props.node.attrs || {}
+  return attrs[0][1] || generateId()
+})
 // ---------- 计划数据 ----------
 const rawPlan = computed(() => {
+  
   const raw = props.node.content || '[]'
   try {
     const parsed = JSON.parse(raw)
@@ -298,12 +295,13 @@ watch(
   (newPlan) => {
     const normalized = newPlan.map((step: any, index: number) => {
       const uid = step.uuid || step._id || generateId()
+      console.log(uid);
+      
         return {
         step_id: step.step_id || index + 1,
         description: step.description || step.desc || '',
         tool: step.tool || '',
         disabled: step.disabled || false,
-        status: step.status || '',
         uuid: uid,
         ...step,
       }
@@ -472,7 +470,7 @@ function handleExecute() {
 
   // 构造消息文本并发送
   const planText = formatPlan(planData.value)
-  sendTextMessage(planText, [], scrollToBottom)
+  sendPlanMessage(planId.value, planText, scrollToBottom)
 }
 
 defineExpose({

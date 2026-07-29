@@ -280,7 +280,8 @@ export function useChat() {
     content: string,
     files: UploadedFile[] = [],
     scrollToBottom?: () => void,
-    close_blueprint?: boolean
+    close_blueprint?: boolean,
+    plan_id?: string
   ) {
     if (!content.trim() || isLoading.value || !chatStore.activeChatId) return
 
@@ -300,7 +301,10 @@ export function useChat() {
       content: content,
       file_ref: files.length > 0 ? files.map((f) => ({ filename: f.filename, type: f.type, url: f.url })) : null,
       turn_index: userTurnIndex,
+      plan_id: plan_id
     }
+    console.log(plan_id);
+    
     chatStore.addMessageToLocal(userMsg)
     await chatStore.saveMessageToBackend(userMsg)
 
@@ -393,9 +397,9 @@ export function useChat() {
     currentInput.value = ''
   }
 
-  async function sendTextMessage(content: string, files: UploadedFile[] = [], scrollToBottom?: () => void) {
+  async function sendPlanMessage(id: string, content: string, scrollToBottom?: () => void) {
     if (!content.trim() || isLoading.value || !chatStore.activeChatId) return
-    await sendMessageInternal(content.trim(), files, scrollToBottom, true)
+    await sendMessageInternal(content.trim(), [], scrollToBottom, true, id)
   }
 
   function stopGeneration() {
@@ -563,7 +567,7 @@ export function useChat() {
     regeneratingMsg,
     onStreamEnd,
     sendMessage,
-    sendTextMessage,
+    sendPlanMessage,
     regenerateResponse,
     regenerateFromCurrentHistory,
     stopGeneration,

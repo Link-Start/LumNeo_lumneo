@@ -38,6 +38,7 @@ async def init_db():
             model_id TEXT DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
             turn_index INTEGER NOT NULL,
+            plan_id TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )
@@ -147,7 +148,6 @@ async def init_db():
             plan_id TEXT NOT NULL UNIQUE,
             chat_id TEXT NOT NULL,
             steps TEXT NOT NULL,          -- JSON 数组
-            created_by TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
@@ -191,3 +191,5 @@ async def migrate_db(db):
             await db.execute("ALTER TABLE messages ADD COLUMN profile_id TEXT DEFAULT ''")
         if 'model_id' not in column_names:
             await db.execute("ALTER TABLE messages ADD COLUMN model_id TEXT DEFAULT ''")
+        if 'plan_id' not in column_names:
+            await db.execute("ALTER TABLE messages ADD COLUMN plan_id TEXT DEFAULT NULL")

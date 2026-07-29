@@ -16,6 +16,7 @@ from backend.services.tool_execution.approval import ApprovalHandler
 from backend.services.tool_execution.persister import ToolPersister
 from backend.services.tool_execution.suggestion import SuggestionGenerator
 from backend.repositories import DecisionRepository, MessageRepository
+from backend.repositories.plan_repo import PlanRepository
 
 
 class LLMOrchestrator:
@@ -54,7 +55,7 @@ class LLMOrchestrator:
         blueprint_mode: bool = False,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
-
+        plan_id_saved = None
         current_messages = messages.copy()
         if tools is None and enable_tools:
             tools = await get_all_tools(mcp_manager)
@@ -152,6 +153,9 @@ class LLMOrchestrator:
                 if plan is not None:
                     # 1. 生成一个唯一的 Plan ID（用于后续追踪）
                     plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+                    plan_id_saved = plan_id
+
+                    await PlanRepository.create_plan(plan_id, chat_id, plan)
                     
                     # 2. 构建一个特殊的 segment，类型为 'plan'
                     #    这个 segment 包含了完整的计划结构，前端拿到后可以渲染成编辑器
@@ -159,9 +163,9 @@ class LLMOrchestrator:
                         "type": "plan",
                         "id": plan_id,
                         "content": plan,  # 这里是具体的步骤列表
-                        "status": "pending" # 状态：等待执行
+                        # "status": "pending" # 状态：等待执行
                     }
-                    segments.append(plan_segment)
+                    # segments.append(plan_segment)
                     
                     # 3. 发送一个特殊事件给前端，告诉前端“计划已就绪，请展示编辑器”
                     #    前端收到这个事件后，应该停止loading，渲染计划编辑界面
@@ -352,6 +356,7 @@ class LLMOrchestrator:
                 chat_id=chat_id,
                 content=segments_json,
                 profile_id=profile_id,
+                plan_id=plan_id_saved,
                 model_id=model_id,
                 turn_index=turn_index,
                 file_ref=None

@@ -36,6 +36,46 @@
 
     <!-- 输入框 -->
     <div class="compose-input-container">
+      <div style="position:absolute;left:-10px;top:32px;">
+        <n-flex vertical>
+          <n-popover trigger="hover">
+            <template #trigger>
+              <n-badge dot type="info" :color="!strategyStore.blueprintMode ? 'grey' : ''"/>
+            </template>
+            <n-flex>
+              <span>蓝图模式</span>
+              <n-switch v-model:value="strategyStore.blueprintMode" />
+            </n-flex>
+          </n-popover>
+          <n-popover trigger="hover">
+            <template #trigger>
+              <n-badge dot type="success" :color="!strategyStore.approvalMode ? 'grey' : ''"/>
+            </template>
+            <n-flex>
+              <span>审批模式</span>
+              <n-switch v-model:value="strategyStore.approvalMode" />
+            </n-flex>
+          </n-popover>
+          <n-popover trigger="hover">
+            <template #trigger>
+              <n-badge dot type="warning" :color="!strategyStore.autoDecision ? 'grey' : ''"/>
+            </template>
+            <n-flex>
+              <span>自主决策</span>
+              <n-switch v-model:value="strategyStore.autoDecision" />
+            </n-flex>
+          </n-popover>
+          <!-- <n-popover trigger="hover">
+            <template #trigger>
+              <n-badge dot type="error" :color="!strategyStore.blueprintMode ? 'grey' : ''"/>
+            </template>
+            <n-flex>
+              <span>自动分流</span>
+              <n-switch v-model:value="strategyStore.blueprintMode" />
+            </n-flex>
+          </n-popover> -->
+        </n-flex>
+      </div>
       <n-input
         :value="modelValue"
         @update:value="emit('update:modelValue', $event)"
@@ -106,9 +146,10 @@
 
 <script setup lang="ts">
 import { ref, PropType, computed } from 'vue'
-import { NButton, NInput, NDropdown, NUpload, NIcon, type UploadFileInfo } from 'naive-ui'
+import { NButton, NInput, NDropdown, NUpload, NIcon, NFlex, NPopover, NSwitch, NBadge, type UploadFileInfo } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import { ArrowDownOutline, DocumentOutline } from '@vicons/ionicons5'
+import { useStrategyStore } from '@/stores/strategy'
 import mSvg from '@/components/MSvg.vue'
 
 
@@ -144,6 +185,8 @@ const emit = defineEmits<{
   'uploadChange': [options: { file: UploadFileInfo; fileList: UploadFileInfo[] }]
   'update:fileList': [files: UploadFileInfo[]]
 }>()
+
+const strategyStore = useStrategyStore()
 
 const thinkButtonLabel = computed(() => {
   if (props.thinkingMode === 'high') return '标准思考'
@@ -444,4 +487,5 @@ function triggerJelly() {
   opacity: 0;
   transform: translateX(-50%) translateY(10px);
 }
+.close-color {color: red;}
 </style>

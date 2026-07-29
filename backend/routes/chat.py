@@ -246,30 +246,22 @@ async def chat(
             # 注入蓝图模式的 System Prompt 指令（要求包含 arguments）
             blueprint_instruction = """
             ## 蓝图模式
+            触发：任务需 ≥2 个工具协作时，输出以下 JSON 计划。
 
-            **触发条件**：
-            - 任务需 ≥2 个工具协作时，进入规划模式。
-            - 若用户明确要求"执行计划"，**直接执行**已有计划，不再输出计划。
-
-            **规划模式输出**：
+            **严格规则**：
             1. 只输出一个 JSON 数组，不要调用任何工具。
             2. 每个步骤必须包含：`step_id`、`description`、`tool`。
             3. 回复以 `<<<PLAN_START>>>` 开头，以 `<<<PLAN_END>>>` 结尾。
-            4. 输出计划后立即停止，不要添加任何额外文字、解释或工具调用。
-
-            **执行模式**：
-            - 用户说"执行计划"时，按顺序调用计划中的工具。
-            - 无计划时收到执行指令，请回复："请先描述任务，我来生成计划。"
-
-            **例外**：单工具任务直接执行，不输出计划。
+            4. 输出计划后，立即停止生成，不要添加任何额外文字、解释或工具调用。
 
             示例（查询天气并写入文件）：
             <<<PLAN_START>>>
             [
-            {"step_id":1,"description":"查询北京的天气","tool":"system_get_weather"},
-            {"step_id":2,"description":"将天气结果写入文件","tool":"system_write_file"}
+              {"step_id":1,"description":"查询北京的天气","tool":"system_get_weather"},
+              {"step_id":2,"description":"将天气结果总结后写入文件","tool":"system_write_file"}
             ]
             <<<PLAN_END>>>
+            
             """
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction

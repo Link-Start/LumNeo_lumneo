@@ -10,6 +10,8 @@ export interface Message {
   content: any
   file_ref?: any
   profile?: any
+  plan?: any
+  plan_id?: string
   model?: any
   turn_index: number
 }
@@ -161,6 +163,7 @@ export const useChatStore = defineStore('chat', () => {
             ? { filename: msg.file_ref.filename, type: msg.file_ref.type, url: msg.file_ref.url }
             : null,
         profile_id: profileStore.activeProfile?.id,
+        plan_id: msg.plan_id,
         model_id: localStorage.getItem('llm_active_model_id'),
         turn_index: msg.turn_index
       })

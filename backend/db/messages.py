@@ -21,6 +21,7 @@ class MessageRecord:
         self.file_ref = self._parse_json(row['file_ref'])
         self.turn_index = row['turn_index']
         self.created_at = row['created_at']
+        self.plan_id = row['plan_id']
 
         self.profile = None
         if 'p_id' in row.keys():
@@ -42,6 +43,16 @@ class MessageRecord:
                     'type': row['m_type'] if 'm_type' in row.keys() else '',
                     'modelName': row['m_modelName'] if 'm_modelName' in row.keys() else ''
                 }
+
+        self.plan = None
+        if 'plan_steps' in row.keys():
+            steps = row['plan_steps']
+            print(steps)
+            if steps is not None:
+                try:
+                    self.plan = json.loads(steps)
+                except:
+                    self.plan = None
                     
     
     def _parse_content(self, val):
@@ -69,6 +80,8 @@ class MessageRecord:
             'content': self.content,
             'profile_id': self.profile_id,
             'profile': self.profile,
+            'plan_id': self.plan_id,
+            'plan': self.plan,
             'model_id': self.model_id,
             'model': self.model,
             'file_ref': self.file_ref,
@@ -85,13 +98,15 @@ async def get_messages(chat_id: str) -> List[MessageRecord]:
             """
             SELECT 
                 m.id, m.chat_id, m.role, m.content, 
-                m.profile_id, m.file_ref, m.turn_index, m.created_at,
+                m.profile_id, m.file_ref, m.turn_index, m.created_at, m.plan_id,
                 p.id AS p_id, p.name AS p_name, p.avatar AS p_avatar,
                 m.model_id,
-                md.id AS m_id, md.name AS m_name, md.type AS m_type, md.modelName AS m_modelName
+                md.id AS m_id, md.name AS m_name, md.type AS m_type, md.modelName AS m_modelName,
+                pl.steps AS plan_steps
             FROM messages m
             LEFT JOIN profiles p ON m.profile_id = p.id
             LEFT JOIN models md ON m.model_id = md.id
+            LEFT JOIN plans pl ON m.plan_id = pl.plan_id
             WHERE m.chat_id = ?
             ORDER BY m.turn_index ASC
             """,
@@ -108,9 +123,10 @@ async def add_message(
     role: str, 
     content: Any, 
     profile_id: int = None,
+    plan_id: Optional[str] = None,
     model_id: str = None,
     file_ref: Optional[dict] = None,
-    turn_index: Optional[int] = None
+    turn_index: Optional[int] = None,
 ) -> MessageRecord:
     """添加一条消息（自动计算 turn_index）"""
     db = await get_db()
@@ -129,8 +145,8 @@ async def add_message(
         file_ref_json = json.dumps(file_ref) if file_ref else None
 
         cursor = await db.execute(
-            "INSERT INTO messages (chat_id, role, content, profile_id, model_id, file_ref, turn_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (chat_id, role, content_str, profile_id, model_id, file_ref_json, turn_index)
+            "INSERT INTO messages (chat_id, role, content, profile_id, plan_id, model_id, file_ref, turn_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (chat_id, role, content_str, profile_id, plan_id, model_id, file_ref_json, turn_index)
         )
         await db.commit()
         msg_id = cursor.lastrowid
@@ -147,6 +163,7 @@ async def update_message(
     chat_id: str, 
     content: Any = None,
     profile_id: int = None,
+    plan_id: Optional[str] = None,
     model_id: str = None,
     file_ref: Optional[dict] = None
 ) -> bool:
@@ -163,6 +180,10 @@ async def update_message(
         if profile_id is not None:
             updates.append("profile_id = ?")
             params.append(profile_id)
+
+        if plan_id is not None:
+            updates.append("plan_id = ?")
+            params.append(plan_id)
 
         if model_id is not None:
             updates.append("model_id = ?")

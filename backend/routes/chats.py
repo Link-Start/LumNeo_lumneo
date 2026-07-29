@@ -31,6 +31,8 @@ class MessageResponse(BaseModel):
     chat_id: str
     role: str
     content: Any
+    plan_id: Optional[str] = None
+    plan: Optional[List[Dict[str, Any]]] = None
     profile_id: Optional[int] = None
     profile: Optional[Dict[str, Any]] = None
     model_id: Optional[str] = None
@@ -46,6 +48,7 @@ class UpdateChatTitle(BaseModel):
 class AddMessageRequest(BaseModel):
     role: str
     content: Any
+    plan_id: Optional[str] = None
     profile_id: Optional[int] = None
     model_id: Optional[str] = None
     file_ref: Optional[Union[dict, list]] = None
@@ -97,6 +100,7 @@ async def add_message_route(chat_id: str, req: AddMessageRequest):
         role=req.role,
         content=req.content,
         profile_id=req.profile_id,
+        plan_id=req.plan_id,
         model_id=req.model_id,
         file_ref=req.file_ref,
         turn_index=req.turn_index
@@ -111,6 +115,7 @@ async def update_message_route(chat_id: str, message_id: int, req: UpdateMessage
         chat_id=chat_id,
         content=req.content,
         file_ref=req.file_ref,
+        plan_id=req.plan_id,
         model_id=req.model_id
     )
     if not success:

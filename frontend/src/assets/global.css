@@ -279,20 +279,13 @@ tr:last-child td:last-child {
   .light .sidebar-panel {
     background: #fff!important;
   }
-  /* 侧边栏打开状态（通过 JS 添加 .sidebar-open 类） */
-  .sidebar-panel.sidebar-open {
-    left: 0;
-  }
 
   /* 遮罩层（在侧边栏打开时显示） */
   .sidebar-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 30;
-  }
-  .sidebar-panel.sidebar-open ~ .sidebar-overlay {
-    display: block;
+    z-index: 1001;
   }
 
   /* 主聊天区域全宽 */
