@@ -57,6 +57,8 @@ class AddMessageRequest(BaseModel):
 class UpdateMessageRequest(BaseModel):
     content: Any
     file_ref: Optional[Union[dict, list]] = None
+    plan_id: Optional[str] = None
+    model_id: Optional[str] = None
 
 # ---------- 路由 ----------
 

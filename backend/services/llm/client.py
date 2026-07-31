@@ -1,11 +1,10 @@
-################################################
-#   纯 OpenAI 客户端封装，负责构建请求参数并发送  #
-################################################
+# backend/services/llm/client.py
 from typing import List, Dict, Optional
 from openai import AsyncOpenAI
 
 
 class LLMClient:
+    """纯 OpenAI 客户端封装，负责构建请求参数并发送"""
     def __init__(
         self,
         model_type: str,

@@ -21,7 +21,7 @@ class MessageRecord:
         self.file_ref = self._parse_json(row['file_ref'])
         self.turn_index = row['turn_index']
         self.created_at = row['created_at']
-        self.plan_id = row['plan_id']
+        self.plan_id = None if row['plan_id'] == '' else row['plan_id']
 
         self.profile = None
         if 'p_id' in row.keys():
@@ -47,7 +47,6 @@ class MessageRecord:
         self.plan = None
         if 'plan_steps' in row.keys():
             steps = row['plan_steps']
-            print(steps)
             if steps is not None:
                 try:
                     self.plan = json.loads(steps)
@@ -81,7 +80,7 @@ class MessageRecord:
             'profile_id': self.profile_id,
             'profile': self.profile,
             'plan_id': self.plan_id,
-            'plan': self.plan,
+            'plan': self.plan if self.role != 'user' else None,
             'model_id': self.model_id,
             'model': self.model,
             'file_ref': self.file_ref,
@@ -210,6 +209,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
     """
     截断消息：删除 from_turn_index 及之后的所有消息，
     并自动清理 tool_calls 表中对应的孤立工具记录及磁盘文件和关联的上传文件
+    关联的plan也被删除
     """
     db = await get_db()
     try:
@@ -276,8 +276,21 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
             "DELETE FROM messages WHERE chat_id = ? AND turn_index >= ?",
             (chat_id, from_turn_index)
         )
+
+        # 6. 删除该对话中，所有不在 messages 表中引用的 plan
+        await db.execute(
+            """
+            DELETE FROM plans
+            WHERE chat_id = ?
+            AND plan_id NOT IN (
+                SELECT plan_id FROM messages
+                WHERE chat_id = ? AND plan_id IS NOT NULL
+            )
+            """,
+            (chat_id, chat_id)
+        )
         
-        # 6. 删除 tool_calls 表中的孤立数据
+        # 7. 删除 tool_calls 表中的孤立数据
         if unique_call_ids:
             await db.execute(
                 f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
@@ -286,7 +299,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
         
         await db.commit()
 
-        # 7. 删除磁盘上的大文件
+        # 8. 删除磁盘上的大文件
         for file_path in files_to_delete:
             await asyncio.sleep(0.5)  # 让出控制权，避免 Windows 文件占用
             max_retries = 3
@@ -319,7 +332,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
 
 async def delete_message(chat_id: str, turn_index: int) -> bool:
     """
-    单轮精准删除。如果删的是 assistant，对应的 tool 和磁盘文件也会被清除。
+    单轮精准删除。如果删的是 assistant，对应的 tool 和磁盘文件也会被清除，关联的plan也被删除。
     """
     db = await get_db()
     try:
@@ -382,8 +395,21 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             "DELETE FROM messages WHERE chat_id = ? AND turn_index = ?",
             (chat_id, turn_index)
         )
+
+        # 4. 删除该对话中，所有不在 messages 表中引用的 plan
+        await db.execute(
+            """
+            DELETE FROM plans
+            WHERE chat_id = ?
+            AND plan_id NOT IN (
+                SELECT plan_id FROM messages
+                WHERE chat_id = ? AND plan_id IS NOT NULL
+            )
+            """,
+            (chat_id, chat_id)
+        )
         
-        # 4. 删除工具
+        # 5. 删除工具
         if unique_call_ids:
             await db.execute(
                 f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
@@ -392,7 +418,7 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             
         await db.commit()
 
-        # 5. 删除磁盘文件（带重试）
+        # 6. 删除磁盘文件（带重试）
         for file_path in files_to_delete:
             await asyncio.sleep(0.5)
             max_retries = 3

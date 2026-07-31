@@ -407,6 +407,7 @@ function handlePasteFiles(files: File[]) {
 
 // 发送消息
 const onSendMessage = () => {
+  if (!currentInput.value.trim() || isLoading.value || !chatStore.activeChatId || !activeModelId.value) return
   sendMessage(uploadedFiles.value, () => {
     messageListRef.value?.scrollToLatest()
   })
@@ -419,8 +420,9 @@ const onRegenerateFromCurrentHistory = async () => {
 }
 
 // 重新生成特定消息
-const handleRegenerateResponse = async (msg: Message) => {
-  await regenerateResponse(msg)
+const handleRegenerateResponse = async (msg: Message, prevMsg: Message) => {
+  
+  await regenerateResponse(msg, prevMsg)
 }
 
 // 编辑后保存并重新生成
@@ -548,6 +550,8 @@ const toggleDecision = debounce(() => {
 }, 150)
 
 const handleKeyboard = (event: KeyboardEvent) => {
+  console.log(event.code);
+  
   if (event.altKey) {
     event.preventDefault()
     if (event.key === ',' || event.code === 'Comma') {
@@ -556,11 +560,11 @@ const handleKeyboard = (event: KeyboardEvent) => {
       toggleSidebar()
     } else if (event.code === 'KeyR') {
       togglePanel()
-    } else if (event.code === 'KeyB') {
+    } else if (event.code === 'Digit1') {
       toggleBlueprint()
-    } else if (event.code === 'KeyA') {
+    } else if (event.code === 'Digit2') {
       toggleApproval()
-    } else if (event.code === 'KeyD') {
+    } else if (event.code === 'Digit3') {
       toggleDecision()
     }
   }

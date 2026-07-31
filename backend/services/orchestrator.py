@@ -53,9 +53,11 @@ class LLMOrchestrator:
         chat_id: Optional[str] = None,
         turn_index: Optional[int] = None,
         blueprint_mode: bool = False,
+        plan_id: Optional[str] = None,
+        is_executing_plan: bool = False,
     ) -> AsyncGenerator[str, None]:
         params = params or {}
-        plan_id_saved = None
+        plan_id_saved = plan_id
         current_messages = messages.copy()
         if tools is None and enable_tools:
             tools = await get_all_tools(mcp_manager)
@@ -147,9 +149,8 @@ class LLMOrchestrator:
                 state.reasoning_buffer = ""
 
             # ========== 蓝图模式：检测并执行计划 ==========
-            if blueprint_mode:
+            if blueprint_mode and plan_id_saved is None:
                 plan = self._extract_plan_from_content(state.final_content)
-                print(f"提取到的计划: {plan}")
                 if plan is not None:
                     # 1. 生成一个唯一的 Plan ID（用于后续追踪）
                     plan_id = f"plan_{uuid.uuid4().hex[:12]}"
@@ -163,14 +164,13 @@ class LLMOrchestrator:
                         "type": "plan",
                         "id": plan_id,
                         "content": plan,  # 这里是具体的步骤列表
-                        # "status": "pending" # 状态：等待执行
                     }
-                    # segments.append(plan_segment)
                     
                     # 3. 发送一个特殊事件给前端，告诉前端“计划已就绪，请展示编辑器”
                     #    前端收到这个事件后，应该停止loading，渲染计划编辑界面
                     plan_json_str = json.dumps(plan_segment, ensure_ascii=False)
                     yield f"<!--plan_ready:{plan_json_str}-->"
+                    segments.append({"type": "text", "content": "📋 计划已生成，请确认后执行。"})
 
                     # 4. 结束当前轮次，等待用户前端操作
                     break 
@@ -356,7 +356,7 @@ class LLMOrchestrator:
                 chat_id=chat_id,
                 content=segments_json,
                 profile_id=profile_id,
-                plan_id=plan_id_saved,
+                plan_id=plan_id_saved if not is_executing_plan else None,
                 model_id=model_id,
                 turn_index=turn_index,
                 file_ref=None

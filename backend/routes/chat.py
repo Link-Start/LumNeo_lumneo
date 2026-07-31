@@ -73,6 +73,8 @@ class ChatRequest(BaseModel):
     message_id: Optional[int] = None
     chat_id: Optional[str] = None
     turn_index: Optional[int] = None
+    plan_id: Optional[str] = None
+    is_executing_plan: bool = False
     params: Optional[StrategyParams] = None
 
 class DecisionUpdate(BaseModel):
@@ -241,8 +243,7 @@ async def chat(
             strategy_params = request.params.model_dump(exclude_none=True)
 
         final_params = {**base_params, **strategy_params}
-
-        if request.params and request.params.blueprint_mode:
+        if request.params and request.params.blueprint_mode and request.plan_id is None:
             # 注入蓝图模式的 System Prompt 指令（要求包含 arguments）
             blueprint_instruction = """
             ## 蓝图模式
@@ -283,6 +284,8 @@ async def chat(
                 chat_id=request.chat_id,
                 turn_index=request.turn_index,
                 blueprint_mode=request.params.blueprint_mode if request.params else False,
+                plan_id=request.plan_id if request.plan_id else None,
+                is_executing_plan=request.is_executing_plan
             ),
             media_type="text/event-stream"
         )

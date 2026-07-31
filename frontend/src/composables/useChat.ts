@@ -173,12 +173,13 @@ export function useChat() {
   }
 
   // ---------- 流读取 ----------
-  async function readStream(response: Response): Promise<{ finalSegments?: any[] }> {
+  async function readStream(response: Response): Promise<{ finalSegments?: any[], planData?: any }> {
     if (!response.ok || !response.body) throw new Error('网络响应失败')
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullText = ''
     let finalSegments: any[] | undefined = undefined
+    let planData: any = null // 记录当前计划数据
 
     while (true) {
       const { done, value } = await reader.read()
@@ -186,6 +187,19 @@ export function useChat() {
       const chunk = decoder.decode(value, { stream: true })
       fullText += chunk
       streamingContent.value = fullText
+
+      // 检测 plan_ready 标签（新增）
+      const planMatch = chunk.match(/<!--plan_ready:([\s\S]*?)-->/)
+      if (planMatch) {
+        try {
+          const parsed = JSON.parse(planMatch[1])
+          if (parsed.type === 'plan' && parsed.id && Array.isArray(parsed.content)) {
+            planData = parsed   // 存储最新的 plan 数据（通常只有一次）
+          }
+        } catch (e) {
+          console.warn('解析 plan_ready 失败', e)
+        }
+      }
 
       // 检测工具确认请求
       const confirmMatch = chunk.match(/<!--tool_confirm_required:([^:]+):([^:]*):([\s\S]*?)-->/)
@@ -243,7 +257,7 @@ export function useChat() {
         }
       }
     }
-    return { finalSegments }
+    return { finalSegments, planData }
   }
 
   // ---------- 保存中断消息 ----------
@@ -280,8 +294,8 @@ export function useChat() {
     content: string,
     files: UploadedFile[] = [],
     scrollToBottom?: () => void,
-    close_blueprint?: boolean,
-    plan_id?: string
+    isExecutingPlan: boolean = false,
+    plan_id?: string,
   ) {
     if (!content.trim() || isLoading.value || !chatStore.activeChatId) return
 
@@ -303,7 +317,6 @@ export function useChat() {
       turn_index: userTurnIndex,
       plan_id: plan_id
     }
-    console.log(plan_id);
     
     chatStore.addMessageToLocal(userMsg)
     await chatStore.saveMessageToBackend(userMsg)
@@ -329,8 +342,7 @@ export function useChat() {
       allMessages.pop() // 移除占位
 
       const apiMessages = await cleanMessages(allMessages)
-      const params = strategyStore.getBackendParams()
-      if (close_blueprint) params.blueprint_mode = false
+
       const body = JSON.stringify({
         messages: apiMessages,
         enable_tools: chatStore.enableProfile,
@@ -346,7 +358,9 @@ export function useChat() {
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
         turn_index: assistantTurnIndex,
-        params: params,
+        plan_id: plan_id,
+        is_executing_plan: isExecutingPlan,
+        params: strategyStore.getBackendParams()
       })
 
       if (scrollToBottom) setTimeout(scrollToBottom, 160)
@@ -358,7 +372,7 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      const { finalSegments } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response)
 
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)
@@ -366,6 +380,12 @@ export function useChat() {
           const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
           if (targetMsg) {
             targetMsg.content = JSON.stringify(finalSegments)
+            if (planData) {
+              targetMsg.plan_id = planData.id
+              targetMsg.plan = planData.content
+            } else {
+              targetMsg.plan = null
+            }
           }
         }
         streamingContent.value = ''
@@ -393,8 +413,9 @@ export function useChat() {
   // ---------- 对外方法 ----------
   async function sendMessage(uploadedFiles: UploadedFile[], scrollToBottom: () => void) {
     if (!currentInput.value.trim() || isLoading.value || !chatStore.activeChatId) return
-    await sendMessageInternal(currentInput.value.trim(), uploadedFiles, scrollToBottom)
+    const content = currentInput.value.trim()
     currentInput.value = ''
+    await sendMessageInternal(content, uploadedFiles, scrollToBottom, false)
   }
 
   async function sendPlanMessage(id: string, content: string, scrollToBottom?: () => void) {
@@ -435,6 +456,8 @@ export function useChat() {
     try {
       const allMessages = chatStore.getActiveMessages()
       allMessages.pop()
+      const prevMsg = allMessages[allMessages.length - 1]
+      const isExecutingPlan = !!prevMsg?.plan_id
 
       const body = JSON.stringify({
         messages: await cleanMessages(allMessages),
@@ -451,16 +474,26 @@ export function useChat() {
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
         turn_index: assistantTurnIndex,
+        plan_id: prevMsg?.plan_id,
+        is_executing_plan: isExecutingPlan,
         params: strategyStore.getBackendParams()
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const { finalSegments } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response)
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)
         if (chat) {
           const targetMsg = chat.messages.find(m => m.turn_index === assistantTurnIndex && m.role === 'assistant')
-          if (targetMsg) targetMsg.content = JSON.stringify(finalSegments)
+          if (targetMsg) {
+            targetMsg.content = JSON.stringify(finalSegments)
+            if (planData) {
+              targetMsg.plan_id = planData.id
+              targetMsg.plan = planData.content
+            } else {
+              targetMsg.plan = null
+            }
+          }
         }
         streamingContent.value = ''
       }
@@ -480,7 +513,8 @@ export function useChat() {
   }
 
   // 重新生成特定消息（替换截断）
-  async function regenerateResponse(assistantMsg: Message) {
+  async function regenerateResponse(assistantMsg: Message, prevMsg: Message) {
+
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
     if (!currentModel) { message.error('请先选择一个模型'); return }
@@ -499,7 +533,7 @@ export function useChat() {
       id: Date.now() + 1,
       role: 'assistant',
       content: '',
-      turn_index: assistantMsg.turn_index
+      turn_index: assistantMsg.turn_index,
     }
     chatStore.addMessageToLocal(newMsg)
 
@@ -507,6 +541,7 @@ export function useChat() {
       const allMessages = chatStore.getActiveMessages()
       allMessages.pop()
 
+      const isExecutingPlan = !!prevMsg.plan_id
       const body = JSON.stringify({
         messages: await cleanMessages(allMessages),
         enable_tools: chatStore.enableProfile,
@@ -522,11 +557,13 @@ export function useChat() {
         profile_id: chatStore.enableProfile ? profileStore.activeProfileId : null,
         chat_id: chatStore.activeChatId,
         turn_index: assistantMsg.turn_index,
+        plan_id: prevMsg.plan_id,
+        is_executing_plan: isExecutingPlan,
         params: strategyStore.getBackendParams()
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const { finalSegments } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response)
 
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)
@@ -534,6 +571,12 @@ export function useChat() {
           const targetMsg = chat.messages.find(m => m.turn_index === assistantMsg.turn_index && m.role === 'assistant')
           if (targetMsg) {
             targetMsg.content = JSON.stringify(finalSegments)
+            if (planData) {
+              targetMsg.plan_id = planData.id
+              targetMsg.plan = planData.content
+            } else {
+              targetMsg.plan = null
+            }
           }
         }
         streamingContent.value = ''

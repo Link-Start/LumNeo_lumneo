@@ -1,7 +1,5 @@
 
-################################################
-#   负责解析流式 chunk，提取内容、推理和工具调用  #
-################################################
+# backend/services/llm/stream_parser.py
 import time
 import uuid
 from typing import AsyncGenerator, Dict, List, Optional
@@ -9,6 +7,7 @@ from backend.schemas.llm import StreamState
 
 
 class StreamParser:
+    """负责解析流式 chunk，提取内容、推理和工具调用"""
     @staticmethod
     async def parse(
         response,
@@ -20,6 +19,8 @@ class StreamParser:
     ) -> AsyncGenerator[str, None]:
         """解析流式响应，yield 文本和标记，同时填充 state"""
         state.tool_calls_by_index = {}
+        state.tool_calls_started = False
+        state.final_content = ""
 
         async for chunk in response:
             if state.request and await state.request.is_disconnected():

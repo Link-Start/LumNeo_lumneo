@@ -104,10 +104,12 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = processedText.replace(/<!--plan_ready:([\s\S]*?)-->/g, (_, jsonStr) => {
     try {
       const planData = JSON.parse(jsonStr)
-      return `\n\n<plan>${JSON.stringify(planData.content)}</plan>\n\n`
-    } catch (e) {
+      console.log(planData);
+      
+      return `\n\n<plan plan_id=${planData.id}>${JSON.stringify(planData.content)}</plan>\n\n`
+    } catch (e: any) {
       console.error('解析 Plan Ready 失败', e)
-      return ''
+      return `\n\n<!-- plan_ready 解析错误: ${e.message} -->\n\n`
     }
   })
   // 3. 处理 Token 用量
@@ -164,6 +166,7 @@ export function renderStructuredContent(input: string | any[], plan_id: string, 
 
   // 2. 用于暂存连续的 reasoning / tool_call
   const thinkingItems: any[] = []
+   let planInserted = false
 
   // 3. 将暂存的一组思考项输出为一个标签
   const flushThinkingGroup = (): string => {
@@ -271,9 +274,10 @@ export function renderStructuredContent(input: string | any[], plan_id: string, 
     } else {
       // 先输出之前积攒的思考链
       resultHtml += flushThinkingGroup()
-
-      if (plan && plan.length > 0) {
+      
+      if (!planInserted && plan && plan.length > 0) {
         resultHtml += `\n\n<plan plan_id=${plan_id}>${JSON.stringify(plan)}</plan>\n\n`
+        planInserted = true
       }
 
       // 再处理当前非思考片段
@@ -293,6 +297,10 @@ export function renderStructuredContent(input: string | any[], plan_id: string, 
 
   // 处理末尾可能遗留的思考链
   resultHtml += flushThinkingGroup()
+  // 如果循环结束后 plan 还没插入（比如所有片段都是 thinking），则在最后插入
+  if (!planInserted && plan && plan.length > 0) {
+    resultHtml += `\n\n<plan plan_id="${plan_id}">${JSON.stringify(plan)}</plan>\n\n`
+  }
 
   // 清理多余换行
   return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
