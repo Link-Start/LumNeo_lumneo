@@ -140,14 +140,13 @@ async def init_db():
     await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_chat ON user_decisions (chat_id)")
     await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_status ON user_decisions (status)")
 
-    # backend/database.py 的 init_db 函数中添加
 
     await db.execute("""
         CREATE TABLE IF NOT EXISTS plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             plan_id TEXT NOT NULL UNIQUE,
             chat_id TEXT NOT NULL,
-            steps TEXT NOT NULL,          -- JSON 数组
+            steps TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE

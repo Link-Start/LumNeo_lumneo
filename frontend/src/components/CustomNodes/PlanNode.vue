@@ -433,13 +433,38 @@ function resetPlan() {
   message.success('已重置为原始计划')
 }
 
-function confirmEdit() {
-  console.log();
+const confirmEdit = async () => {
   
   planData.value = JSON.parse(JSON.stringify(editablePlan.value))
   editing.value = false
   editingIndex.value = null
-  message.success('计划已更新')
+  
+  // 保存到数据库
+  const id = planId.value
+  if (!id) {
+    message.warning('计划 ID 缺失，无法保存')
+    return
+  }
+
+  try {
+    const response = await fetch(`/api/plans/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ steps: planData.value }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    message.success('计划已更新')
+  } catch (error: any) {
+    console.error('更新计划失败', error)
+    message.error(`保存计划失败: ${error.message || '未知错误'}，本地修改已生效`)
+  }
 }
 
 // 添加格式化计划文本的函数
@@ -454,12 +479,10 @@ function formatPlan(steps: any[]): string {
   return `按照以下计划执行：\n${lines.join('\n')}`
 }
 
-function handleExecute() {
+const handleExecute = async () => {
   // 如果处于编辑模式，先应用编辑
   if (editing.value) {
-    planData.value = JSON.parse(JSON.stringify(editablePlan.value))
-    editing.value = false
-    editingIndex.value = null
+    await confirmEdit()  // 保存后再执行
   }
 
   const executable = planData.value.filter((step: any) => !step.disabled)

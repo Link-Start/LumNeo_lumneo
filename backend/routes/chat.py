@@ -3,7 +3,7 @@ import re
 import json
 import traceback
 import os
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Literal, Any
@@ -340,3 +340,10 @@ async def update_decision(decision: DecisionUpdate):
     if not success:
         raise HTTPException(status_code=500, detail="更新失败")
     return {"success": True}
+
+@router.get("/decisions")
+async def get_decisions(chat_id: str = Query(..., description="对话 ID")):
+    """获取某个对话的所有决策记录（按时间倒序）"""
+    from backend.db.decisions import list_decisions_by_chat
+    records = await list_decisions_by_chat(chat_id)
+    return [r.to_dict() for r in records]
