@@ -117,6 +117,12 @@ def _validate_script_path(script_path: str) -> Tuple[Optional[Path], Optional[st
 
     return abs_path, None
 
+def _get_python_interpreter() -> str:
+    # 如果是打包环境，优先使用 _base_executable
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_base_executable'):
+        return sys._base_executable
+    return sys.executable
+
 
 def _build_command(
     abs_path: Path, args: str
@@ -131,7 +137,8 @@ def _build_command(
     if abs_path.suffix == ".py":
         # -I: 隔离模式，忽略 PYTHON* 环境变量和用户 site-packages
         # -B: 不生成 .pyc 文件
-        cmd: List[str] = [sys.executable, "-I", "-B", str(abs_path)]
+        python = _get_python_interpreter()
+        cmd: List[str] = [python, "-I", "-B", str(abs_path)]
     else:
         cmd = [str(abs_path)]
 

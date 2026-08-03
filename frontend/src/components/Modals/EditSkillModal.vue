@@ -297,10 +297,10 @@ function startUpload() {
 
 function finishUpload() {
   uploadPhase.value = 'finish'
-  adding.value = false
   if (finishTimer) clearTimeout(finishTimer)
   finishTimer = window.setTimeout(() => {
     uploadPhase.value = 'idle'
+    adding.value = false
     finishTimer = null
   }, 1000)
 }

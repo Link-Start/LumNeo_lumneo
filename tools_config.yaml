@@ -1,6 +1,6 @@
 tools:
   - name: system_get_weather
-    title: 获取天气
+    title: 天气获取
     description: 获取指定城市的当前或未来天气信息。
     parameters:
       type: object
@@ -16,7 +16,7 @@ tools:
     function_name: get_weather
 
   - name: system_use_skill
-    title: 装载技能
+    title: 技能装载
     description: 当用户意图匹配某个可用技能时，必须首先调用此工具获取该技能的完整执行手册（包含详细步骤、脚本路径、参数说明等）。调用前请参考系统注入的“可用技能索引”选择正确的 `skill_id`。获取手册后，严格按照手册内容执行后续操作。
     parameters:
       type: object
@@ -29,7 +29,7 @@ tools:
     function_name: use_skill
 
   - name: system_execute_script
-    title: 施放技能
+    title: 技能施放
     description: 当已通过 `system_use_skill` 获取技能手册，且手册中明确指出需要运行脚本时，调用此工具执行指定的脚本文件。脚本路径必须使用手册中提供的绝对路径，参数格式按手册说明传递。执行结果将直接返回给用户。
     parameters:
       type: object
@@ -45,7 +45,7 @@ tools:
     function_name: execute_script
 
   - name: system_read_file
-    title: 读取文件
+    title: 文件读取
     description: >
       读取指定路径的文件内容。自动根据文件扩展名选择最佳解析策略，并返回包含内容、格式和元数据的字典。
       支持的文件类型：
@@ -76,7 +76,7 @@ tools:
     function_name: file_read
 
   - name: system_write_file
-    title: 写入文件
+    title: 文件写入
     description: 将文本内容写入指定路径的文件。支持全量覆盖或追加模式。若文件所在目录不存在会自动递归创建。
     parameters:
       type: object
@@ -126,7 +126,7 @@ tools:
     function_name: file_patch
 
   - name: system_delete_file
-    title: 删除文件
+    title: 文件删除
     description: |
       删除指定路径的文件。
       若文件不存在且 `force` 为 true 则静默忽略，否则返回错误。
@@ -163,7 +163,7 @@ tools:
     function_name: create_project_tree
 
   - name: system_read_file_list
-    title: 列出文件
+    title: 文件列表
     description: 递归列出指定目录下的所有文件，自动应用 .gitignore 忽略规则。
     parameters:
       type: object
