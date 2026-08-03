@@ -52,7 +52,7 @@ watch(() => isOpen.value, (newVal) => {
   isExpanded.value = newVal
 })
 const timeStr = computed(() => {
-  const attrs = props.node.attrs || {}  
+  const attrs = props.node.attrs || {}
   if (attrs[0] && attrs[0][1]) {
     return ` (${attrs[0][1]}秒)`
   }

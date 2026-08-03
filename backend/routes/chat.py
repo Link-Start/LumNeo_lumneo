@@ -3,7 +3,7 @@ import re
 import json
 import traceback
 import os
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Literal, Any
@@ -26,8 +26,8 @@ with open(full_path, 'r', encoding="utf-8") as f:
     BASE_SYSTEM_PROMPT = f.read()
 BASE_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT.replace("{{uploads_dir}}", str(config.uploads_dir))
 
-disabled_tools = ['system_test_fail', 'system_write_file', 'system_patch_file', 'system_delete_file', 'system_create_project_tree', 'system_read_file_list']
-default_tools = ['system_get_weather', 'system_read_file', 'system_use_skill', 'system_execute_script']
+disabled_tools = ['system_write_file', 'system_patch_file', 'system_delete_file', 'system_create_project_tree', 'system_read_file_list']
+default_tools = ['system_get_weather', 'system_read_file']
 
  # 需要转义 reasoning_effort 的模型名称列表
 REASONING_EFFORT_MAPPING_MODELS = [
@@ -73,11 +73,22 @@ class ChatRequest(BaseModel):
     message_id: Optional[int] = None
     chat_id: Optional[str] = None
     turn_index: Optional[int] = None
+    plan_id: Optional[str] = None
+    is_executing_plan: bool = False
     params: Optional[StrategyParams] = None
 
 class DecisionUpdate(BaseModel):
     decision_id: int
     choice: str  # 'continue' 或 'stop'
+
+class ExecutePlanRequest(BaseModel):
+    chat_id: str
+    turn_index: int
+    plan: List[Dict[Any, Any]]       # 用户编辑后的计划
+    messages: List[Dict[str, Any]]   # 当前的对话历史
+    profile_id: Optional[int] = None
+    llm_config: Optional[ModelConfig] = None
+    params: Optional[Dict[str, Any]] = None
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
@@ -123,12 +134,10 @@ async def chat(
         # 基础 System Prompt
         system_prompt = BASE_SYSTEM_PROMPT.replace("{{workspace_path}}", backend.workspace_path)
         system_prompt = system_prompt.replace("{{time_now}}", get_current_time())
-
-        # 初始化工具列表
-        tools = []
         
         # 处理 Profile 和 Skills
         profile = None
+        has_available_skills = False
         if request.profile_id is not None:
             profile = await get_profile_by_id(request.profile_id)
             if profile:
@@ -173,6 +182,7 @@ async def chat(
                     if skill_descriptions:
                         system_prompt += "\n\n## 可用技能索引\n\n"
                         system_prompt += "\n".join(skill_descriptions)
+                        has_available_skills = True
 
         # 处理系统工具
         local_tools = get_local_tools()
@@ -189,8 +199,11 @@ async def chat(
             use_tools = [t for t in enable_tools if t["function"]["name"] in allowed_tools]
             system_tools.extend(use_tools)
 
+        skill_tools = []
         # 合并所有工具 (系统工具 + 技能工具)
-        final_tools = system_tools + tools
+        if has_available_skills:
+            skill_tools = [t for t in local_tools if t["function"]["name"] in ['system_use_skill', 'system_execute_script']]
+        final_tools = system_tools + skill_tools
 
         # 清理历史消息中的 reasoning block
         REASONING_BLOCK = re.compile(r'<!--reasoning:start-->.*?<!--reasoning:end:\d+\.?\d*-->', re.DOTALL)
@@ -232,29 +245,32 @@ async def chat(
             strategy_params = request.params.model_dump(exclude_none=True)
 
         final_params = {**base_params, **strategy_params}
-
-        if request.params and request.params.blueprint_mode:
-            # 注入蓝图模式的 System Prompt 指令
+        if request.params and request.params.blueprint_mode and request.plan_id is None:
+            # 注入蓝图模式的 System Prompt 指令（要求包含 arguments）
             blueprint_instruction = """
-            ## 蓝图模式
-            触发：任务需 ≥2 个工具协作时，输出以下 JSON 计划。
 
-            **严格规则**：
-            1. 只输出一个 JSON 数组，不要调用任何工具。
-            2. 计划必须包含步骤：`step_id`、`description`、`tool`。
-            3. 回复以 `<<<PLAN_START>>>` 开头，以 `<<<PLAN_END>>>` 结尾。
-            4. 输出计划后，立即停止生成，不要添加任何额外文字、解释或工具调用。
+## 蓝图模式
+触发：任务需 ≥2 个工具协作时，输出以下 JSON 计划。
 
-            示例（下载 Node.js 源码并统计文件数量）：
-            <<<PLAN_START>>>
-            [
-            {"step_id":1,"description":"克隆 Node.js 仓库","tool":"execute_command"},
-            {"step_id":2,"description":"统计文件数量","tool":"execute_command"}
-            ]
-            <<<PLAN_END>>>
+**严格规则**：
+1. 只输出一个 JSON 数组，不要调用任何工具。
+2. 每个步骤必须包含：`step_id`、`description`、`tool`。
+3. 回复以 `<<<PLAN_START>>>` 开头，以 `<<<PLAN_END>>>` 结尾。
+4. 输出计划后，立即停止生成，不要添加任何额外文字、解释或工具调用。
+
+示例（查询天气并写入文件）：
+<<<PLAN_START>>>
+[
+    {"step_id":1,"description":"查询北京的天气","tool":"system_get_weather"},
+    {"step_id":2,"description":"将天气结果总结后写入文件","tool":"system_write_file"}
+]
+<<<PLAN_END>>>
+
             """
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction
+
+            print(system_prompt, final_tools, has_available_skills)
 
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
@@ -271,7 +287,10 @@ async def chat(
                 profile_id=profile.id if profile else None,
                 model_id=request.llm_config.model_id,
                 chat_id=request.chat_id,
-                turn_index=request.turn_index
+                turn_index=request.turn_index,
+                blueprint_mode=request.params.blueprint_mode if request.params else False,
+                plan_id=request.plan_id if request.plan_id else None,
+                is_executing_plan=request.is_executing_plan
             ),
             media_type="text/event-stream"
         )
@@ -326,3 +345,10 @@ async def update_decision(decision: DecisionUpdate):
     if not success:
         raise HTTPException(status_code=500, detail="更新失败")
     return {"success": True}
+
+@router.get("/decisions")
+async def get_decisions(chat_id: str = Query(..., description="对话 ID")):
+    """获取某个对话的所有决策记录（按时间倒序）"""
+    from backend.db.decisions import list_decisions_by_chat
+    records = await list_decisions_by_chat(chat_id)
+    return [r.to_dict() for r in records]

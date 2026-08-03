@@ -99,22 +99,19 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = processedText.replace(/<!--tool_preview:(start|end):[^>]+-->/g, '')
   processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
 
+  processedText = processedText.replace(/<<<PLAN_START>>>[\s\S]*?(?:<<<PLAN_END>>>|$)/g, '')
   // 处理计划块 (流式)
-  let planMatch = processedText.match(/<<<PLAN_START>>>([\s\S]*?)(?:<<<PLAN_END>>>|$)/)
-  if (planMatch) {
-    const fullMatch = planMatch[0]
-    const inner = planMatch[1]
-    const hasEnd = fullMatch.includes('<<<PLAN_END>>>')
-    // 构造标签：未闭合时添加 loading，闭合后去掉
-    const tag = hasEnd
-      ? `<plan>${inner}</plan>`
-      : `<plan loading="true">${inner}</plan>`
-    // 替换整个匹配区间，并保留前后文本
-    processedText = processedText.replace(
-      /<<<PLAN_START>>>[\s\S]*?(?:<<<PLAN_END>>>|$)/,
-      tag
-    )
-  }
+  processedText = processedText.replace(/<!--plan_ready:([\s\S]*?)-->/g, (_, jsonStr) => {
+    try {
+      const planData = JSON.parse(jsonStr)
+      console.log(planData);
+      
+      return `\n\n<plan plan_id=${planData.id}>${JSON.stringify(planData.content)}</plan>\n\n`
+    } catch (e: any) {
+      console.error('解析 Plan Ready 失败', e)
+      return `\n\n<!-- plan_ready 解析错误: ${e.message} -->\n\n`
+    }
+  })
   // 3. 处理 Token 用量
   processedText = processedText.replace(
     /<!--token_usage:(.*?)-->/g,
@@ -146,9 +143,9 @@ function isAllToolCalls(items: any[]): boolean {
  * @param input - 后端返回的 JSON 字符串或已解析的数组 (例如: [{"type": "reasoning", ...}, {"type": "text", ...}])
  * @returns 渲染好的 HTML 标签字符串
  */
-export function renderStructuredContent(input: string | any[]): string {
+export function renderStructuredContent(input: string | any[], plan_id: string, plan: any[]): string {
   let segments: any[] = []
-
+  
   // 1. 解析输入
   if (typeof input === 'string') {
     try {
@@ -169,6 +166,7 @@ export function renderStructuredContent(input: string | any[]): string {
 
   // 2. 用于暂存连续的 reasoning / tool_call
   const thinkingItems: any[] = []
+   let planInserted = false
 
   // 3. 将暂存的一组思考项输出为一个标签
   const flushThinkingGroup = (): string => {
@@ -276,6 +274,11 @@ export function renderStructuredContent(input: string | any[]): string {
     } else {
       // 先输出之前积攒的思考链
       resultHtml += flushThinkingGroup()
+      
+      if (!planInserted && plan && plan.length > 0) {
+        resultHtml += `\n\n<plan plan_id=${plan_id}>${JSON.stringify(plan)}</plan>\n\n`
+        planInserted = true
+      }
 
       // 再处理当前非思考片段
       if (type === 'text') {
@@ -294,9 +297,13 @@ export function renderStructuredContent(input: string | any[]): string {
 
   // 处理末尾可能遗留的思考链
   resultHtml += flushThinkingGroup()
+  // 如果循环结束后 plan 还没插入（比如所有片段都是 thinking），则在最后插入
+  if (!planInserted && plan && plan.length > 0) {
+    resultHtml += `\n\n<plan plan_id="${plan_id}">${JSON.stringify(plan)}</plan>\n\n`
+  }
 
   // 清理多余换行
-  return convertPlanTags(resultHtml.replace(/\n{3,}/g, '\n\n').trim())
+  return resultHtml.replace(/\n{3,}/g, '\n\n').trim()
 }
 
 // ============================================================
@@ -419,28 +426,6 @@ async function fetchToolDetails(callIds: string[]): Promise<Record<string, { arg
   await fetchPromise
 
   return finalResult
-}
-
-// ============================================================
-// 第五部分：蓝图计划标签转换
-// ============================================================
-
-/**
- * 将流式中的 <<<PLAN_START>>>...<<<PLAN_END>>> 转换为 <plan> 自定义标签
- * @param text 原始文本
- * @returns 转换后的文本
- */
-function convertPlanTags(text: string): string {
-  if (!text) return text
-  
-  return text.replace(/<<<PLAN_START>>>([\s\S]*?)<<<PLAN_END>>>/g, (match, jsonStr) => {
-    try {
-      JSON.parse(jsonStr)
-      return `<plan>${jsonStr}</plan>`
-    } catch {
-      return match
-    }
-  })
 }
 
 interface ResponseType { 

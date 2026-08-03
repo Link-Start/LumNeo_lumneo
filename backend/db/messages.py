@@ -21,6 +21,7 @@ class MessageRecord:
         self.file_ref = self._parse_json(row['file_ref'])
         self.turn_index = row['turn_index']
         self.created_at = row['created_at']
+        self.plan_id = None if row['plan_id'] == '' else row['plan_id']
 
         self.profile = None
         if 'p_id' in row.keys():
@@ -42,6 +43,15 @@ class MessageRecord:
                     'type': row['m_type'] if 'm_type' in row.keys() else '',
                     'modelName': row['m_modelName'] if 'm_modelName' in row.keys() else ''
                 }
+
+        self.plan = None
+        if 'plan_steps' in row.keys():
+            steps = row['plan_steps']
+            if steps is not None:
+                try:
+                    self.plan = json.loads(steps)
+                except:
+                    self.plan = None
                     
     
     def _parse_content(self, val):
@@ -69,6 +79,8 @@ class MessageRecord:
             'content': self.content,
             'profile_id': self.profile_id,
             'profile': self.profile,
+            'plan_id': self.plan_id,
+            'plan': self.plan if self.role != 'user' else None,
             'model_id': self.model_id,
             'model': self.model,
             'file_ref': self.file_ref,
@@ -85,13 +97,15 @@ async def get_messages(chat_id: str) -> List[MessageRecord]:
             """
             SELECT 
                 m.id, m.chat_id, m.role, m.content, 
-                m.profile_id, m.file_ref, m.turn_index, m.created_at,
+                m.profile_id, m.file_ref, m.turn_index, m.created_at, m.plan_id,
                 p.id AS p_id, p.name AS p_name, p.avatar AS p_avatar,
                 m.model_id,
-                md.id AS m_id, md.name AS m_name, md.type AS m_type, md.modelName AS m_modelName
+                md.id AS m_id, md.name AS m_name, md.type AS m_type, md.modelName AS m_modelName,
+                pl.steps AS plan_steps
             FROM messages m
             LEFT JOIN profiles p ON m.profile_id = p.id
             LEFT JOIN models md ON m.model_id = md.id
+            LEFT JOIN plans pl ON m.plan_id = pl.plan_id
             WHERE m.chat_id = ?
             ORDER BY m.turn_index ASC
             """,
@@ -108,9 +122,10 @@ async def add_message(
     role: str, 
     content: Any, 
     profile_id: int = None,
+    plan_id: Optional[str] = None,
     model_id: str = None,
     file_ref: Optional[dict] = None,
-    turn_index: Optional[int] = None
+    turn_index: Optional[int] = None,
 ) -> MessageRecord:
     """添加一条消息（自动计算 turn_index）"""
     db = await get_db()
@@ -129,8 +144,8 @@ async def add_message(
         file_ref_json = json.dumps(file_ref) if file_ref else None
 
         cursor = await db.execute(
-            "INSERT INTO messages (chat_id, role, content, profile_id, model_id, file_ref, turn_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (chat_id, role, content_str, profile_id, model_id, file_ref_json, turn_index)
+            "INSERT INTO messages (chat_id, role, content, profile_id, plan_id, model_id, file_ref, turn_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (chat_id, role, content_str, profile_id, plan_id, model_id, file_ref_json, turn_index)
         )
         await db.commit()
         msg_id = cursor.lastrowid
@@ -147,6 +162,7 @@ async def update_message(
     chat_id: str, 
     content: Any = None,
     profile_id: int = None,
+    plan_id: Optional[str] = None,
     model_id: str = None,
     file_ref: Optional[dict] = None
 ) -> bool:
@@ -163,6 +179,10 @@ async def update_message(
         if profile_id is not None:
             updates.append("profile_id = ?")
             params.append(profile_id)
+
+        if plan_id is not None:
+            updates.append("plan_id = ?")
+            params.append(plan_id)
 
         if model_id is not None:
             updates.append("model_id = ?")
@@ -189,6 +209,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
     """
     截断消息：删除 from_turn_index 及之后的所有消息，
     并自动清理 tool_calls 表中对应的孤立工具记录及磁盘文件和关联的上传文件
+    关联的plan也被删除
     """
     db = await get_db()
     try:
@@ -255,8 +276,21 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
             "DELETE FROM messages WHERE chat_id = ? AND turn_index >= ?",
             (chat_id, from_turn_index)
         )
+
+        # 6. 删除该对话中，所有不在 messages 表中引用的 plan
+        await db.execute(
+            """
+            DELETE FROM plans
+            WHERE chat_id = ?
+            AND plan_id NOT IN (
+                SELECT plan_id FROM messages
+                WHERE chat_id = ? AND plan_id IS NOT NULL
+            )
+            """,
+            (chat_id, chat_id)
+        )
         
-        # 6. 删除 tool_calls 表中的孤立数据
+        # 7. 删除 tool_calls 表中的孤立数据
         if unique_call_ids:
             await db.execute(
                 f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
@@ -265,7 +299,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
         
         await db.commit()
 
-        # 7. 删除磁盘上的大文件
+        # 8. 删除磁盘上的大文件
         for file_path in files_to_delete:
             await asyncio.sleep(0.5)  # 让出控制权，避免 Windows 文件占用
             max_retries = 3
@@ -298,7 +332,7 @@ async def truncate_messages(chat_id: str, from_turn_index: int) -> int:
 
 async def delete_message(chat_id: str, turn_index: int) -> bool:
     """
-    单轮精准删除。如果删的是 assistant，对应的 tool 和磁盘文件也会被清除。
+    单轮精准删除。如果删的是 assistant，对应的 tool 和磁盘文件也会被清除，关联的plan也被删除。
     """
     db = await get_db()
     try:
@@ -361,8 +395,21 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             "DELETE FROM messages WHERE chat_id = ? AND turn_index = ?",
             (chat_id, turn_index)
         )
+
+        # 4. 删除该对话中，所有不在 messages 表中引用的 plan
+        await db.execute(
+            """
+            DELETE FROM plans
+            WHERE chat_id = ?
+            AND plan_id NOT IN (
+                SELECT plan_id FROM messages
+                WHERE chat_id = ? AND plan_id IS NOT NULL
+            )
+            """,
+            (chat_id, chat_id)
+        )
         
-        # 4. 删除工具
+        # 5. 删除工具
         if unique_call_ids:
             await db.execute(
                 f"DELETE FROM tool_calls WHERE call_id IN ({placeholders})",
@@ -371,7 +418,7 @@ async def delete_message(chat_id: str, turn_index: int) -> bool:
             
         await db.commit()
 
-        # 5. 删除磁盘文件（带重试）
+        # 6. 删除磁盘文件（带重试）
         for file_path in files_to_delete:
             await asyncio.sleep(0.5)
             max_retries = 3

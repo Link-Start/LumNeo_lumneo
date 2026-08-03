@@ -1,17 +1,17 @@
 <template>
     <n-card title="调度控制" hoverable size="small">
         <n-form inline label-placement="left" label-width="auto" label-align="right">
-            <!-- <n-form-item>
+            <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">
                         <template #trigger>
                             <span class="mode-title">蓝图模式</span>
                         </template>
-                        启用后，任务执行路径完全遵循预先定义的工作流（DAG）。适合重复性高、步骤固定的场景；关闭后则允许 Agent 根据上下文动态调整执行策略。
+                        开启后，Agent 生成可编辑的结构化执行计划，经确认后按序执行，确保复杂任务过程透明、结果可控。
                     </n-tooltip>
                 </template>
                 <n-switch v-model:value="strategyStore.blueprintMode" />
-            </n-form-item> -->
+            </n-form-item>
             <n-form-item>
                 <template #label>
                     <n-tooltip placement="top" :keep-alive-on-hover="false">

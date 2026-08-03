@@ -38,6 +38,7 @@ async def init_db():
             model_id TEXT DEFAULT NULL,
             file_ref TEXT DEFAULT NULL,
             turn_index INTEGER NOT NULL,
+            plan_id TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
         )
@@ -138,6 +139,23 @@ async def init_db():
     # 索引：按 chat_id 和 status 快速查询
     await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_chat ON user_decisions (chat_id)")
     await db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_status ON user_decisions (status)")
+
+
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id TEXT NOT NULL UNIQUE,
+            chat_id TEXT NOT NULL,
+            steps TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+        )
+    """)
+
+    # 索引
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_plans_plan_id ON plans (plan_id)")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_plans_chat_id ON plans (chat_id)")
     
     await migrate_db(db)
     await db.commit()
@@ -172,3 +190,5 @@ async def migrate_db(db):
             await db.execute("ALTER TABLE messages ADD COLUMN profile_id TEXT DEFAULT ''")
         if 'model_id' not in column_names:
             await db.execute("ALTER TABLE messages ADD COLUMN model_id TEXT DEFAULT ''")
+        if 'plan_id' not in column_names:
+            await db.execute("ALTER TABLE messages ADD COLUMN plan_id TEXT DEFAULT NULL")

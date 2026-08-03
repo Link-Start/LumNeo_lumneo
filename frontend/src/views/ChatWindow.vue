@@ -5,7 +5,7 @@
 
     <!-- ========== 侧边栏（折叠式） ========== -->
      <Transition name="sidebar">
-      <aside v-if="!sidebarCollapsed" class="sidebar-panel border-marquee-right" :class="{ collapsed: sidebarCollapsed, 'sidebar-open': sidebarOpen }">
+      <aside v-if="!sidebarCollapsed" class="sidebar-panel border-marquee-right" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
           <div class="logo-text">
             <m-svg name="star" style="position: absolute;left:120px;top:18px;"/>✨ LumNeo
@@ -256,15 +256,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode } from 'naive-ui'
+import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode, useMessage } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
+import { useStrategyStore } from '@/stores/strategy'
+
 import SettingsDrawer from '@/components/SettingsDrawer/index.vue'
 import Introduction from '@/components/Introduction.vue'
 import mSvg from '@/components/MSvg.vue'
@@ -284,6 +286,9 @@ const chatStore = useChatStore()
 const configStore = useConfigStore()
 const profileStore = useProfileStore()
 const toolStore = useToolStore()
+const strategyStore = useStrategyStore()
+
+const message = useMessage()
 
 const isMobile = ref(false)
 const sidebarOpen = ref(false)
@@ -319,6 +324,10 @@ const { showEditModal, editContent, copySvgName, copyContent,
 } = useMessageActions()
 
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null)
+
+provide('scrollToBottom', () => {
+  messageListRef.value?.scrollToLatest()
+})
 
 const currentMessages = computed(() => chatStore.currentChatMessages)
 
@@ -398,6 +407,7 @@ function handlePasteFiles(files: File[]) {
 
 // 发送消息
 const onSendMessage = () => {
+  if (!currentInput.value.trim() || isLoading.value || !chatStore.activeChatId || !activeModelId.value) return
   sendMessage(uploadedFiles.value, () => {
     messageListRef.value?.scrollToLatest()
   })
@@ -410,8 +420,9 @@ const onRegenerateFromCurrentHistory = async () => {
 }
 
 // 重新生成特定消息
-const handleRegenerateResponse = async (msg: Message) => {
-  await regenerateResponse(msg)
+const handleRegenerateResponse = async (msg: Message, prevMsg: Message) => {
+  
+  await regenerateResponse(msg, prevMsg)
 }
 
 // 编辑后保存并重新生成
@@ -497,6 +508,68 @@ async function waitForBackend() {
   }
 }
 
+// ========== 防抖工具 ==========
+function debounce(fn: (...args: any[]) => void, delay: number = 300) {
+  let timer: number | null = null
+  return (...args: any[]) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn(...args)
+      timer = null
+    }, delay)
+  }
+}
+
+// ========== 为每个操作创建防抖函数 ==========
+const toggleSettings = debounce(() => {
+  showSettings.value = !showSettings.value
+}, 150)
+
+const toggleSidebar = debounce(() => {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  sidebarOpen.value = !sidebarOpen.value
+}, 150)
+
+const togglePanel = debounce(() => {
+  showPanelModal.value = !showPanelModal.value
+}, 150)
+
+const toggleBlueprint = debounce(() => {
+  strategyStore.blueprintMode = !strategyStore.blueprintMode
+  message.info('蓝图模式已' + (strategyStore.blueprintMode ? '开启' : '关闭'))
+}, 150)
+
+const toggleApproval = debounce(() => {
+  strategyStore.approvalMode = !strategyStore.approvalMode
+  message.info('审批模式已' + (strategyStore.approvalMode ? '开启' : '关闭'))
+}, 150)
+
+const toggleDecision = debounce(() => {
+  strategyStore.autoDecision = !strategyStore.autoDecision
+  message.info('自主决策已' + (strategyStore.autoDecision ? '开启' : '关闭'))
+}, 150)
+
+const handleKeyboard = (event: KeyboardEvent) => {
+  console.log(event.code);
+  
+  if (event.altKey) {
+    event.preventDefault()
+    if (event.key === ',' || event.code === 'Comma') {
+      toggleSettings()
+    } else if (event.code === 'KeyM') {
+      toggleSidebar()
+    } else if (event.code === 'KeyR') {
+      togglePanel()
+    } else if (event.code === 'Digit1') {
+      toggleBlueprint()
+    } else if (event.code === 'Digit2') {
+      toggleApproval()
+    } else if (event.code === 'Digit3') {
+      toggleDecision()
+    }
+  }
+}
+
 onMounted(async () => {
   checkMobile()
   configStore.loadModels()
@@ -519,11 +592,14 @@ onMounted(async () => {
   setTimeout(() => {
     isRender.value = true
   }, 150)
+
+  document.addEventListener('keydown', handleKeyboard)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('keydown', handleKeyboard)
 })
 </script>
 

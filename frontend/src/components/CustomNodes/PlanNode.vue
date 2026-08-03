@@ -5,15 +5,11 @@
       <div class="plan-header-left">
         <span class="plan-icon">📋</span>
         <span class="plan-title">执行计划</span>
-        <n-tag v-if="planData.length > 0" size="small" type="info">
-          {{ planData.length }} 个步骤
+        <n-tag v-if="!editing && planData.length > 0" size="small" type="info">
+          {{ getFilteredSteps(planData).length }} 个步骤
         </n-tag>
       </div>
       <div class="plan-header-right">
-        <n-button size="small" quaternary @click="handleRegenerate" title="重新生成计划">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
-          重新生成
-        </n-button>
         <n-button v-if="!editing" size="small" quaternary @click="startEditing" title="编辑计划">
           <template #icon><n-icon><CreateOutline /></n-icon></template>
           编辑
@@ -124,10 +120,10 @@
       </div>
     </div>
 
-    <!-- 步骤列表（只读模式） 修改为独立 v-if -->
+    <!-- 步骤列表（只读模式） -->
     <n-timeline v-if="!editing && planData.length > 0" class="plan-timeline">
       <n-timeline-item
-        v-for="(step, index) in planData"
+        v-for="(step, index) in getFilteredSteps(planData)"
         :key="step.uuid"
         type="info"
       >
@@ -135,14 +131,6 @@
           <span class="step-title">步骤 {{ index + 1 }}</span>
           <n-tag v-if="step.disabled" size="tiny" type="warning" :bordered="false">
             已禁用
-          </n-tag>
-          <n-tag
-            v-if="step.status"
-            size="tiny"
-            :type="step.status === 'success' ? 'success' : step.status === 'error' ? 'error' : 'info'"
-            :bordered="false"
-          >
-            {{ step.status }}
           </n-tag>
         </template>
         <template #default>
@@ -198,7 +186,6 @@
           {{ editing ? '确认并执行' : '执行计划' }}
         </n-button>
         <n-button v-if="editing" size="small" @click="cancelEditing">取消</n-button>
-        <n-button v-else size="small" @click="handleCancel">取消</n-button>
       </div>
     </div>
 
@@ -224,49 +211,18 @@
         </n-button>
       </template>
     </n-modal>
-
-    <!-- 重新生成确认弹窗 -->
-    <n-modal v-model:show="showRegenerateConfirm" preset="dialog" title="重新生成计划">
-      <p>重新生成将丢失当前所有编辑，确定要继续吗？</p>
-      <template #action>
-        <n-button @click="showRegenerateConfirm = false">取消</n-button>
-        <n-button type="primary" @click="confirmRegenerate">确定重新生成</n-button>
-      </template>
-    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import {
-  NTimeline,
-  NTimelineItem,
-  NTag,
-  NButton,
-  NInput,
-  NSelect,
-  NSwitch,
-  NIcon,
-  NModal,
-  NForm,
-  NFormItem,
-  NCheckbox,
-  useMessage,
-  NButtonGroup,
-} from 'naive-ui'
-import {
-  RefreshOutline,
-  CreateOutline,
-  CloseOutline,
-  AddOutline,
-  PlayOutline,
-  ChevronUpOutline,
-  ChevronDownOutline,
-  Move,
-} from '@vicons/ionicons5'
+import { ref, computed, watch, inject } from 'vue'
+import { NTimeline, NTimelineItem, NTag, NButton, NInput, NSelect, NSwitch, 
+  NIcon, NModal, NForm, NFormItem, NCheckbox, useMessage, NButtonGroup } from 'naive-ui'
+import { CreateOutline, CloseOutline, AddOutline, PlayOutline, ChevronUpOutline, ChevronDownOutline, Move } from '@vicons/ionicons5'
 import { useDraggable } from 'vue-draggable-plus'
 import { useToolStore } from '@/stores/tools'
 import { useProfileStore } from '@/stores/profiles'
+import { useChat } from '@/composables/useChat'
 
 const props = defineProps<{
   node: {
@@ -278,22 +234,16 @@ const props = defineProps<{
   isDark?: boolean
 }>()
 
-const emit = defineEmits<{
-  (e: 'execute', plan: any[]): void
-  (e: 'cancel'): void
-  (e: 'regenerate'): void
-  (e: 'update', plan: any[]): void
-}>()
-
 const profileStore = useProfileStore()
 const toolStore = useToolStore()
 const message = useMessage()
+const { sendPlanMessage } = useChat()
+const scrollToBottom = inject<() => void>('scrollToBottom', () => {})
 
 // ---------- 状态 ----------
 const editing = ref(false)
 const editingIndex = ref<number | null>(null)
 const showAddModal = ref(false)
-const showRegenerateConfirm = ref(false)
 const showDisabled = ref(true)
 const originalPlan = ref<any[]>([])
 const draggingIndex = ref<number | null>(null)
@@ -311,12 +261,9 @@ const toolOptions = computed(() => {
   const tools = toolStore.defaultTools.concat(
     profileStore.activeProfile?.tools ?? []
   )
-  console.log(tools);
   return tools.map((name) => {
-    console.log(toolStore.toolsInfo[name]);
-    
     return {
-      label: toolStore.toolsInfo[name].title || name,
+      label: toolStore.toolsInfo[name]?.title || name,
       value: name,
     }
   })
@@ -324,9 +271,14 @@ const toolOptions = computed(() => {
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
+const planId = computed(() => {
+  const attrs = props.node.attrs || {}
+  return attrs[0][1] || generateId()
+})
 // ---------- 计划数据 ----------
 const rawPlan = computed(() => {
-  const raw = props.node.attrs?.['data-plan'] || props.node.content || '[]'
+  
+  const raw = props.node.content || '[]'
   try {
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
@@ -343,12 +295,13 @@ watch(
   (newPlan) => {
     const normalized = newPlan.map((step: any, index: number) => {
       const uid = step.uuid || step._id || generateId()
+      console.log(uid);
+      
         return {
         step_id: step.step_id || index + 1,
         description: step.description || step.desc || '',
         tool: step.tool || '',
         disabled: step.disabled || false,
-        status: step.status || '',
         uuid: uid,
         ...step,
       }
@@ -397,6 +350,14 @@ const hasValidSteps = computed(() => {
 const hasExecutableSteps = computed(() => {
   return planData.value.some((step: any) => !step.disabled && step.description?.trim())
 })
+
+function getFilteredSteps(steps: any[]) {
+  if (showDisabled.value) {
+    return steps
+  } else {
+    return steps.filter(step => !step.disabled)
+  }
+}
 
 // ---------- 工具函数 ----------
 function getToolDisplayName(toolName: string): string {
@@ -472,45 +433,67 @@ function resetPlan() {
   message.success('已重置为原始计划')
 }
 
-function confirmEdit() {
+const confirmEdit = async () => {
+  
   planData.value = JSON.parse(JSON.stringify(editablePlan.value))
   editing.value = false
   editingIndex.value = null
-  message.success('计划已更新')
-  emit('update', planData.value)
+  
+  // 保存到数据库
+  const id = planId.value
+  if (!id) {
+    message.warning('计划 ID 缺失，无法保存')
+    return
+  }
+
+  try {
+    const response = await fetch(`/api/plans/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ steps: planData.value }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    message.success('计划已更新')
+  } catch (error: any) {
+    console.error('更新计划失败', error)
+    message.error(`保存计划失败: ${error.message || '未知错误'}，本地修改已生效`)
+  }
 }
 
-function handleExecute() {
+// 添加格式化计划文本的函数
+function formatPlan(steps: any[]): string {
+  const lines = steps
+    .filter(step => !step.disabled)
+    .map((step, index) => {
+      const desc = step.description || step.desc || '无描述'
+      const tool = step.tool ? ` (工具: ${step.tool})` : ''
+      return `${index + 1}. ${desc}${tool}`
+    })
+  return `按照以下计划执行：\n${lines.join('\n')}`
+}
+
+const handleExecute = async () => {
+  // 如果处于编辑模式，先应用编辑
   if (editing.value) {
-    planData.value = JSON.parse(JSON.stringify(editablePlan.value))
-    editing.value = false
-    editingIndex.value = null
+    await confirmEdit()  // 保存后再执行
   }
+
   const executable = planData.value.filter((step: any) => !step.disabled)
   if (executable.length === 0) {
     message.warning('没有可执行的步骤')
     return
   }
-  emit('execute', planData.value)
-}
 
-function handleCancel() {
-  emit('cancel')
-}
-
-function handleRegenerate() {
-  if (editing.value) {
-    showRegenerateConfirm.value = true
-  } else {
-    emit('regenerate')
-  }
-}
-
-function confirmRegenerate() {
-  showRegenerateConfirm.value = false
-  editing.value = false
-  editingIndex.value = null
-  emit('regenerate')
+  // 构造消息文本并发送
+  const planText = formatPlan(planData.value)
+  sendPlanMessage(planId.value, planText, scrollToBottom)
 }
 
 defineExpose({

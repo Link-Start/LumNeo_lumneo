@@ -47,7 +47,7 @@
                 <div class="bubble">
                   <!-- 用户消息纯文本 -->
                   <template v-if="msg.role === 'user'">
-                    <div class="message-content user-content" v-text="msg.content.trim()"></div>
+                    <div :class="['message-content', 'user-content', { 'message-plan': msg.plan_id }]" v-text="msg.content.trim()"></div>
                   </template>
                   <!-- 助手消息 Markdown -->
                   <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
@@ -71,7 +71,7 @@
                         :themes="['vitesse-light', 'vitesse-dark']"
                         code-block-dark-theme="vitesse-dark"
                         code-block-light-theme="vitesse-light"
-                        :content="renderStructuredContent(msg.content?.trim())"
+                        :content="renderStructuredContent(msg.content?.trim(), msg.plan_id, msg.plan)"
                         :final="true"
                         :fade="false"
                         :typewriter="false"
@@ -90,11 +90,11 @@
                     <n-button
                       v-if="msg.role === 'assistant' && index === currentMessages.length - 1"
                       text class="icon-btn" size="small" title="重新生成"
-                      @click="$emit('regenerate', msg)"
+                      @click="$emit('regenerate', msg, listItems[index - 1])"
                     >
                       <template #icon><n-icon><m-svg name="refresh" /></n-icon></template>
                     </n-button>
-                    <n-button text class="icon-btn" size="small" title="编辑" @click="$emit('edit', msg)">
+                    <n-button v-if="!msg.plan_id" text class="icon-btn" size="small" title="编辑" @click="$emit('edit', msg)">
                       <template #icon><n-icon :size="20"><m-svg name="edit" /></n-icon></template>
                     </n-button>
                     <n-popconfirm
@@ -116,7 +116,7 @@
               </div>
             </template>
 
-            <!-- 流式输出占位（列表最后一项） -->
+            <!-- 流式输出占位 -->
             <template v-else>
               <div class="streaming-after-item message-row assistant">
                 <div v-if="streamingContent" class="bubble streaming">
@@ -191,7 +191,7 @@ const props = defineProps({
 
 const emit = defineEmits<{
   copy: [msg: Message]
-  regenerate: [msg: Message]
+  regenerate: [msg: Message, prevMsg: Message]
   edit: [msg: Message]
   delete: [id: number]
 }>()
@@ -513,6 +513,7 @@ onUnmounted(() => {
   border: none;
   margin-top: 10px;
   margin-bottom: 40px;
+  position: relative;
 }
 .user-content {
   max-height: 200px;
@@ -522,6 +523,16 @@ onUnmounted(() => {
 }
 .user-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 3px; }
 .user-content::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.4); }
+
+.message-plan::before {
+  content: '⚡执行指令';
+  position: absolute;
+  font-size: 12px;
+  color: rgba(255,255,255,0.75);
+  top: -20px;
+  left: 0;
+  height: 10px;
+}
 
 .streaming {
   border: 1px solid var(--accent);
