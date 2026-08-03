@@ -17,20 +17,20 @@ tools:
 
   - name: system_use_skill
     title: 装载技能
-    description: 当用户意图匹配可用技能时，调用此工具获取该技能的详细执行手册。必须调用此工具后才能执行技能任务。
+    description: 当用户意图匹配某个可用技能时，必须首先调用此工具获取该技能的完整执行手册（包含详细步骤、脚本路径、参数说明等）。调用前请参考系统注入的“可用技能索引”选择正确的 `skill_id`。获取手册后，严格按照手册内容执行后续操作。
     parameters:
       type: object
       properties:
         skill_id:
           type: string
-          description: 要使用的技能ID。
+          description: 要使用的技能ID，必须从“可用技能索引”中选取。
       required: ["skill_id"]
     module: backend.system_tools.skills
     function_name: use_skill
 
   - name: system_execute_script
     title: 施放技能
-    description: 执行技能指定的脚本文件，并返回执行结果。
+    description: 当已通过 `system_use_skill` 获取技能手册，且手册中明确指出需要运行脚本时，调用此工具执行指定的脚本文件。脚本路径必须使用手册中提供的绝对路径，参数格式按手册说明传递。执行结果将直接返回给用户。
     parameters:
       type: object
       properties:

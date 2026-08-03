@@ -12,7 +12,7 @@ class ToolExecutionContext:
     tool_timeout: int
     retry_count: int
     retry_delay: int
-    request: Optional[Any]  # FastAPI Request
+    request: Optional[Any]
     skip_approval: bool = False
     is_retry: bool = False
 
