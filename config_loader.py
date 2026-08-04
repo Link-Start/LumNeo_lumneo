@@ -46,7 +46,7 @@ class AppConfig:
         self.cache_dir = self.data_dir / self.raw_config.get("cache_dir", "data/cache")
         self.logs_dir = self.data_dir / self.raw_config.get("logs_dir", "logs")
         self.temp_dir = self.data_dir / self.raw_config.get("temp_dir", "temp")
-        self.skill_dir = self.data_dir / self.raw_config.get("skills_dir", "skills_library")
+        self.skill_dir = self.data_dir / self.raw_config.get("skills_dir", "skills")
         self.generate_dir = self.data_dir / self.raw_config.get("generate_dir", "data/generate")
         
         # mcp_config.json 路径：可以是绝对路径或相对于 data_dir

@@ -108,7 +108,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ---------- 立即添加到本地（不等待后端） ----------
-  async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>) {
+  async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>): Promise<Message | undefined> {
     const chat = chats.value.find(c => c.id === activeChatId.value)
     
     if (!chat) return
@@ -135,6 +135,7 @@ export const useChatStore = defineStore('chat', () => {
         body: JSON.stringify({ title: chat.title })
       }).catch(() => {})
     }
+    return newMsg
   }
   // 更新消息id
   function updateMessageId(turnIndex: number, newId: number) {
@@ -169,6 +170,8 @@ export const useChatStore = defineStore('chat', () => {
       })
     })
     const data = await res.json()
+    console.log(data);
+    
     if (data.id != null) {
       msg.id = data.id
     }

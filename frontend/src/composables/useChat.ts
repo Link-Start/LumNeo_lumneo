@@ -306,20 +306,18 @@ export function useChat() {
     }
 
     const chatId = chatStore.activeChatId
-    const userTurnIndex = chatStore.getNextTurnIndex()
 
     // 1. 用户消息
-    const userMsg: Message = {
-      id: Date.now(),
+    const userMsg: Omit<Message, 'id' | 'turn_index'> = {
       role: 'user',
       content: content,
       file_ref: files.length > 0 ? files.map((f) => ({ filename: f.filename, type: f.type, url: f.url })) : null,
-      turn_index: userTurnIndex,
       plan_id: plan_id
     }
     
-    chatStore.addMessageToLocal(userMsg)
-    await chatStore.saveMessageToBackend(userMsg)
+    const addedMsg = await chatStore.addMessageToLocal(userMsg)
+    if (!addedMsg) return
+    await chatStore.saveMessageToBackend(addedMsg)
 
     // 2. 助手占位
     const assistantTurnIndex = chatStore.getNextTurnIndex()

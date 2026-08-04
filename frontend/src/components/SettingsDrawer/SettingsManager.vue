@@ -172,8 +172,6 @@ onMounted(() => {
     profileId.value = profileStore.activeProfileId
     if (!workspacePath.value) {
         getWorkspace()
-    } else {
-        saveWorkspace(workspacePath.value, false)
     }
 })
 </script>

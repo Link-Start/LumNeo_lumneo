@@ -15,8 +15,9 @@ import asyncio
 import os
 import shlex
 import sys
+import shutil
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from backend.bootstrap import logger
 from config_loader import config
 
@@ -79,48 +80,75 @@ def _validate_script_path(script_path: str) -> Tuple[Optional[Path], Optional[st
     """
     # 空值校验
     if not script_path or not script_path.strip():
-        return None, "错误：脚本路径不能为空"
+        return None, "脚本路径不能为空"
 
     # 空字节注入防护（C 语言层面 path 截断）
     if "\x00" in script_path:
-        return None, "错误：脚本路径包含非法字符（空字节）"
+        return None, "脚本路径包含非法字符（空字节）"
 
     # 解析脚本绝对路径（resolve 会展开符号链接）
     try:
         abs_path = Path(script_path).resolve(strict=False)
     except (OSError, ValueError) as e:
-        return None, f"错误：无效的脚本路径格式 — {e}"
+        return None, f"无效的脚本路径格式 — {e}"
 
     # 解析技能库根目录
     try:
         skill_root = Path(config.skill_dir).resolve()
     except (OSError, ValueError) as e:
-        return None, f"错误：技能库根目录配置异常 — {e}"
+        return None, f"技能库根目录配置异常 — {e}"
 
     # ★ 核心安全校验：脚本必须严格位于技能库目录内部
     try:
         abs_path.relative_to(skill_root)
     except ValueError:
         logger.warning(f"拒绝执行越权脚本: {abs_path} (skill_root={skill_root})")
-        return None, "错误：只能执行技能库内的脚本，禁止操作系统文件"
+        return None, "只能执行技能库内的脚本，禁止操作系统文件"
 
     # 必须是普通文件
     if not abs_path.is_file():
-        return None, f"错误：脚本不存在或不是文件 -> {abs_path}"
+        return None, f"脚本不存在或不是文件 -> {abs_path}"
 
     # 后缀白名单
     if abs_path.suffix.lower() not in ALLOWED_SCRIPT_EXTENSIONS:
         return None, (
-            f"错误：不支持的脚本类型 '{abs_path.suffix}'，"
+            f"不支持的脚本类型 '{abs_path.suffix}'，"
             f"仅允许 {sorted(ALLOWED_SCRIPT_EXTENSIONS)}"
         )
 
     return abs_path, None
 
+
 def _get_python_interpreter() -> str:
-    # 如果是打包环境，优先使用 _base_executable
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_base_executable'):
-        return sys._base_executable
+    # 打包环境（PyInstaller 等）
+    if getattr(sys, 'frozen', False):
+        # 1. 尝试 PyInstaller 内嵌的 python（_MEIPASS 目录下）
+        if hasattr(sys, '_MEIPASS'):
+            meipass = Path(sys._MEIPASS)
+            for name in ('python.exe', 'python', 'python3'):
+                candidate = meipass / name
+                if candidate.exists():
+                    return str(candidate)
+        
+        # 2. 尝试 _base_executable（部分打包工具提供）
+        if hasattr(sys, '_base_executable'):
+            base = Path(sys._base_executable)
+            if base.exists() and 'python' in base.name.lower():
+                return str(base)
+        
+        # 3. 从系统 PATH 中找独立的 Python（最常用）
+        for cmd in ('python.exe', 'python3.exe', 'python', 'python3'):
+            found = shutil.which(cmd)
+            if found:
+                return found
+        
+        # 4. 兜底：返回 sys.executable，但日志警告
+        logger.warning(
+            "打包环境下未找到独立 Python 解释器，"
+            "将回退到 sys.executable，子进程执行 Python 脚本可能失败"
+        )
+    
+    # 非打包环境，直接用当前解释器
     return sys.executable
 
 
@@ -145,16 +173,30 @@ def _build_command(
     # 安全分割参数
     if args and args.strip():
         try:
-            extra = shlex.split(args)
+             extra = shlex.split(args, posix=(os.name != 'nt'))
         except ValueError as e:
-            return [], f"错误：参数格式不合法 — {e}"
+            return [], f"参数格式不合法 — {e}"
 
         if len(extra) > MAX_ARGS_COUNT:
-            return [], f"错误：参数数量超限（最多 {MAX_ARGS_COUNT} 个）"
+            return [], f"参数数量超限（最多 {MAX_ARGS_COUNT} 个）"
 
         cmd.extend(a for a in extra if a)  # 过滤空串
 
     return cmd, None
+
+
+def _make_result(
+    success: bool,
+    message: str = "",
+    returncode: Optional[int] = None,
+    **extra: Any
+) -> Dict[str, Any]:
+    """统一封装返回结构"""
+    result: Dict[str, Any] = {"success": success, "message": message}
+    if returncode is not None:
+        result["returncode"] = returncode
+    result.update(extra)
+    return result
 
 
 # ──────────────────────── 对外接口 ────────────────────────
@@ -163,7 +205,7 @@ async def execute_script(
     script_path: str,
     args: str = "",
     timeout: Optional[int] = None,
-) -> str:
+) -> Dict[str, Any]:
     """
     安全执行技能目录下的脚本。
 
@@ -173,17 +215,22 @@ async def execute_script(
         timeout:     超时秒数，默认 60，上限 300。
 
     Returns:
-        人类可读的执行结果字符串。
+        {
+            "success": bool,
+            "message": str,          # 成功时为输出内容，失败时为错误描述
+            "returncode": int,       # 进程退出码（校验失败/超时等场景可能为 None）
+            # 可选扩展字段...
+        }
     """
     # ── 1. 路径校验 ──
     abs_path, err = _validate_script_path(script_path)
     if err:
-        return err
+        return _make_result(False, message=err)
 
     # ── 2. 构建命令 ──
     cmd, err = _build_command(abs_path, args)
     if err:
-        return err
+        return _make_result(False, message=err)
 
     # ── 3. 超时钳制 ──
     exec_timeout = max(1, min(timeout or DEFAULT_TIMEOUT, MAX_TIMEOUT))
@@ -212,10 +259,12 @@ async def execute_script(
         )
     except PermissionError:
         logger.warning(f"脚本无执行权限: {abs_path}")
-        return f"错误：脚本无执行权限 -> {abs_path.name}"
+        return _make_result(False, message=f"脚本无执行权限 -> {abs_path.name}")
     except Exception as e:
         logger.exception("创建子进程失败")
-        return f"错误：无法启动脚本 — {type(e).__name__}: {e}"
+        return _make_result(
+            False, message=f"无法启动脚本 — {type(e).__name__}: {e}"
+        )
 
     # ── 7. 等待结果（带超时） ──
     try:
@@ -231,7 +280,10 @@ async def execute_script(
         except ProcessLookupError:
             pass  # 进程已退出
         logger.warning(f"脚本执行超时被终止: {abs_path}")
-        return f"错误：脚本执行超时（超过 {exec_timeout} 秒），进程已终止"
+        return _make_result(
+            False,
+            message=f"脚本执行超时（超过 {exec_timeout} 秒），进程已终止",
+        )
 
     # ── 8. 解码 & 截断 ──
     stdout = (stdout_bytes or b"").decode("utf-8", errors="replace")
@@ -241,8 +293,8 @@ async def execute_script(
     if proc.returncode == 0:
         output = _truncate(stdout.strip())
         if not output:
-            return "脚本执行成功（无输出内容）"
-        return f"执行成功:\n{output}"
+            return _make_result(True, message="脚本执行成功（无输出内容）", returncode=0)
+        return _make_result(True, message=output, returncode=0)
     else:
         parts = [f"执行失败 (退出码 {proc.returncode}):"]
         err_text = _truncate(stderr.strip())
@@ -253,4 +305,10 @@ async def execute_script(
             parts.append(f"--- stdout ---\n{out_text}")
         if len(parts) == 1:  # 既无 stderr 也无 stdout
             parts.append("(无输出)")
-        return "\n".join(parts)
+        return _make_result(
+            False,
+            message="\n".join(parts),
+            returncode=proc.returncode,
+            stderr=stderr.strip(),
+            stdout=stdout.strip(),
+        )

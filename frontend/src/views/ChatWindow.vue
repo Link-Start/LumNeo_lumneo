@@ -508,6 +508,14 @@ async function waitForBackend() {
   }
 }
 
+const saveWorkspace = async (path: string) => {
+  await fetch('/api/workspace/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path })
+  })
+}
+
 // ========== 防抖工具 ==========
 function debounce(fn: (...args: any[]) => void, delay: number = 300) {
   let timer: number | null = null
@@ -550,8 +558,6 @@ const toggleDecision = debounce(() => {
 }, 150)
 
 const handleKeyboard = (event: KeyboardEvent) => {
-  console.log(event.code);
-  
   if (event.altKey) {
     event.preventDefault()
     if (event.key === ',' || event.code === 'Comma') {
@@ -594,6 +600,10 @@ onMounted(async () => {
   }, 150)
 
   document.addEventListener('keydown', handleKeyboard)
+  const workspacePath = ref(localStorage.getItem('workspacePath') || '')
+  if (workspacePath.value) {
+      saveWorkspace(workspacePath.value)
+  }
 })
 
 onUnmounted(() => {
