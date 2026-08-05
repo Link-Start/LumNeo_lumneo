@@ -1,4 +1,4 @@
-#  LumNeo —  给 AI 硬件开发装上一双能"看见"物理世界的眼睛
+#  LumNeo —  给 AI 硬件开发装上一双"看见"物理世界的眼睛
 
 ![Vue 3](https://img.shields.io/badge/vue%203-%2335495e.svg?style=flat&logo=vuedotjs&logoColor=%234FC08D)
 ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=flat&logo=vite&logoColor=white)
@@ -97,7 +97,7 @@ LumNeo 不仅仅是一个生产力工具，还准备打造一个不断进化的*
 
 ---
 
-##  项目主要结构
+## 📂 项目主要结构
 
 ```text
 LumNeo/
@@ -131,7 +131,7 @@ LumNeo/
 
 ---
 
-## ️ 快速开始
+## ️🚀 快速开始
 
 在开始之前，请确保你的电脑已安装 **Python 3.12+** 和 **Node.js 18+**。
 
@@ -178,7 +178,7 @@ build.bat
 
 ---
 
-## ️ 配置 MCP 服务器
+## ️⚙️ 配置 MCP 服务器
 
 编辑根目录 `mcp_config.json` 即可为角色接入外部工具：
 
