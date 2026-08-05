@@ -328,34 +328,60 @@ async def chat(
                             thinking='enabled',
                             reasoning_effort=reasoning_effort
                         )
-                        logger.info(f"[协作策略] {collab_reason}")
+                        # logger.info(f"[协作策略] {collab_reason}")
 
-        # 创建 LLM 服务实例
-        if cfg:
-            reasoning_effort = cfg.reasoning_effort
-            if cfg.model_name and any(
-                re.search(pattern, cfg.model_name, re.IGNORECASE) 
-                for pattern in REASONING_EFFORT_MAPPING_MODELS
-            ):
-                reasoning_effort = REASONING_EFFORT_MAP.get(
-                    reasoning_effort, reasoning_effort
+        # 保存主模型配置，用于故障回退
+        primary_cfg = None
+        if collab_config and collab_config.fallback_enabled:
+            primary_model = model_map.get(collab_config.primary_model_id) if 'model_map' in locals() else None
+            if primary_model and (cfg is None or cfg.model_id != primary_model.get('id')):
+                reasoning_effort = cfg.reasoning_effort if cfg else 'high'
+                p_name = primary_model.get('modelName', '')
+                if p_name and any(
+                    re.search(pattern, p_name, re.IGNORECASE)
+                    for pattern in REASONING_EFFORT_MAPPING_MODELS
+                ):
+                    reasoning_effort = REASONING_EFFORT_MAP.get(reasoning_effort, reasoning_effort)
+                primary_cfg = ModelConfig(
+                    type=primary_model.get('type', 'local'),
+                    model_id=primary_model.get('id'),
+                    model_name=p_name,
+                    base_url=primary_model.get('baseUrl'),
+                    api_key=primary_model.get('apiKey'),
+                    thinking='enabled',
+                    reasoning_effort=reasoning_effort
                 )
-            if cfg.type == "local":
-                service = LLMService(
-                    model_type="local", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
-                )
-            else:
-                if not cfg.api_key:
-                    raise HTTPException(status_code=400, detail="线上模型必须提供 API Key")
-                service = LLMService(
-                    model_type="online", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
-                )
-        else:
+
+        # 创建 LLM 服务实例（故障回退时会在 _call_with_model 中重新创建）
+        if not cfg:
+            # 无协作策略时，使用用户选中的模型或全局实例
             service = LLMService.instance
             if not service:
                 raise HTTPException(status_code=400, detail="请先选择或配置模型")
+            # 包装为统一接口
+            async def _call_with_model(model_cfg: ModelConfig):
+                async for chunk in service.generate_response(
+                    messages=messages,
+                    enable_tools=request.enable_tools,
+                    tools=final_tools,
+                    request=fastapi_request,
+                    mcp_manager=mcp_manager,
+                    params=final_params,
+                    profile_id=profile.id if profile else None,
+                    model_id=model_cfg.model_id if model_cfg else None,
+                    chat_id=request.chat_id,
+                    turn_index=request.turn_index,
+                    blueprint_mode=request.params.blueprint_mode if request.params else False,
+                    plan_id=request.plan_id if request.plan_id else None,
+                    is_executing_plan=request.is_executing_plan
+                ):
+                    yield chunk
+
+            async def response_generator():
+                async for chunk in _call_with_model(cfg):
+                    yield chunk
+
+            return StreamingResponse(response_generator(), media_type="text/event-stream")
 
         # 准备 System Prompt 和 Tools
         messages = request.messages.copy()
@@ -506,19 +532,32 @@ async def chat(
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
 
-        # ========== 包装流式响应，先发送实际使用的模型信息 ==========
-        async def response_generator():
-            # 如果协作策略切换了模型，先告知前端实际使用的模型
-            if cfg and collab_reason:
-                model_info = {
-                    "model_id": cfg.model_id,
-                    "model_name": cfg.model_name,
-                    "type": cfg.type,
-                    "reason": collab_reason
-                }
-                yield f"<!--model_info:{json.dumps(model_info, ensure_ascii=False)}-->"
+        # ========== 包装流式响应，先发送实际使用的模型信息，支持故障回退 ==========
+        async def _call_with_model(model_cfg: ModelConfig):
+            """用指定模型配置创建服务并调用生成"""
+            reasoning_effort = model_cfg.reasoning_effort
+            if model_cfg.model_name and any(
+                re.search(pattern, model_cfg.model_name, re.IGNORECASE)
+                for pattern in REASONING_EFFORT_MAPPING_MODELS
+            ):
+                reasoning_effort = REASONING_EFFORT_MAP.get(reasoning_effort, reasoning_effort)
 
-            async for chunk in service.generate_response(
+            if model_cfg.type == "local":
+                svc = LLMService(
+                    model_type="local", model_name=model_cfg.model_name,
+                    base_url=model_cfg.base_url, api_key=model_cfg.api_key,
+                    thinking=model_cfg.thinking, reasoning_effort=reasoning_effort
+                )
+            else:
+                if not model_cfg.api_key:
+                    raise HTTPException(status_code=400, detail="线上模型必须提供 API Key")
+                svc = LLMService(
+                    model_type="online", model_name=model_cfg.model_name,
+                    base_url=model_cfg.base_url, api_key=model_cfg.api_key,
+                    thinking=model_cfg.thinking, reasoning_effort=reasoning_effort
+                )
+
+            gen = svc.generate_response(
                 messages=messages,
                 enable_tools=request.enable_tools,
                 tools=final_tools,
@@ -526,14 +565,65 @@ async def chat(
                 mcp_manager=mcp_manager,
                 params=final_params,
                 profile_id=profile.id if profile else None,
-                model_id=cfg.model_id if cfg else None,
+                model_id=model_cfg.model_id,
                 chat_id=request.chat_id,
                 turn_index=request.turn_index,
                 blueprint_mode=request.params.blueprint_mode if request.params else False,
                 plan_id=request.plan_id if request.plan_id else None,
                 is_executing_plan=request.is_executing_plan
-            ):
-                yield chunk
+            )
+
+            # 手动迭代：检测到 orchestrator 内部吞掉的错误消息时，转成异常抛出以触发回退
+            try:
+                while True:
+                    chunk = await gen.__anext__()
+                    # orchestrator 在超时/异常时会 yield "❌ 模型服务错误..."
+                    if chunk.startswith("❌ 模型服务错误") or chunk.startswith("\n❌ 模型服务错误"):
+                        raise Exception(f"模型 {model_cfg.model_name} 服务错误: {chunk.strip()}")
+                    yield chunk
+            except StopAsyncIteration:
+                pass
+
+        async def response_generator():
+            current_cfg = cfg
+            current_reason = collab_reason
+
+            # 发送当前选用的模型信息
+            if current_cfg and current_reason:
+                model_info = {
+                    "model_id": current_cfg.model_id,
+                    "model_name": current_cfg.model_name,
+                    "type": current_cfg.type,
+                    "reason": current_reason
+                }
+                yield f"<!--model_info:{json.dumps(model_info, ensure_ascii=False)}-->"
+
+            try:
+                async for chunk in _call_with_model(current_cfg):
+                    yield chunk
+            except Exception as e:
+                # 故障回退：如果当前不是主模型且开启了回退，尝试主模型
+                if (primary_cfg and 
+                    current_cfg and 
+                    current_cfg.model_id != primary_cfg.model_id):
+                    # logger.warning(f"[故障回退] 模型 {current_cfg.model_name} 调用失败: {str(e)[:200]}，尝试回退到主模型 {primary_cfg.model_name}")
+
+                    fallback_reason = f"[故障回退] 原模型调用失败，已切换至主模型 {primary_cfg.model_name}"
+                    fallback_info = {
+                        "model_id": primary_cfg.model_id,
+                        "model_name": primary_cfg.model_name,
+                        "type": primary_cfg.type,
+                        "reason": fallback_reason
+                    }
+                    yield f"<!--model_info:{json.dumps(fallback_info, ensure_ascii=False)}-->"
+
+                    async for chunk in _call_with_model(primary_cfg):
+                        yield chunk
+                else:
+                    # 无法回退：错误消息已 yield 给用户，直接结束不再抛 500
+                    error_msg = f"\n\n{str(e)[:300]}"
+                    yield error_msg
+                    return
 
         # 流式响应
         return StreamingResponse(
@@ -541,7 +631,7 @@ async def chat(
             media_type="text/event-stream"
         )
     except Exception as e:
-        logger.error(f"对话服务错误：{e}")
+        # logger.error(f"对话服务错误：{e}")
         error_trace = traceback.format_exc()
         raise HTTPException(
             status_code=500, detail=f"服务崩溃: {error_trace}"

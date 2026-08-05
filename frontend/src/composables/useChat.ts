@@ -209,6 +209,9 @@ export function useChat() {
                   type: model.type,
                   modelName: model.modelName
                 }
+                if (info.reason) {
+                  targetMsg.modelSwitchReason = info.reason
+                }
               }
             }
           }

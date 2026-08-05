@@ -15,6 +15,7 @@ export interface Message {
   model?: any
   model_id?: string
   turn_index: number
+  modelSwitchReason?: string
 }
 
 export interface Chat {

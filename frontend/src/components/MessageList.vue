@@ -63,6 +63,14 @@
                         </div>
                       </n-popover>
                     </div>
+
+                    <div
+                      v-if="msg.modelSwitchReason"
+                      class="model-switch-tag"
+                      :class="msg.modelSwitchReason.includes('故障回退') ? 'warning' : 'info'"
+                    >
+                      {{ msg.modelSwitchReason }}
+                    </div>
                     <div class="message-content assistant-box" :data-theme="isDark">
                       <MarkdownRender
                         :key="'msg-' + chatId + '-' + msg.id + '-' + index"
@@ -146,6 +154,13 @@
                   </n-popover>
                 </div>
                 <div v-if="streamingContent.replace(/<!--model_info:[\s\S]*?-->/g, '')" class="bubble streaming">
+                  <div
+                    v-if="streamingAssistantMsg?.modelSwitchReason"
+                    class="model-switch-tag"
+                    :class="streamingAssistantMsg.modelSwitchReason.includes('故障回退') ? 'warning' : 'info'"
+                  >
+                    {{ streamingAssistantMsg.modelSwitchReason }}
+                  </div>
                   <MarkdownRender
                     :key="'streaming-' + index"
                     custom-id="chat"
@@ -635,4 +650,25 @@ onUnmounted(() => {
 }
 .avatar {box-shadow: 0 0 3px rgba(128,128,128,.8);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
 .assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:14px;}
+
+.model-switch-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.model-switch-tag.info {
+  background: rgba(32, 128, 240, 0.08);
+  color: #2080f0;
+  border: 1px solid rgba(32, 128, 240, 0.15);
+}
+.model-switch-tag.warning {
+  background: rgba(240, 160, 32, 0.08);
+  color: #f0a020;
+  border: 1px solid rgba(240, 160, 32, 0.15);
+}
 </style>

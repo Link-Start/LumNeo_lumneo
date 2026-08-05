@@ -1,6 +1,6 @@
 <template>
     <div>
-        <n-space vertical style="padding-right:10px;height:80vh;overflow:auto;">
+        <n-space vertical>
             <!-- 顶部开关 -->
             <n-card size="small" :bordered="false" style="background: transparent">
             <n-space align="center" justify="space-between">
