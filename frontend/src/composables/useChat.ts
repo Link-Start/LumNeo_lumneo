@@ -434,7 +434,10 @@ export function useChat() {
   async function regenerateFromCurrentHistory() {
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
-    if (!currentModel) { message.error('请先选择一个模型'); return }
+    if (!currentModel) { 
+      message.error('请先选择一个模型') 
+      return 
+    }
 
     const chatId = chatStore.activeChatId
     const assistantTurnIndex = chatStore.getNextTurnIndex()
@@ -515,8 +518,12 @@ export function useChat() {
 
     if (!chatStore.activeChatId || isLoading.value) return
     const currentModel = configStore.activeModel
-    if (!currentModel) { message.error('请先选择一个模型'); return }
+    if (!currentModel) { 
+      message.error('请先选择一个模型')
+      return 
+    }
 
+    streamingContent.value = ''
     const chatId = chatStore.activeChatId
     regeneratingMsg.value = assistantMsg
 

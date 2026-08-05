@@ -208,6 +208,10 @@ class ToolExecutor:
         if idx in tool_preview_active:
             del tool_preview_active[idx]
 
+        if log_queue:
+            for out in outputs:
+                await log_queue.put(out)
+
         return ToolResult(
             outputs=outputs,
             new_segments=new_segments,

@@ -217,8 +217,8 @@ class LLMOrchestrator:
             for idx, tc, res in results:
                 # 审批等待
                 if res.status == "need_approval":
-                    for out in res.outputs:
-                        yield out
+                    # for out in res.outputs:
+                    #     yield out
                     decision_id = res.approval_info["local_call_id"]
                     confirmed = await self.approval_handler.wait_for_tool_approval(
                         decision_id, self.persister.repo, request, timeout=50
@@ -271,8 +271,8 @@ class LLMOrchestrator:
                         continue
 
                 # 正常处理结果
-                for out in res.outputs:
-                    yield out
+                # for out in res.outputs:
+                #     yield out
                 for seg in res.new_segments:
                     self._merge_segment(segments, seg)
 
