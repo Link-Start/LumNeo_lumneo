@@ -100,6 +100,8 @@ export function processMessageContent(text: string, isStreaming = false): string
   processedText = processedText.replace(/<!--tool_call:[^>]+-->/g, '')
 
   processedText = processedText.replace(/<<<PLAN_START>>>[\s\S]*?(?:<<<PLAN_END>>>|$)/g, '')
+  // 过滤协作策略 model_info 标记
+  processedText = processedText.replace(/<!--model_info:[\s\S]*?-->/g, '')
   // 处理计划块 (流式)
   processedText = processedText.replace(/<!--plan_ready:([\s\S]*?)-->/g, (_, jsonStr) => {
     try {

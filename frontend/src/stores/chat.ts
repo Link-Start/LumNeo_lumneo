@@ -13,6 +13,7 @@ export interface Message {
   plan?: any
   plan_id?: string
   model?: any
+  model_id?: string
   turn_index: number
 }
 
@@ -110,6 +111,7 @@ export const useChatStore = defineStore('chat', () => {
   // ---------- 立即添加到本地（不等待后端） ----------
   async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>): Promise<Message | undefined> {
     const chat = chats.value.find(c => c.id === activeChatId.value)
+    console.log(msg,'===');
     
     if (!chat) return
     const newMsg: Message = {
@@ -120,7 +122,7 @@ export const useChatStore = defineStore('chat', () => {
         name: profileStore.activeProfile?.name,
         avatar: profileStore.activeProfile?.avatar
       },
-      model: configStore.activeModel,
+      model: msg.model,
       turn_index: getNextTurnIndex() // 自动注入轮次
     }
     chat.messages.push(newMsg)
@@ -165,7 +167,7 @@ export const useChatStore = defineStore('chat', () => {
             : null,
         profile_id: profileStore.activeProfile?.id,
         plan_id: msg.plan_id,
-        model_id: localStorage.getItem('llm_active_model_id'),
+        model_id: msg.model_id || localStorage.getItem('llm_active_model_id'),
         turn_index: msg.turn_index
       })
     })

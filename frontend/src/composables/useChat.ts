@@ -6,6 +6,7 @@ import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useStrategyStore } from '@/stores/strategy'
+import { useCollaborationStore } from '@/stores/collaboration'
 import { cleanMessages } from '@/utils/message'
 import { useToolStore } from '@/stores/tools'
 import type { UploadedFile } from '@/composables/useFileUpload'
@@ -21,6 +22,7 @@ export function useChat() {
   const configStore = useConfigStore()
   const profileStore = useProfileStore()
   const strategyStore = useStrategyStore()
+  const collabStore = useCollaborationStore()
 
   const message = useMessage()
   const dialog = useDialog()
@@ -173,7 +175,7 @@ export function useChat() {
   }
 
   // ---------- 流读取 ----------
-  async function readStream(response: Response): Promise<{ finalSegments?: any[], planData?: any }> {
+  async function readStream(response: Response, turnIndex: number): Promise<{ finalSegments?: any[], planData?: any }> {
     if (!response.ok || !response.body) throw new Error('网络响应失败')
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -187,6 +189,33 @@ export function useChat() {
       const chunk = decoder.decode(value, { stream: true })
       fullText += chunk
       streamingContent.value = fullText
+
+      // 检测 model_info 标签（协作策略切换模型时推送）
+      const modelInfoMatch = chunk.match(/<!--model_info:([\s\S]*?)-->/)
+      if (modelInfoMatch) {
+        try {
+          const info = JSON.parse(modelInfoMatch[1])
+          
+          const model = configStore.savedModels.find(m => m.id === info.model_id)
+          if (model) {
+            const chat = chatStore.chats.find(c => c.id === chatStore.activeChatId)
+            if (chat) {
+              const targetMsg = chat.messages.find(m => m.turn_index === turnIndex && m.role === 'assistant')
+              if (targetMsg) {
+                targetMsg.model_id = model.id
+                targetMsg.model = {
+                  id: model.id,
+                  name: model.name,
+                  type: model.type,
+                  modelName: model.modelName
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('解析 model_info 失败', e)
+        }
+      }
 
       // 检测 plan_ready 标签（新增）
       const planMatch = chunk.match(/<!--plan_ready:([\s\S]*?)-->/)
@@ -358,7 +387,8 @@ export function useChat() {
         turn_index: assistantTurnIndex,
         plan_id: plan_id,
         is_executing_plan: isExecutingPlan,
-        params: strategyStore.getBackendParams()
+        params: strategyStore.getBackendParams(),
+        collaboration: collabStore.payload
       })
 
       if (scrollToBottom) setTimeout(scrollToBottom, 160)
@@ -370,7 +400,7 @@ export function useChat() {
         signal: controller.signal,
       })
 
-      const { finalSegments, planData } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response, assistantTurnIndex)
 
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)
@@ -477,11 +507,12 @@ export function useChat() {
         turn_index: assistantTurnIndex,
         plan_id: prevMsg?.plan_id,
         is_executing_plan: isExecutingPlan,
-        params: strategyStore.getBackendParams()
+        params: strategyStore.getBackendParams(),
+        collaboration: collabStore.payload
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const { finalSegments, planData } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response, assistantTurnIndex)
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)
         if (chat) {
@@ -513,7 +544,7 @@ export function useChat() {
     }
   }
 
-  // 重新生成特定消息（替换截断）
+  // 重新生成特定消息
   async function regenerateResponse(assistantMsg: Message, prevMsg: Message) {
 
     if (!chatStore.activeChatId || isLoading.value) return
@@ -564,11 +595,12 @@ export function useChat() {
         turn_index: assistantMsg.turn_index,
         plan_id: prevMsg.plan_id,
         is_executing_plan: isExecutingPlan,
-        params: strategyStore.getBackendParams()
+        params: strategyStore.getBackendParams(),
+        collaboration: collabStore.payload
       })
 
       const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal })
-      const { finalSegments, planData } = await readStream(response)
+      const { finalSegments, planData } = await readStream(response, assistantMsg.turn_index)
 
       if (chatStore.activeChatId === chatId && finalSegments) {
         const chat = chatStore.chats.find(c => c.id === chatId)

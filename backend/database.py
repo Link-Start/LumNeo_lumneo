@@ -156,6 +156,7 @@ async def init_db():
     # 索引
     await db.execute("CREATE INDEX IF NOT EXISTS idx_plans_plan_id ON plans (plan_id)")
     await db.execute("CREATE INDEX IF NOT EXISTS idx_plans_chat_id ON plans (chat_id)")
+
     
     await migrate_db(db)
     await db.commit()
