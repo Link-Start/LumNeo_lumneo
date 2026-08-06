@@ -108,6 +108,7 @@
             </n-button>
             <div class="model-badge">
               <n-select
+                v-if="!collaborationStore.enabled"
                 v-model:value="activeModelId"
                 :options="modelOptions"
                 size="large"
@@ -266,6 +267,7 @@ import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
 import { useStrategyStore } from '@/stores/strategy'
+import { useCollaborationStore } from '@/stores/collaboration'
 
 import SettingsDrawer from '@/components/SettingsDrawer/index.vue'
 import Introduction from '@/components/Introduction.vue'
@@ -287,6 +289,7 @@ const configStore = useConfigStore()
 const profileStore = useProfileStore()
 const toolStore = useToolStore()
 const strategyStore = useStrategyStore()
+const collaborationStore = useCollaborationStore()
 
 const message = useMessage()
 
@@ -557,6 +560,11 @@ const toggleDecision = debounce(() => {
   message.info('自主决策已' + (strategyStore.autoDecision ? '开启' : '关闭'))
 }, 150)
 
+const toggleCollaboration = debounce(() => {
+  collaborationStore.enabled = !collaborationStore.enabled
+  message.info('模型协作已' + (collaborationStore.enabled ? '开启' : '关闭'))
+}, 150)
+
 const handleKeyboard = (event: KeyboardEvent) => {
   if (event.altKey) {
     event.preventDefault()
@@ -572,6 +580,8 @@ const handleKeyboard = (event: KeyboardEvent) => {
       toggleApproval()
     } else if (event.code === 'Digit3') {
       toggleDecision()
+    } else if (event.code === 'Digit4') {
+      toggleCollaboration()
     }
   }
 }

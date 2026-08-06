@@ -34,34 +34,34 @@ export const fileConfig = {
 
 export const useConfigStore = defineStore('config', () => {
   // 从 localStorage 初始化
-  const savedModels = ref<ModelConfig[]>([])
+  const modelList = ref<ModelConfig[]>([])
   const activeModelId = ref<string|null>(null)
   const themeMode = ref<'light' | 'dark'>('dark')
 
   localStorage.getItem('themeMode') && (themeMode.value = localStorage.getItem('themeMode') as 'light' | 'dark')
 
   const savedActive = localStorage.getItem(ACTIVE_KEY)
-  if (savedActive && savedModels.value.some(m => m.id === savedActive)) {
+  if (savedActive && modelList.value.some(m => m.id === savedActive)) {
     activeModelId.value = savedActive
-  } else if (savedModels.value.length > 0) {
-    activeModelId.value = savedModels.value[0].id
+  } else if (modelList.value.length > 0) {
+    activeModelId.value = modelList.value[0].id
   }
 
   watch(activeModelId, (val) => {
     if (val) localStorage.setItem(ACTIVE_KEY, val)
   })
 
-  const activeModel = computed(() => savedModels.value.find(m => m.id === activeModelId.value))
+  const activeModel = computed(() => modelList.value.find(m => m.id === activeModelId.value))
   const loading = ref(false)
   // 从后端加载模型列表
   async function loadModels() {
     loading.value = true
     try {
       const models = await getModels()
-      savedModels.value = models
+      modelList.value = models
       // 如果当前激活的ID不在列表中，重置为第一个或清空
-      // if (activeModelId.value && !savedModels.value.some(m => m.id === activeModelId.value)) {
-      //   activeModelId.value = savedModels.value[0]?.id || ''
+      // if (activeModelId.value && !modelList.value.some(m => m.id === activeModelId.value)) {
+      //   activeModelId.value = modelList.value[0]?.id || ''
       //   localStorage.setItem(ACTIVE_KEY, activeModelId.value)
       // }
     } catch (err) {
@@ -74,7 +74,7 @@ export const useConfigStore = defineStore('config', () => {
   // 添加模型
   async function addModel(model: Omit<ModelConfig, 'id'>) {
     const newModel = await createModel(model)
-    savedModels.value.push(newModel)
+    modelList.value.push(newModel)
     if (!activeModelId.value) {
       activeModelId.value = newModel.id
       localStorage.setItem(ACTIVE_KEY, activeModelId.value)
@@ -84,18 +84,18 @@ export const useConfigStore = defineStore('config', () => {
   // 更新模型
   async function updateModelById(id: string, updates: Partial<Omit<ModelConfig, 'id'>>) {
     await updateModel(id, updates)
-    const idx = savedModels.value.findIndex(m => m.id === id)
-    if (idx !== -1) Object.assign(savedModels.value[idx], updates)
+    const idx = modelList.value.findIndex(m => m.id === id)
+    if (idx !== -1) Object.assign(modelList.value[idx], updates)
   }
 
   // 删除模型
   async function deleteModelById(id: string) {
     await deleteModel(id)
-    savedModels.value = savedModels.value.filter(m => m.id !== id)
-    if (activeModelId.value === id && savedModels.value.length > 0) {
-      activeModelId.value = savedModels.value[0].id
+    modelList.value = modelList.value.filter(m => m.id !== id)
+    if (activeModelId.value === id && modelList.value.length > 0) {
+      activeModelId.value = modelList.value[0].id
       localStorage.setItem(ACTIVE_KEY, activeModelId.value)
-    } else if (savedModels.value.length === 0) {
+    } else if (modelList.value.length === 0) {
       activeModelId.value = ''
       localStorage.setItem(ACTIVE_KEY, '')
     }
@@ -115,7 +115,7 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   return {
-    savedModels,
+    modelList,
     activeModel,
     themeMode,
     loading,

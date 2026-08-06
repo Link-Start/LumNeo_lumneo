@@ -9,7 +9,7 @@
 
         <!-- 模型列表 -->
         <n-list clickable bordered>
-            <n-list-item v-for="model in configStore.savedModels" :key="model.id">
+            <n-list-item v-for="model in configStore.modelList" :key="model.id">
             <template #suffix>
                 <n-space>
                 <n-button text size="small" @click="editModel(model)">

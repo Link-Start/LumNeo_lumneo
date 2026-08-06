@@ -1,9 +1,13 @@
 <template>
-  <n-drawer :show="show" :auto-focus="false" @update:show="(val: boolean) => emit('update:show', val)" width="470">
+  <n-drawer :show="show" :auto-focus="false" @update:show="(val: boolean) => emit('update:show', val)" width="520">
     <n-drawer-content title="系统设置" closable>
       <n-tabs v-model:value="activeTab">
         <n-tab-pane name="model" tab="模型管理">
           <ModelManager/>
+        </n-tab-pane>
+
+        <n-tab-pane name="collaboration" tab="模型协作">
+          <CollaborationManager/>
         </n-tab-pane>
 
         <!-- 执行策略 -->
@@ -31,6 +35,7 @@
 import { ref } from 'vue'
 import { NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui'
 import ModelManager from './ModelManager.vue'
+import CollaborationManager from './CollaborationManager.vue'
 import StrategyManager from './StrategyManager.vue'
 import SkillsManager from './SkillsManager.vue'
 import SettingsManager from './SettingsManager.vue'

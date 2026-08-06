@@ -33,6 +33,17 @@
         </n-button>
       </div>
     </div>
+    <div v-else-if="collaborationStore.enabled" style="font-size:12px;color:grey;">
+      ⚡模型协作调度策略：
+      <n-popover trigger="hover">
+        <template #trigger>
+          <span style="cursor:pointer">{{collaborationStore.strategyLabel}}</span>
+        </template>
+        <!-- 展示策略详情 -->
+        <strategy-details />
+      </n-popover>
+      
+    </div>
 
     <!-- 输入框 -->
     <div class="compose-input-container">
@@ -65,15 +76,15 @@
               <n-switch v-model:value="strategyStore.autoDecision" />
             </n-flex>
           </n-popover>
-          <!-- <n-popover trigger="hover">
+          <n-popover trigger="hover">
             <template #trigger>
-              <n-badge dot type="error" :color="!strategyStore.blueprintMode ? 'grey' : ''"/>
+              <n-badge dot type="error" :color="!collaborationStore.enabled ? 'grey' : ''"/>
             </template>
             <n-flex>
-              <span>自动分流</span>
-              <n-switch v-model:value="strategyStore.blueprintMode" />
+              <span>模型协作</span>
+              <n-switch v-model:value="collaborationStore.enabled" />
             </n-flex>
-          </n-popover> -->
+          </n-popover>
         </n-flex>
       </div>
       <n-input
@@ -150,6 +161,8 @@ import { NButton, NInput, NDropdown, NUpload, NIcon, NFlex, NPopover, NSwitch, N
 import type { DropdownOption } from 'naive-ui'
 import { ArrowDownOutline, DocumentOutline } from '@vicons/ionicons5'
 import { useStrategyStore } from '@/stores/strategy'
+import { useCollaborationStore } from '@/stores/collaboration'
+import StrategyDetails from './StrategyDetails.vue'
 import mSvg from '@/components/MSvg.vue'
 
 
@@ -187,6 +200,7 @@ const emit = defineEmits<{
 }>()
 
 const strategyStore = useStrategyStore()
+const collaborationStore = useCollaborationStore()
 
 const thinkButtonLabel = computed(() => {
   if (props.thinkingMode === 'high') return '标准思考'

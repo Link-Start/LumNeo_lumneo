@@ -13,9 +13,10 @@ from backend.services.tools import get_local_tools, get_mcp_tools, get_all_tools
 from backend.db.profiles import get_profile_by_id
 from backend.db.skills import get_skills_by_profile
 from backend.db.decisions import update_decision_status, get_decision_status
-from backend.utils.base import resource_path, get_current_time, get_local_ip
+from backend.db.models import list_models as list_models_db
+from backend.utils.base import resource_path, get_current_time, get_local_ip, get_typeName
+from backend.utils.collaboration_strategy import select_model_by_strategy
 from config_loader import config
-from backend.bootstrap import logger
 
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -58,12 +59,23 @@ class StrategyParams(BaseModel):
 
 class ModelConfig(BaseModel):
     type: str
+    name: str
     model_id: str
     model_name: str
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     thinking: str = 'enabled'
     reasoning_effort: str = 'high'
+
+class CollaborationParams(BaseModel):
+    """模型协作调度参数（前端每次请求携带）"""
+    enabled: bool = False
+    primary_model_id: str
+    secondary_model_id: Optional[str] = None
+    strategy: str = Field(default="auto", pattern="^(auto|primary|secondary|hybrid)$")
+    primary_ratio: int = Field(default=70, ge=0, le=100)
+    conditions: Optional[Dict[str, Any]] = None
+    fallback_enabled: bool = True
 
 class ChatRequest(BaseModel):
     messages: List[Dict[str, Any]]
@@ -76,6 +88,7 @@ class ChatRequest(BaseModel):
     plan_id: Optional[str] = None
     is_executing_plan: bool = False
     params: Optional[StrategyParams] = None
+    collaboration: Optional[CollaborationParams] = None
 
 class DecisionUpdate(BaseModel):
     decision_id: int
@@ -93,6 +106,8 @@ class ExecutePlanRequest(BaseModel):
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
 
+# ========== 聊天接口 ==========
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
@@ -100,41 +115,128 @@ async def chat(
     mcp_manager=Depends(get_mcp_manager)
 ):
     try:
-        # 创建 LLM 服务实例
-        if request.llm_config:
-            cfg = request.llm_config
-            reasoning_effort = cfg.reasoning_effort
-            if cfg.model_name and any(
-                re.search(pattern, cfg.model_name, re.IGNORECASE) 
-                for pattern in REASONING_EFFORT_MAPPING_MODELS
-            ):
-                reasoning_effort = REASONING_EFFORT_MAP.get(
-                    reasoning_effort, reasoning_effort
+        cfg = request.llm_config
+        collab_reason = None
+
+        # ========== 模型协作策略介入 ==========
+        # 执行已确认的计划时，跳过模型协作策略的自动切换
+        if not request.is_executing_plan:
+            # 优先使用请求体携带的协作参数（前端实时配置），否则回退到数据库
+            collab_config = None
+            if request.collaboration and request.collaboration.enabled:
+                collab_config = request.collaboration
+
+            if collab_config:
+                models = await list_models_db()
+                model_map = {m.id: m.to_dict() for m in models}
+
+                # 获取最后一条用户消息用于判断
+                last_user_msg = ""
+                for msg in reversed(request.messages):
+                    if msg.get("role") == "user":
+                        content = msg.get("content", "")
+                        if isinstance(content, str):
+                            last_user_msg = content
+                        elif isinstance(content, list):
+                            for part in content:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    last_user_msg = part.get("text", "")
+                                    break
+                        break
+
+                selected_id, collab_reason = await select_model_by_strategy(
+                    collab_config, last_user_msg, request.enable_tools, model_map
                 )
-            if cfg.type == "local":
-                service = LLMService(
-                    model_type="local", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
+
+                # 如果选中的不是当前请求的模型，则替换
+                if cfg is None or cfg.model_id != selected_id:
+                    selected_model = model_map.get(selected_id)
+                    if selected_model:
+                        reasoning_effort = cfg.reasoning_effort if cfg else 'high'
+                        model_name = selected_model.get('modelName', '')
+                        if model_name and any(
+                            re.search(pattern, model_name, re.IGNORECASE)
+                            for pattern in REASONING_EFFORT_MAPPING_MODELS
+                        ):
+                            reasoning_effort = REASONING_EFFORT_MAP.get(reasoning_effort, reasoning_effort)
+
+                        cfg = ModelConfig(
+                            type=selected_model.get('type', 'local'),
+                            name=selected_model.get('name', ''),
+                            model_id=selected_model.get('id'),
+                            model_name=model_name,
+                            base_url=selected_model.get('baseUrl'),
+                            api_key=selected_model.get('apiKey'),
+                            thinking='enabled',
+                            reasoning_effort=reasoning_effort
+                        )
+                        # logger.info(f"[协作策略] {collab_reason}")
+
+        # 保存主模型配置，用于故障回退
+        primary_cfg = None
+        if collab_config and collab_config.fallback_enabled:
+            primary_model = model_map.get(collab_config.primary_model_id) if 'model_map' in locals() else None
+            if primary_model and (cfg is None or cfg.model_id != primary_model.get('id')):
+                reasoning_effort = cfg.reasoning_effort if cfg else 'high'
+                p_name = primary_model.get('modelName', '')
+                if p_name and any(
+                    re.search(pattern, p_name, re.IGNORECASE)
+                    for pattern in REASONING_EFFORT_MAPPING_MODELS
+                ):
+                    reasoning_effort = REASONING_EFFORT_MAP.get(reasoning_effort, reasoning_effort)
+                primary_cfg = ModelConfig(
+                    type=primary_model.get('type', 'local'),
+                    name=primary_model.get('name', ''),
+                    model_id=primary_model.get('id'),
+                    model_name=p_name,
+                    base_url=primary_model.get('baseUrl'),
+                    api_key=primary_model.get('apiKey'),
+                    thinking='enabled',
+                    reasoning_effort=reasoning_effort
                 )
-            else:
-                if not cfg.api_key:
-                    raise HTTPException(status_code=400, detail="线上模型必须提供 API Key")
-                service = LLMService(
-                    model_type="online", model_name=cfg.model_name,
-                    base_url=cfg.base_url, api_key=cfg.api_key, thinking=cfg.thinking, reasoning_effort=reasoning_effort
-                )
-        else:
+
+        # 创建 LLM 服务实例（故障回退时会在 _call_with_model 中重新创建）
+        if not cfg:
+            # 无协作策略时，使用用户选中的模型或全局实例
             service = LLMService.instance
             if not service:
                 raise HTTPException(status_code=400, detail="请先选择或配置模型")
+            # 包装为统一接口
+            async def _call_with_model(model_cfg: ModelConfig):
+                async for chunk in service.generate_response(
+                    messages=messages,
+                    enable_tools=request.enable_tools,
+                    tools=final_tools,
+                    request=fastapi_request,
+                    mcp_manager=mcp_manager,
+                    params=final_params,
+                    profile_id=profile.id if profile else None,
+                    model_id=model_cfg.model_id if model_cfg else None,
+                    chat_id=request.chat_id,
+                    turn_index=request.turn_index,
+                    blueprint_mode=request.params.blueprint_mode if request.params else False,
+                    plan_id=request.plan_id if request.plan_id else None,
+                    is_executing_plan=request.is_executing_plan
+                ):
+                    yield chunk
+
+            async def response_generator():
+                async for chunk in _call_with_model(cfg):
+                    yield chunk
+
+            return StreamingResponse(response_generator(), media_type="text/event-stream")
 
         # 准备 System Prompt 和 Tools
         messages = request.messages.copy()
-        
+
         # 基础 System Prompt
         system_prompt = BASE_SYSTEM_PROMPT.replace("{{workspace_path}}", backend.workspace_path)
         system_prompt = system_prompt.replace("{{time_now}}", get_current_time())
-        
+
+        # 如果协作策略介入，在系统提示中标注（帮助用户理解）
+        if collab_reason:
+            system_prompt += f"\n\n[系统提示] 当前由模型协作策略调度: {collab_reason}"
+
         # 处理 Profile 和 Skills
         profile = None
         has_available_skills = False
@@ -144,14 +246,14 @@ async def chat(
                 # 注入角色 Prompt
                 if profile.profile_prompt:
                     system_prompt += f"\n\n ## 当前角色人设 \n\n{profile.profile_prompt}"
-                
+
                 # --- 加载技能（懒加载） ---
                 if request.enable_tools:
                     db_skills = await get_skills_by_profile(request.profile_id)
-                    
+
                     # 存放技能的描述（轻量级）
                     skill_descriptions = []
-                    
+
                     for skill in db_skills:
                         # 1. 获取简短描述（优先 metadata，其次 prompt_content 首行，最后用名称）
                         desc = ""
@@ -163,8 +265,8 @@ async def chat(
                             desc = lines[0] if lines else skill.name
                         if not desc:
                             desc = skill.name
-                        
-                        
+
+
                         # 2. 构建技能条目
                         if skill.file_path:
                             # 新技能：有文件路径，只注入描述，提示读取 SKILL.md
@@ -187,15 +289,15 @@ async def chat(
         # 处理系统工具
         local_tools = get_local_tools()
         system_tools = [t for t in local_tools if t["function"]["name"] in default_tools]
-        
+
         if profile and request.enable_tools:
             # 筛选 Profile 允许的工具
             mcp_tools = await get_mcp_tools(mcp_manager) if request.enable_tools else []
             allowed_tools = profile.tools
-            
+
             enable_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
             enable_tools.extend(mcp_tools)
-            
+
             use_tools = [t for t in enable_tools if t["function"]["name"] in allowed_tools]
             system_tools.extend(use_tools)
 
@@ -208,7 +310,7 @@ async def chat(
         # 清理历史消息中的 reasoning block
         REASONING_BLOCK = re.compile(r'<!--reasoning:start-->.*?<!--reasoning:end:\d+\.?\d*-->', re.DOTALL)
         MISC_MARKERS = re.compile(r'<!--(?:token_usage|reasoning):[^>]*-->')
-        
+
         for msg in messages:
             content = msg.get("content")
             if isinstance(content, str):
@@ -270,14 +372,35 @@ async def chat(
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction
 
-            print(system_prompt, final_tools, has_available_skills)
-
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
 
-        # 流式响应
-        return StreamingResponse(
-            service.generate_response(
+        # ========== 包装流式响应，先发送实际使用的模型信息，支持故障回退 ==========
+        async def _call_with_model(model_cfg: ModelConfig):
+            """用指定模型配置创建服务并调用生成"""
+            reasoning_effort = model_cfg.reasoning_effort
+            if model_cfg.model_name and any(
+                re.search(pattern, model_cfg.model_name, re.IGNORECASE)
+                for pattern in REASONING_EFFORT_MAPPING_MODELS
+            ):
+                reasoning_effort = REASONING_EFFORT_MAP.get(reasoning_effort, reasoning_effort)
+
+            if model_cfg.type == "local":
+                svc = LLMService(
+                    model_type="local", model_name=model_cfg.model_name,
+                    base_url=model_cfg.base_url, api_key=model_cfg.api_key,
+                    thinking=model_cfg.thinking, reasoning_effort=reasoning_effort
+                )
+            else:
+                if not model_cfg.api_key:
+                    raise HTTPException(status_code=400, detail="线上模型必须提供 API Key")
+                svc = LLMService(
+                    model_type="online", model_name=model_cfg.model_name,
+                    base_url=model_cfg.base_url, api_key=model_cfg.api_key,
+                    thinking=model_cfg.thinking, reasoning_effort=reasoning_effort
+                )
+
+            gen = svc.generate_response(
                 messages=messages,
                 enable_tools=request.enable_tools,
                 tools=final_tools,
@@ -285,17 +408,73 @@ async def chat(
                 mcp_manager=mcp_manager,
                 params=final_params,
                 profile_id=profile.id if profile else None,
-                model_id=request.llm_config.model_id,
+                model_id=model_cfg.model_id,
                 chat_id=request.chat_id,
                 turn_index=request.turn_index,
                 blueprint_mode=request.params.blueprint_mode if request.params else False,
                 plan_id=request.plan_id if request.plan_id else None,
                 is_executing_plan=request.is_executing_plan
-            ),
+            )
+
+            # 手动迭代：检测到 orchestrator 内部吞掉的错误消息时，转成异常抛出以触发回退
+            try:
+                while True:
+                    chunk = await gen.__anext__()
+                    # orchestrator 在超时/异常时会 yield "❌ 模型服务错误..."
+                    if chunk.startswith("❌ 模型服务错误") or chunk.startswith("\n❌ 模型服务错误"):
+                        raise Exception(f"模型 {model_cfg.model_name} 服务错误: {chunk.strip()}")
+                    yield chunk
+            except StopAsyncIteration:
+                pass
+
+        async def response_generator():
+            current_cfg = cfg
+            current_reason = collab_reason
+
+            # 发送当前选用的模型信息
+            if current_cfg and current_reason:
+                model_info = {
+                    "model_id": current_cfg.model_id,
+                    "model_name": current_cfg.model_name,
+                    "type": current_cfg.type,
+                    "reason": current_reason
+                }
+                yield f"<!--model_info:{json.dumps(model_info, ensure_ascii=False)}-->"
+
+            try:
+                async for chunk in _call_with_model(current_cfg):
+                    yield chunk
+            except Exception as e:
+                # 故障回退：如果当前不是主模型且开启了回退，尝试主模型
+                if (primary_cfg and 
+                    current_cfg and 
+                    current_cfg.model_id != primary_cfg.model_id):
+                    # logger.warning(f"[故障回退] 模型 {current_cfg.model_name} 调用失败: {str(e)[:200]}，尝试回退到主模型 {primary_cfg.model_name}")
+                    print(primary_cfg)
+                    fallback_reason = f"[故障回退] 原模型调用失败，已切换至主模型 「 {primary_cfg.name} · {get_typeName(primary_cfg.type)} 」"
+                    fallback_info = {
+                        "model_id": primary_cfg.model_id,
+                        "model_name": primary_cfg.model_name,
+                        "type": primary_cfg.type,
+                        "reason": fallback_reason
+                    }
+                    yield f"<!--model_info:{json.dumps(fallback_info, ensure_ascii=False)}-->"
+
+                    async for chunk in _call_with_model(primary_cfg):
+                        yield chunk
+                else:
+                    # 无法回退：错误消息已 yield 给用户，直接结束不再抛 500
+                    error_msg = f"模型 {current_cfg.name if current_cfg else '未知'} 调用失败，且无法回退到主模型。错误：{str(e)[:300]}"
+                    yield f"<!--error:{json.dumps({'message': error_msg}, ensure_ascii=False)}-->"
+                    return
+
+        # 流式响应
+        return StreamingResponse(
+            response_generator(),
             media_type="text/event-stream"
         )
     except Exception as e:
-        logger.error(f"对话服务错误：{e}")
+        # logger.error(f"对话服务错误：{e}")
         error_trace = traceback.format_exc()
         raise HTTPException(
             status_code=500, detail=f"服务崩溃: {error_trace}"
@@ -334,13 +513,13 @@ async def update_decision(decision: DecisionUpdate):
     """用户决策回写接口"""
     if decision.choice not in ['continue', 'stop']:
         raise HTTPException(status_code=400, detail="无效的选择")
-    
+
     status = await get_decision_status(decision.decision_id)
     if status is None:
         raise HTTPException(status_code=404, detail="决策不存在")
     if status != 'pending':
         raise HTTPException(status_code=400, detail="该决策已被处理")
-    
+
     success = await update_decision_status(decision.decision_id, decision.choice)
     if not success:
         raise HTTPException(status_code=500, detail="更新失败")

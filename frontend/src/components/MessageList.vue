@@ -63,6 +63,14 @@
                         </div>
                       </n-popover>
                     </div>
+
+                    <div
+                      v-if="msg.modelSwitchReason"
+                      class="model-switch-tag"
+                      :class="msg.modelSwitchReason.includes('故障回退') ? 'warning' : 'info'"
+                    >
+                      {{ msg.modelSwitchReason }}
+                    </div>
                     <div class="message-content assistant-box" :data-theme="isDark">
                       <MarkdownRender
                         :key="'msg-' + chatId + '-' + msg.id + '-' + index"
@@ -118,24 +126,59 @@
 
             <!-- 流式输出占位 -->
             <template v-else>
-              <div class="streaming-after-item message-row assistant">
-                <div v-if="streamingContent" class="bubble streaming">
-                  <MarkdownRender
-                    :key="'streaming-' + index"
-                    custom-id="chat"
-                    :is-dark="isDark"
-                    :themes="['vitesse-light', 'vitesse-dark']"
-                    code-block-dark-theme="vitesse-dark"
-                    code-block-light-theme="vitesse-light"
-                    :content="processMessageContent(streamingContent, true)"
-                    :final="false"
-                    :typewriter="false"
-                    :max-live-nodes="0"
-                    :viewport-priority="false"
-                    :defer-nodes-until-visible="false"
-                    :batch-rendering="true"
-                    :custom-html-tags="customHtmlTags"
-                  />
+              <div class="streaming-after-item message-row assistant" style="position: relative;">
+                <!-- 流式消息头像与模型信息 -->
+                <div v-if="!isMobile && streamingAssistantMsg" style="position: absolute; left: -56px; top: 4px;">
+                  <div v-if="streamingModel?.type === 'online'" style="position: absolute; left: -6px; top: -7px;">
+                    <m-svg name="hat" :size="20" />
+                  </div>
+                  <n-popover trigger="hover">
+                    <template #trigger>
+                      <n-avatar
+                        class="avatar"
+                        round
+                        :size="40"
+                        :src="`./images/avatars/${getLatestProfile(streamingAssistantMsg).avatar}`"
+                        @click="handleShowModal(getLatestProfile(streamingAssistantMsg).id)"
+                      />
+                    </template>
+                    <div style="text-align: center;">
+                      {{ streamingAssistantMsg.profile?.name || getLatestProfile(streamingAssistantMsg).name }}
+                    </div>
+                    <div v-if="streamingModel" style="font-size: 12px; color: rgba(125,125,125,0.8)">
+                      {{ streamingModel.type === 'local' ? '本地' : '云端' }}: {{ streamingModel.modelName }}
+                    </div>
+                    <div v-else style="font-size: 12px; color: rgba(125,125,125,0.5)">
+                      模型加载中…
+                    </div>
+                  </n-popover>
+                </div>
+                <div v-if="streamingContent.replace(/<!--model_info:[\s\S]*?-->/g, '')" class="bubble streaming">
+                  <div
+                    v-if="streamingAssistantMsg?.modelSwitchReason"
+                    class="model-switch-tag"
+                    :class="streamingAssistantMsg.modelSwitchReason.includes('故障回退') ? 'warning' : 'info'"
+                  >
+                    {{ streamingAssistantMsg.modelSwitchReason }}
+                  </div>
+                  <div class="message-content assistant-box">
+                    <MarkdownRender
+                      :key="'streaming-' + index"
+                      custom-id="chat"
+                      :is-dark="isDark"
+                      :themes="['vitesse-light', 'vitesse-dark']"
+                      code-block-dark-theme="vitesse-dark"
+                      code-block-light-theme="vitesse-light"
+                      :content="processMessageContent(streamingContent, true)"
+                      :final="false"
+                      :typewriter="false"
+                      :max-live-nodes="0"
+                      :viewport-priority="false"
+                      :defer-nodes-until-visible="false"
+                      :batch-rendering="true"
+                      :custom-html-tags="customHtmlTags"
+                    />
+                  </div>
                 </div>
                 <svgLoading v-else />
               </div>
@@ -202,6 +245,22 @@ const messageListRef = ref<HTMLElement | null>(null)
 const showPanelModal = ref(false)
 
 const currentMessages = computed(() => props.messages)
+
+// 当前流式输出对应的 assistant 消息（用于显示头像和模型信息）
+const streamingAssistantMsg = computed(() => {
+  if (!props.isLoading) return null
+  const msgs = props.messages
+  console.log(msgs);
+  
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') {
+      return msgs[i]
+    }
+  }
+  return null
+})
+
+const streamingModel = computed(() => streamingAssistantMsg.value?.model || null)
 
 const listItems = computed<any>(() => {
   const msgs = currentMessages.value as (Message | { __streaming: boolean })[]
@@ -593,4 +652,25 @@ onUnmounted(() => {
 }
 .avatar {box-shadow: 0 0 3px rgba(128,128,128,.8);cursor:pointer;border:2px solid #fff;margin-bottom:10px;}
 .assistant-box {background: var(--message-bg-color);border-radius: 8px;margin-bottom:12px;padding-top:14px;}
+
+.model-switch-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.model-switch-tag.info {
+  background: rgba(32, 128, 240, 0.08);
+  color: #2080f0;
+  border: 1px solid rgba(32, 128, 240, 0.15);
+}
+.model-switch-tag.warning {
+  background: rgba(240, 160, 32, 0.08);
+  color: #f0a020;
+  border: 1px solid rgba(240, 160, 32, 0.15);
+}
 </style>
