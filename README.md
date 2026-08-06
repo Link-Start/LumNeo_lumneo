@@ -1,4 +1,4 @@
-#  LumNeo —  给 AI 硬件开发装上一双"看见"物理世界的眼睛
+#  LumNeo —  下一代跨平台 AI 智能体工作台
 
 ![Vue 3](https://img.shields.io/badge/vue%203-%2335495e.svg?style=flat&logo=vuedotjs&logoColor=%234FC08D)
 ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=flat&logo=vite&logoColor=white)
@@ -11,7 +11,8 @@
 ![Stars](https://img.shields.io/github/stars/lumneo/LumNeo?style=social)
 
 > Build AI that builds hardware.  
-> 造一个能造硬件的 AI。
+> 造一个能造硬件的 AI。  
+> 版本里程碑：3.0 版本之前，它是一款通用的 AI 提效工具；3.0 版本起，它将正式进化为硬件开发者的专属智能伙伴。
 
 LumNeo 是一款跨平台 AI 桌面应用，将本地隐私与云端算力融为一体。但它不是又一个通用对话工具——它的起点，是一个硬件爱好者"给自己写的工具箱"。
 
