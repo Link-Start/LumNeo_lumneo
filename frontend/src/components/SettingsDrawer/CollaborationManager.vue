@@ -3,21 +3,19 @@
         <n-space vertical>
             <!-- 顶部开关 -->
             <n-card size="small" :bordered="false" style="background: transparent">
-            <n-space align="center" justify="space-between">
-                <n-space align="center" :size="12">
-                <n-icon size="24" :depth="2"><git-compare-outline /></n-icon>
-                <div>
-                    <n-text strong style="font-size: 16px">模型协作调度</n-text>
-                    <n-text depth="3" style="font-size: 12px; display: block">
-                    根据任务特征自动在本地与云端模型间切换，实现智能负载均衡
-                    </n-text>
-                </div>
+                <n-space align="center" justify="space-between">
+                    <n-space align="center" :size="12">
+                        <n-icon size="28" :depth="2"><git-compare-outline /></n-icon>
+                        <div>
+                            <n-text strong style="font-size: 16px">模型协作调度</n-text>
+                            <n-text depth="3" style="font-size: 12px; display: block">根据任务特征自动在主模型与副模型间切换，实现智能负载均衡</n-text>
+                        </div>
+                    </n-space>
+                    <n-switch v-model:value="store.enabled" size="large" @update:value="handleToggle">
+                        <template #checked>已启用</template>
+                        <template #unchecked>已关闭</template>
+                    </n-switch>
                 </n-space>
-                <n-switch v-model:value="store.enabled" size="large" @update:value="handleToggle">
-                    <template #checked>已启用</template>
-                    <template #unchecked>已关闭</template>
-                </n-switch>
-            </n-space>
             </n-card>
 
             <n-divider style="margin: 4px 0" />
@@ -72,10 +70,10 @@
                 <n-card title="调度策略" size="small" hoverable>
                     <n-space justify="center">
                         <n-radio-group v-model:value="store.strategy" :disabled="!store.enabled" size="large">
-                            <n-radio-button value="auto">🧠 自动</n-radio-button>
-                            <n-radio-button value="primary">📌 固定主模型</n-radio-button>
-                            <n-radio-button value="secondary">📎 固定副模型</n-radio-button>
-                            <n-radio-button value="hybrid">🎲 混合</n-radio-button>
+                            <n-radio-button value="auto">智能调度</n-radio-button>
+                            <n-radio-button value="primary">固定主模型</n-radio-button>
+                            <n-radio-button value="secondary">固定副模型</n-radio-button>
+                            <n-radio-button value="hybrid">混合占比</n-radio-button>
                         </n-radio-group>
                     </n-space>
 
@@ -92,15 +90,15 @@
                     <n-card size="small" embedded :bordered="false" style="margin-top: 16px; background: rgba(125,125,125,0.04)">
                         <n-space vertical>
                         <div style="display: flex; justify-content: space-between; align-items: center">
-                            <n-text style="font-size: 14px">本地模型调用占比</n-text>
+                            <n-text style="font-size: 14px">主模型调用占比</n-text>
                             <n-text strong style="font-size: 20px; color: var(--primary-color)">
-                            {{ store.local_ratio }}%
+                            {{ store.primary_ratio }}%
                             </n-text>
                         </div>
-                        <n-slider v-model:value="store.local_ratio" :step="5" :marks="{0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%'}" />
+                        <n-slider v-model:value="store.primary_ratio" :step="5" :marks="{0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%'}" />
                         <n-space justify="space-between" style="margin-top: 8px">
-                            <n-statistic label="本地模型" :value="`${store.local_ratio}%`" size="small" />
-                            <n-statistic label="云端模型" :value="`${100 - store.local_ratio}%`" size="small" />
+                            <n-statistic label="主模型" :value="`${store.primary_ratio}%`" size="small" />
+                            <n-statistic label="副模型" :value="`${100 - store.primary_ratio}%`" size="small" />
                         </n-space>
                         </n-space>
                     </n-card>
@@ -111,6 +109,24 @@
                 <n-collapse-transition :show="store.strategy === 'auto'">
                     <n-card title="智能触发条件" size="small" hoverable>
                     <n-space vertical :size="16">
+
+                        <!-- 检测项总开关 -->
+                        <n-space justify="space-around" align="center" :size="20" style="flex-wrap: wrap;">
+                            <n-space align="center" :size="6">
+                                <n-switch v-model:value="store.conditions.enable_complexity_detect" size="small" />
+                                <n-text style="font-size: 13px">复杂度检测</n-text>
+                            </n-space>
+                            <n-space align="center" :size="6">
+                                <n-switch v-model:value="store.conditions.enable_length_detect" size="small" />
+                                <n-text style="font-size: 13px">长度检测</n-text>
+                            </n-space>
+                            <n-space align="center" :size="6">
+                                <n-switch v-model:value="store.conditions.enable_keyword_detect" size="small" />
+                                <n-text style="font-size: 13px">关键词检测</n-text>
+                            </n-space>
+                        </n-space>
+                        <n-divider style="margin: 8px 0" />
+
                         <!-- 复杂度阈值 -->
                         <n-form-item label="复杂度阈值" label-placement="left" label-width="120" :show-feedback="false">
                         <template #label>
@@ -118,10 +134,10 @@
                             <template #trigger>
                                 <span style="cursor: help; border-bottom: 1px dashed #999">复杂度阈值</span>
                             </template>
-                            当消息复杂度超过此阈值时，优先使用云端模型处理。复杂度基于代码块、任务步骤、专业术语等因素估算。
+                            当消息复杂度超过此阈值时，优先使用副模型处理。复杂度基于代码块、任务步骤、专业术语等因素估算。
                             </n-tooltip>
                         </template>
-                        <n-slider v-model:value="store.conditions.complexity_threshold" :step="0.05" :max="1" :min="0" style="max-width: 300px" />
+                        <n-slider v-model:value="store.conditions.complexity_threshold" :step="0.05" :max="1" :min="0" style="max-width: 300px" :disabled="!store.conditions.enable_complexity_detect" />
                         <n-text strong style="margin-left: 16px; min-width: 50px">
                             {{ (store.conditions.complexity_threshold * 100).toFixed(0) }}%
                         </n-text>
@@ -134,7 +150,7 @@
                             <template #trigger>
                                 <span style="cursor: help; border-bottom: 1px dashed #999">长度阈值</span>
                             </template>
-                            当单条消息超过此字符数时，优先使用云端模型处理长文本。
+                            当单条消息超过此字符数时，优先使用副模型处理长文本。
                             </n-tooltip>
                         </template>
                         <n-input-number
@@ -144,6 +160,7 @@
                             :step="100"
                             size="medium"
                             style="width: 140px"
+                            :disabled="!store.conditions.enable_length_detect"
                         />
                         <n-text depth="3" style="margin-left: 8px">字符</n-text>
                         </n-form-item>
@@ -155,20 +172,18 @@
                             <template #trigger>
                                 <span style="cursor: help; border-bottom: 1px dashed #999">工具任务优先</span>
                             </template>
-                            当请求启用工具调用时，优先使用指定类型的模型处理工具密集型任务。
+                            当请求启用工具调用时，优先使用指定模型处理工具密集型任务。
                             </n-tooltip>
                         </template>
                         <n-radio-group v-model:value="store.conditions.tool_heavy_priority" size="medium">
-                            <n-radio value="cloud">
+                            <n-radio value="primary">
                             <n-space align="center" :size="4">
-                                <n-icon size="16" :depth="3"><cloud-outline /></n-icon>
-                                <span>云端模型</span>
+                                <span>主模型</span>
                             </n-space>
                             </n-radio>
-                            <n-radio value="local">
+                            <n-radio value="secondary">
                             <n-space align="center" :size="4">
-                                <n-icon size="16" :depth="3"><desktop-outline /></n-icon>
-                                <span>本地模型</span>
+                                <span>副模型</span>
                             </n-space>
                             </n-radio>
                         </n-radio-group>
@@ -178,31 +193,34 @@
 
                         <!-- 关键词触发规则 -->
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-                        <n-text strong style="font-size: 14px">关键词触发规则</n-text>
-                        <n-button text size="small" type="primary" @click="store.addKeywordRule">
-                            <template #icon><n-icon><add /></n-icon></template>
-                            添加规则
-                        </n-button>
+                            <n-text strong style="font-size: 14px">关键词触发规则</n-text>
+                            <n-button text size="small" type="primary" @click="store.addKeywordRule" :disabled="!store.conditions.enable_keyword_detect">
+                                <template #icon><n-icon><add /></n-icon></template>
+                                添加规则
+                            </n-button>
                         </div>
 
                         <n-empty v-if="!store.conditions.keyword_triggers.length" description="暂无规则，点击上方按钮添加" size="small" />
 
-                        <n-space v-for="(rule, idx) in store.conditions.keyword_triggers" :key="idx" align="center" :size="12" style="margin-bottom: 8px">
-                        <n-input v-model:value="rule.keyword" size="medium" placeholder="输入关键词" style="width: 160px" />
-                        <n-text depth="3">命中后使用</n-text>
-                        <n-select
-                            v-model:value="rule.target"
-                            size="medium"
-                            style="width: 120px"
-                            :options="[
-                            { label: '本地模型', value: 'local' },
-                            { label: '云端模型', value: 'cloud' }
-                            ]"
-                        />
-                        <n-button text size="small" type="error" @click="store.removeKeywordRule(idx)">
-                            <n-icon size="18"><trash-outline /></n-icon>
-                        </n-button>
-                        </n-space>
+                        <div v-show="store.conditions.enable_keyword_detect">
+                            <n-space v-for="(rule, idx) in store.conditions.keyword_triggers" :key="idx" align="center" :size="12" style="margin-bottom: 8px">
+                            <n-input v-model:value="rule.keyword" size="medium" :maxlength="6" placeholder="输入关键词" style="width: 160px" :disabled="!store.conditions.enable_keyword_detect" />
+                            <n-text depth="3">命中后使用</n-text>
+                            <n-select
+                                v-model:value="rule.target"
+                                size="medium"
+                                style="width: 120px"
+                                :options="[
+                                { label: '主模型', value: 'primary' },
+                                { label: '副模型', value: 'secondary' }
+                                ]"
+                                :disabled="!store.conditions.enable_keyword_detect"
+                            />
+                            <n-button text size="small" type="error" @click="store.removeKeywordRule(idx)" :disabled="!store.conditions.enable_keyword_detect">
+                                <n-icon size="18"><trash-outline /></n-icon>
+                            </n-button>
+                            </n-space>
+                        </div>
                     </n-space>
                     </n-card>
                 </n-collapse-transition>
@@ -245,7 +263,7 @@
                                     {{ previewResult.selected.name }}
                                 </n-tag>
                                 <n-text depth="3" style="font-size: 12px">
-                                    {{ previewResult.selected.type === 'local' ? '本地部署' : '云端服务' }} · {{ previewResult.selected.modelName }}
+                                    {{ previewResult.selected.id === store.primary_model_id ? '主模型' : '副模型' }}
                                 </n-text>
                                 </n-space>
                                 <n-space v-else>
@@ -255,7 +273,7 @@
                             </n-alert>
                         </n-collapse-transition>
                     </n-space>
-                    <n-empty :description="`当前为固定模式，始终使用 ${store.strategy === 'primary' ? '主模型' : '副模型'}`" v-else />
+                    <n-empty :description="`当前为固定模式，始终使用 「 ${store.strategy === 'primary' ? '主模型' : '副模型'} 」`" v-else />
                 </n-card>
             </n-space>
         </n-space>
@@ -269,7 +287,7 @@ import {
   NSlider, NInputNumber, NInput, NDivider, NGrid, NGi, NCollapseTransition,
   NAlert, NText, NIcon, NButton, NTag, NStatistic, NEmpty, NTooltip,
   useMessage } from 'naive-ui'
-import { GitCompareOutline, FlashOutline, FlashOffOutline, Add, TrashOutline, CloudOutline, DesktopOutline } from '@vicons/ionicons5'
+import { GitCompareOutline, FlashOutline, FlashOffOutline, Add, TrashOutline } from '@vicons/ionicons5'
 import { useConfigStore } from '@/stores/config'
 import { useCollaborationStore, type CollabStrategy } from '@/stores/collaboration'
 
@@ -283,7 +301,7 @@ const previewResult = ref<any>(null)
 
 // ========== 计算属性 ==========
 const modelOptions = computed(() =>
-  configStore.savedModels.map(m => ({
+  configStore.modelList.map(m => ({
     label: `${m.name} (${m.type === 'local' ? '本地' : '云端'})`,
     value: m.id,
     type: m.type
@@ -297,20 +315,20 @@ const secondaryModelOptions = computed(() =>
 const strategyDesc = computed(() => {
   const descs: Record<CollabStrategy, { title: string; desc: string }> = {
     auto: {
-      title: '🧠 自动智能调度',
+      title: '智能调度',
       desc: '系统根据消息复杂度、关键词、长度和工具调用需求自动选择最适合的模型。适合大多数场景。'
     },
     primary: {
-      title: '📌 固定主模型',
+      title: '固定主模型',
       desc: '所有请求始终使用主模型，协作策略仅作为备用。适合对稳定性要求高的场景。'
     },
     secondary: {
-      title: '📎 固定副模型',
-      desc: '所有请求始终使用副模型。适合需要集中使用云端算力的场景。'
+      title: '固定副模型',
+      desc: '所有请求始终使用副模型。适合需要集中使用副模型算力的场景。'
     },
     hybrid: {
-      title: '🎲 混合占比调度',
-      desc: '按照设定的本地/云端占比随机分配请求。适合负载均衡和成本优化场景。'
+      title: '混合占比调度',
+      desc: '按照设定的主/副模型占比随机分配请求。适合负载均衡和成本优化场景。'
     }
   }
   return descs[store.strategy] || descs.auto
@@ -340,7 +358,7 @@ const runPreview = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: previewMessage.value,
-        enable_tools: false
+        collaboration: store.payload
       })
     })
     const data = await res.json()

@@ -15,7 +15,7 @@ export function useModel() {
   }, 120)
 
   const modelOptions = computed(() =>
-    configStore.savedModels.map(m => ({
+    configStore.modelList.map(m => ({
       label: m.name,
       value: m.id,
     }))

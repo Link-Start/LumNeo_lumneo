@@ -216,5 +216,6 @@ const behaviorOptions = [
 <style scoped>
 .mode-title {
     cursor: help;
+    border-bottom: 1px dashed #999
 }
 </style>

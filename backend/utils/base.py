@@ -123,3 +123,9 @@ def _validate(path: str) -> Tuple[Optional[Path], Optional[str]]:
         return safe_path, None
     except (ValueError, RuntimeError) as e:
         return None, str(e)
+
+def get_typeName(type: str) -> str:
+    if type == 'local':
+        return '本地'
+    else:
+        return '云端'

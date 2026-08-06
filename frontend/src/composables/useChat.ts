@@ -196,7 +196,7 @@ export function useChat() {
         try {
           const info = JSON.parse(modelInfoMatch[1])
           
-          const model = configStore.savedModels.find(m => m.id === info.model_id)
+          const model = configStore.modelList.find(m => m.id === info.model_id)
           if (model) {
             const chat = chatStore.chats.find(c => c.id === chatStore.activeChatId)
             if (chat) {
@@ -279,6 +279,18 @@ export function useChat() {
           { duration: 5000 }
         )
       }
+
+      // 检测错误标记（无法回退时的最终错误）
+      const errorMatch = chunk.match(/<!--error:([\s\S]*?)-->/)
+      if (errorMatch) {
+        try {
+          const errorData = JSON.parse(errorMatch[1])
+          finalSegments = [{ type: 'text', content: `**❌ 错误：** ${errorData.message}` }]
+        } catch (e) {
+          finalSegments = [{ type: 'text', content: `**❌ 错误：** ${errorMatch[1]}` }]
+        }
+      }
+
       // 提取最终结构化数据
       const match = chunk.match(/<!--segments_complete:([\s\S]*?)-->/)
       if (match) {
@@ -378,6 +390,7 @@ export function useChat() {
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          name: currentModel.name,
           model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
@@ -498,6 +511,7 @@ export function useChat() {
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          name: currentModel.name,
           model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,
@@ -586,6 +600,7 @@ export function useChat() {
         enable_tools: chatStore.enableProfile,
         llm_config: {
           type: currentModel.type,
+          name: currentModel.name,
           model_id: currentModel.id,
           model_name: currentModel.modelName,
           base_url: currentModel.baseUrl,

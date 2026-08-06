@@ -161,22 +161,24 @@
                   >
                     {{ streamingAssistantMsg.modelSwitchReason }}
                   </div>
-                  <MarkdownRender
-                    :key="'streaming-' + index"
-                    custom-id="chat"
-                    :is-dark="isDark"
-                    :themes="['vitesse-light', 'vitesse-dark']"
-                    code-block-dark-theme="vitesse-dark"
-                    code-block-light-theme="vitesse-light"
-                    :content="processMessageContent(streamingContent, true)"
-                    :final="false"
-                    :typewriter="false"
-                    :max-live-nodes="0"
-                    :viewport-priority="false"
-                    :defer-nodes-until-visible="false"
-                    :batch-rendering="true"
-                    :custom-html-tags="customHtmlTags"
-                  />
+                  <div class="message-content assistant-box">
+                    <MarkdownRender
+                      :key="'streaming-' + index"
+                      custom-id="chat"
+                      :is-dark="isDark"
+                      :themes="['vitesse-light', 'vitesse-dark']"
+                      code-block-dark-theme="vitesse-dark"
+                      code-block-light-theme="vitesse-light"
+                      :content="processMessageContent(streamingContent, true)"
+                      :final="false"
+                      :typewriter="false"
+                      :max-live-nodes="0"
+                      :viewport-priority="false"
+                      :defer-nodes-until-visible="false"
+                      :batch-rendering="true"
+                      :custom-html-tags="customHtmlTags"
+                    />
+                  </div>
                 </div>
                 <svgLoading v-else />
               </div>

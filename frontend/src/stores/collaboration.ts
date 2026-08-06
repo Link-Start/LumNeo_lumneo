@@ -1,8 +1,12 @@
 // src/stores/collaboration.ts
+import { createDiscreteApi } from 'naive-ui'
 import { defineStore } from 'pinia'
 
+
+  const { message } = createDiscreteApi(['message'])
+
 export type CollabStrategy = 'auto' | 'primary' | 'secondary' | 'hybrid'
-export type ModelTypeTarget = 'local' | 'cloud'
+export type ModelTypeTarget = 'primary' | 'secondary'
 
 export interface KeywordTrigger {
   keyword: string
@@ -24,18 +28,18 @@ export interface CollaborationState {
   primary_model_id: string
   secondary_model_id: string | null
   strategy: CollabStrategy
-  local_ratio: number
+  primary_ratio: number
   fallback_enabled: boolean
   conditions: CollabConditions
 }
 
 const DEFAULT_CONDITIONS: CollabConditions = {
   complexity_threshold: 0.6,
-  tool_heavy_priority: 'cloud',
+  tool_heavy_priority: 'primary',
   keyword_triggers: [
-    { keyword: '代码', target: 'local' },
-    { keyword: '分析', target: 'cloud' },
-    { keyword: '总结', target: 'local' }
+    { keyword: '代码', target: 'primary' },
+    { keyword: '分析', target: 'secondary' },
+    { keyword: '总结', target: 'primary' }
   ],
   message_length_threshold: 500,
   enable_complexity_detect: true,
@@ -49,7 +53,7 @@ export const useCollaborationStore = defineStore('collaboration', {
     primary_model_id: '',
     secondary_model_id: null,
     strategy: 'auto',
-    local_ratio: 70,
+    primary_ratio: 70,
     fallback_enabled: true,
     conditions: { ...DEFAULT_CONDITIONS }
   }),
@@ -59,7 +63,7 @@ export const useCollaborationStore = defineStore('collaboration', {
     
     strategyLabel: (state) => {
       const labels: Record<CollabStrategy, string> = {
-        auto: '自动智能',
+        auto: '智能调度',
         primary: '固定主模型',
         secondary: '固定副模型',
         hybrid: '混合占比'
@@ -76,7 +80,7 @@ export const useCollaborationStore = defineStore('collaboration', {
         primary_model_id: state.primary_model_id,
         secondary_model_id: state.secondary_model_id,
         strategy: state.strategy,
-        local_ratio: state.local_ratio,
+        primary_ratio: state.primary_ratio,
         fallback_enabled: state.fallback_enabled,
         conditions: {
           complexity_threshold: state.conditions.complexity_threshold,
@@ -99,7 +103,7 @@ export const useCollaborationStore = defineStore('collaboration', {
       this.primary_model_id = ''
       this.secondary_model_id = null
       this.strategy = 'auto'
-      this.local_ratio = 70
+      this.primary_ratio = 70
       this.fallback_enabled = true
       this.conditions = { ...DEFAULT_CONDITIONS }
     },
@@ -114,7 +118,11 @@ export const useCollaborationStore = defineStore('collaboration', {
 
     // 添加/删除关键词规则
     addKeywordRule() {
-      this.conditions.keyword_triggers.push({ keyword: '', target: 'local' })
+      if(this.conditions.keyword_triggers.length < 9) {
+        this.conditions.keyword_triggers.push({ keyword: '', target: 'primary' })
+      } else {
+        message.warning('最多只能添加9条规则')
+      }
     },
     removeKeywordRule(idx: number) {
       this.conditions.keyword_triggers.splice(idx, 1)
@@ -129,7 +137,7 @@ export const useCollaborationStore = defineStore('collaboration', {
       'primary_model_id',
       'secondary_model_id',
       'strategy',
-      'local_ratio',
+      'primary_ratio',
       'fallback_enabled',
       'conditions'
     ]

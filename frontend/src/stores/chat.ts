@@ -2,7 +2,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProfileStore } from './profiles'
-import { useConfigStore } from './config'
 
 export interface Message {
   id: number
@@ -29,7 +28,6 @@ export const useChatStore = defineStore('chat', () => {
   const activeChatId = ref<string>('')
   const enableProfile = ref(localStorage.getItem('enableProfile') === 'true')
   const profileStore = useProfileStore()
-  const configStore = useConfigStore()
 
   // 从后端加载对话列表
   async function loadChats() {
@@ -112,8 +110,6 @@ export const useChatStore = defineStore('chat', () => {
   // ---------- 立即添加到本地（不等待后端） ----------
   async function addMessageToLocal(msg: Omit<Message, 'turn_index' | 'id'>): Promise<Message | undefined> {
     const chat = chats.value.find(c => c.id === activeChatId.value)
-    console.log(msg,'===');
-    
     if (!chat) return
     const newMsg: Message = {
       ...msg,
