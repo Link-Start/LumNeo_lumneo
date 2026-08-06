@@ -14,7 +14,7 @@
         <span class="value">{{ primaryModelText }}</span>
       </n-flex>
 
-      <n-flex v-if="collaborationStore.secondary_model_id" justify="space-between" align="center">
+      <n-flex justify="space-between" align="center">
         <span class="label">副模型</span>
         <span class="value">{{ secondaryModelText }}</span>
       </n-flex>

@@ -338,11 +338,6 @@ const strategyDesc = computed(() => {
 const handleToggle = async (val: boolean) => {
   if (!val) {
     message.info('协作调度已关闭')
-  } else {
-    if (!store.primary_model_id) {
-      message.warning('请配置主模型后启用协作调度')
-      store.enabled = false
-    }
   }
 }
 

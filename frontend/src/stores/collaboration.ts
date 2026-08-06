@@ -25,7 +25,7 @@ export interface CollabConditions {
 
 export interface CollaborationState {
   enabled: boolean
-  primary_model_id: string
+  primary_model_id: string | null
   secondary_model_id: string | null
   strategy: CollabStrategy
   primary_ratio: number
@@ -50,7 +50,7 @@ const DEFAULT_CONDITIONS: CollabConditions = {
 export const useCollaborationStore = defineStore('collaboration', {
   state: (): CollaborationState => ({
     enabled: false,
-    primary_model_id: '',
+    primary_model_id: null,
     secondary_model_id: null,
     strategy: 'auto',
     primary_ratio: 70,
@@ -100,7 +100,7 @@ export const useCollaborationStore = defineStore('collaboration', {
     // 重置为默认值
     reset() {
       this.enabled = false
-      this.primary_model_id = ''
+      this.primary_model_id = null
       this.secondary_model_id = null
       this.strategy = 'auto'
       this.primary_ratio = 70
