@@ -386,6 +386,7 @@ export function useChat() {
       const apiMessages = await cleanMessages(allMessages)
 
       const body = JSON.stringify({
+        mode: 'chat',
         messages: apiMessages,
         enable_tools: chatStore.enableProfile,
         llm_config: {
@@ -507,6 +508,7 @@ export function useChat() {
       const isExecutingPlan = !!prevMsg?.plan_id
 
       const body = JSON.stringify({
+        mode: 'chat',
         messages: await cleanMessages(allMessages),
         enable_tools: chatStore.enableProfile,
         llm_config: {
@@ -596,6 +598,7 @@ export function useChat() {
 
       const isExecutingPlan = !!prevMsg.plan_id
       const body = JSON.stringify({
+        mode: 'chat',
         messages: await cleanMessages(allMessages),
         enable_tools: chatStore.enableProfile,
         llm_config: {

@@ -44,6 +44,7 @@ class AppConfig:
         # 子目录（相对于 data_dir）
         self.uploads_dir = self.data_dir / self.raw_config.get("uploads_dir", "data/uploads")
         self.cache_dir = self.data_dir / self.raw_config.get("cache_dir", "data/cache")
+        self.memory_dir = self.data_dir / self.raw_config.get("memory_dir", "data/memory")
         self.logs_dir = self.data_dir / self.raw_config.get("logs_dir", "logs")
         self.temp_dir = self.data_dir / self.raw_config.get("temp_dir", "temp")
         self.skill_dir = self.data_dir / self.raw_config.get("skills_dir", "skills")
@@ -84,6 +85,7 @@ class AppConfig:
                 self.data_dir = fallback_base
                 self.uploads_dir = fallback_base / "uploads"
                 self.cache_dir = fallback_base / "cache"
+                self.memory_dir = fallback_base / "memory"
                 self.logs_dir = fallback_base / "logs"
                 self.temp_dir = fallback_base / "temp"
                 self.skill_dir = fallback_base / "skills_library"

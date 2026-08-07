@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.routes import register_all_routers
 from backend.database import init_db
 from backend.mcp_client import MCPClientManager
+from backend.memory import MemoryManager, FTSIndexManager
 from config_loader import config
 
 
@@ -79,11 +80,32 @@ async def lifespan(app: FastAPI):
     app.state.mcp_manager = None
     app.state.init_success = False
     app.state.init_error = None
+    app.state.memory_manager = None
+    app.state.fts_manager = None
 
     async def bg_init_services():
-        logger.info("🚀 后台开始异步初始化基础设施 (DB, MCP)...")
+        logger.info("🚀 后台开始异步初始化基础设施 (DB, MCP, Memory)...")
         try:
             await init_db()
+
+            # 创建 MemoryManager（自动创建目录）
+            memory_mgr = MemoryManager()
+            app.state.memory_manager = memory_mgr
+            # 初始化 FTS5
+            from backend.database import get_db
+            db = await get_db()
+            fts_mgr = FTSIndexManager(db)
+            await fts_mgr.init_schema()
+            # 启动一致性校验与重建
+            rebuilt, total = await fts_mgr.startup_consistency_check()
+            if rebuilt > 0:
+                logger.info(f"🔄 FTS5 重建 {rebuilt}/{total} 个索引")
+            
+            app.state.fts_manager = fts_mgr
+            # 启动 access_count 定时刷盘任务
+            flush_task = asyncio.create_task(memory_mgr.start_access_flush_loop())
+            memory_mgr._access_flush_task = flush_task
+            
             mcp_manager = MCPClientManager()
             await mcp_manager.connect_from_config(config.mcp_config_path)
             app.state.mcp_manager = mcp_manager
@@ -109,6 +131,28 @@ async def lifespan(app: FastAPI):
     # ---- 关闭清理 ----
     logger.info("🛑 应用收到关闭信号，正在清理资源...")
     init_task.cancel()
+
+    try:
+        await init_task
+    except asyncio.CancelledError:
+        pass
+
+    # 关闭 FTS 管理器
+    if app.state.fts_manager:
+        try:
+            await asyncio.wait_for(app.state.fts_manager.close(), timeout=2.0)
+            logger.info("FTS 管理器已关闭")
+        except asyncio.TimeoutError:
+            logger.warning("FTS 关闭超时，强制跳过")
+        except Exception as e:
+            logger.warning(f"FTS 关闭异常: {e}")
+
+    # 关闭 MemoryManager（加超时保护）
+    if app.state.memory_manager:
+        try:
+            await asyncio.wait_for(app.state.memory_manager.shutdown(), timeout=2.0)
+        except asyncio.TimeoutError:
+            logger.warning("MemoryManager 关闭超时")
     try:
         await app.state.http_client.aclose()
     except Exception as e:
@@ -118,6 +162,8 @@ async def lifespan(app: FastAPI):
             await app.state.mcp_manager.close_all()
     except Exception as e:
         logger.warning(f"关闭MCP管理器出错: {e}")
+
+    logger.info("✅ 资源清理完毕")
 
 
 # ============ FastAPI App 构建 ============

@@ -3,6 +3,7 @@ import re
 import json
 import traceback
 import os
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -78,6 +79,8 @@ class CollaborationParams(BaseModel):
     fallback_enabled: bool = True
 
 class ChatRequest(BaseModel):
+    mode: str = "chat"           # "life" | "chat"
+    project_tag: Optional[str] = None
     messages: List[Dict[str, Any]]
     enable_tools: bool = False
     llm_config: Optional[ModelConfig] = None
@@ -105,6 +108,124 @@ class ExecutePlanRequest(BaseModel):
 
 async def get_mcp_manager(request: Request):
     return request.app.state.mcp_manager
+
+
+async def _after_chat_memory_task(
+    request,
+    messages: list,
+    fastapi_request: Request,
+    cfg,
+):
+    """
+    对话结束后异步执行：提取记忆、写入 Timeline、更新 State。
+    失败静默处理，不打断用户。
+    """
+    memory_mgr = fastapi_request.app.state.memory_manager
+    if not memory_mgr:
+        return
+    
+    scope = "life" if request.mode == "life" else "work"
+    
+    try:
+        # 1. Life Mode：写入 Timeline
+        if request.mode == "life":
+            from datetime import datetime
+            from backend.memory.utils import sensitivity_precheck
+            
+            user_messages = [m for m in messages if m.get("role") == "user"]
+            timeline_content = "\n\n".join(
+                f"- {m.get('content', '')}" for m in user_messages[-5:]
+            )
+            
+            sensitivity = sensitivity_precheck(timeline_content)
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            await memory_mgr.write_timeline(
+                date_str=today,
+                content=timeline_content,
+                sensitivity=sensitivity,
+            )
+        
+        # 2. 异步提取记忆（调用 LLM）
+        # 创建用于提取的 LLMService 实例
+        from backend.services.llm_service import LLMService
+        from backend.memory import MemoryExtractor
+        
+        extract_service = None
+        if cfg:
+            extract_service = LLMService(
+                model_type="local" if cfg.type == "local" else "online",
+                model_name=cfg.model_name,
+                base_url=cfg.base_url,
+                api_key=cfg.api_key or "",
+                thinking="enabled",
+                reasoning_effort="high",
+            )
+        elif LLMService.instance:
+            extract_service = LLMService.instance
+        
+        if extract_service:
+            extractor = MemoryExtractor(llm_service=extract_service)
+            extracted = await extractor.extract(
+                messages=messages,
+                scope=scope,
+                chat_id=request.chat_id,
+                source_project=request.project_tag,
+            )
+            
+            # 写入 memory
+            for item in extracted:
+                category = item.get("category", "fact")
+                key = item.get("key", "未命名")
+                content = item.get("content", "")
+                
+                # 过滤 frontmatter 字段
+                fm_data = {k: v for k, v in item.items() 
+                          if k not in ("category", "key", "content")}
+                
+                await memory_mgr.create_memory(
+                    scope=scope,
+                    category=category,
+                    key=key,
+                    content=content,
+                    frontmatter_data=fm_data,
+                )
+            
+            # 同步更新 FTS5 索引
+            fts_mgr = fastapi_request.app.state.fts_manager
+            if fts_mgr and extracted:
+                # MVP：下次启动时一致性校验会重建，这里暂不实时同步
+                pass
+        
+        # 3. Life Mode：更新 state.md
+        if request.mode == "life":
+            from backend.memory import StateManager
+            state_mgr = StateManager()
+            
+            # 创建用于 state 评估的 LLMService
+            state_service = None
+            if cfg:
+                state_service = LLMService(
+                    model_type="local" if cfg.type == "local" else "online",
+                    model_name=cfg.model_name,
+                    base_url=cfg.base_url,
+                    api_key=cfg.api_key or "",
+                    thinking="enabled",
+                    reasoning_effort="high",
+                )
+            elif LLMService.instance:
+                state_service = LLMService.instance
+            
+            if state_service:
+                await state_mgr.update_state(
+                    llm_service=state_service,
+                    messages=messages,
+                )
+                
+    except Exception as e:
+        # 静默失败，不打扰用户
+        # logger.warning(f"记忆提取失败: {e}")
+        pass
 
 # ========== 聊天接口 ==========
 
@@ -372,6 +493,50 @@ async def chat(
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction
 
+        # ========== Phase 1: 记忆检索注入 ==========
+        memory_mgr = fastapi_request.app.state.memory_manager
+        fts_mgr = fastapi_request.app.state.fts_manager
+        
+        if memory_mgr:
+            from backend.memory import MemoryRetriever, StateManager
+            
+            retriever = MemoryRetriever(memory_mgr, fts_mgr)
+            
+            # 获取最后一条用户消息作为检索 query
+            last_user_msg = ""
+            for msg in reversed(request.messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        last_user_msg = content
+                    break
+            
+            memory_block = ""
+            state_block = ""
+            
+            if request.mode == "life":
+                # Life Mode：检索 life + work，加载 state
+                memory_block = await retriever.retrieve_for_life(last_user_msg)
+                
+                # 读取 state.md
+                state_mgr = StateManager()
+                state_data = await state_mgr.read_state()
+                state_block = state_mgr.format_state_for_prompt(state_data)
+            else:
+                # Chat Mode：仅检索 work，带 project_tag 过滤
+                memory_block = await retriever.retrieve_for_chat(
+                    last_user_msg,
+                    project_tag=request.project_tag,
+                )
+                print(f"🔍 检索结果: {memory_block}")
+            
+            # 将记忆块追加到 System Prompt
+            if state_block:
+                system_prompt += "\n\n" + state_block
+            if memory_block:
+                system_prompt += "\n\n" + memory_block
+        # ==========================================
+
         # 插入最终的 System Prompt
         messages.insert(0, {"role": "system", "content": system_prompt})
 
@@ -467,6 +632,15 @@ async def chat(
                     error_msg = f"模型 {current_cfg.name if current_cfg else '未知'} 调用失败，且无法回退到主模型。错误：{str(e)[:300]}"
                     yield f"<!--error:{json.dumps({'message': error_msg}, ensure_ascii=False)}-->"
                     return
+            
+            # === 流式结束后异步提取记忆 ===
+            asyncio.create_task(_after_chat_memory_task(
+                request=request,
+                messages=messages,
+                fastapi_request=fastapi_request,
+                cfg=current_cfg,
+            ))
+            # =============================================
 
         # 流式响应
         return StreamingResponse(
