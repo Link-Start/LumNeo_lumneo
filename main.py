@@ -190,8 +190,8 @@ if IS_FROZEN:
     FRONTEND_URL = f"http://127.0.0.1:{SERVER_PORT}/app/"
     DEBUG_MODE = False
 else:
-    SERVER_PORT = 8080
-    FRONTEND_URL = "http://localhost:5173"
+    SERVER_PORT = 8686
+    FRONTEND_URL = "http://localhost:8520"
     DEBUG_MODE = True
 
 def is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:

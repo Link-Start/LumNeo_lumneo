@@ -91,15 +91,15 @@ export default defineConfig(({ mode }) => {
   ].filter(Boolean),
   resolve: {
     alias: {
-        "@": path.resolve(__dirname, "src")
+        "@": path.resolve(import.meta.dirname, "src")
     }
   },
   server: {
     host: '0.0.0.0',
     port: 8520,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8080', changeOrigin: true },
-      '/files/uploads': { target: 'http://127.0.0.1:8080', changeOrigin: true },
+      '/api': { target: 'http://127.0.0.1:8686', changeOrigin: true },
+      '/files/uploads': { target: 'http://127.0.0.1:8686', changeOrigin: true },
       '/files/generate/': { target: 'http://127.0.0.1:80', changeOrigin: true },
     },
   },
