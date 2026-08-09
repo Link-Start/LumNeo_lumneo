@@ -25,7 +25,7 @@
     </div>
 
     <!-- 重新生成提示 -->
-    <div v-if="showRegenerateHint && !isSendMsg" class="compose-input-container">
+    <div v-if="showRegenerateHint && !isSendMsg && modeType === 'chat'" class="compose-input-container">
       <div style="width:100%;text-align:center;position:absolute;top:-30px;">
         <n-button text @click="$emit('regenerateCurrent')">
           <template #icon><n-icon size="22"><m-svg name="wave" /></n-icon></template>
@@ -33,7 +33,7 @@
         </n-button>
       </div>
     </div>
-    <div v-else-if="collaborationStore.enabled" style="font-size:12px;color:grey;">
+    <div v-else-if="collaborationStore.enabled && modeType === 'chat'" style="font-size:12px;color:grey;">
       ⚡模型协作调度策略：
       <n-popover trigger="hover">
         <template #trigger>
@@ -42,12 +42,11 @@
         <!-- 展示策略详情 -->
         <strategy-details />
       </n-popover>
-      
     </div>
 
     <!-- 输入框 -->
     <div class="compose-input-container">
-      <div style="position:absolute;left:-10px;top:32px;">
+      <div v-if="modeType === 'chat'" style="position:absolute;left:-10px;top:32px;">
         <n-flex vertical>
           <n-popover trigger="hover">
             <template #trigger>
@@ -168,6 +167,7 @@ import mSvg from '@/components/MSvg.vue'
 
 const props = defineProps({
   modelValue: { type: String, required: true },
+  modeType: { type: String, default: 'chat'},
   isLoading: { type: Boolean, required: true },
   disabled: { type: Boolean, default: false },
   uploadedFiles: { type: Array<{ filename: string; type: string; url: string }>, default: () => [] },

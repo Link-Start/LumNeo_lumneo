@@ -24,6 +24,7 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS chats (
             id TEXT PRIMARY KEY,
             title TEXT DEFAULT '新对话',
+            type TEXT DEFAULT 'chat',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -169,6 +170,15 @@ async def migrate_db(db):
     cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = await cursor.fetchall()
     table_names = [t[0] for t in tables]
+
+    # chats 表迁移
+    if 'chats' in table_names:
+        cursor = await db.execute("PRAGMA table_info(chats)")
+        columns = await cursor.fetchall()
+        column_names = [col[1] for col in columns]
+        
+        if 'type' not in column_names:
+            await db.execute("ALTER TABLE chats ADD COLUMN type TEXT DEFAULT 'chat'")
     
     # profiles 表迁移
     if 'profiles' in table_names:

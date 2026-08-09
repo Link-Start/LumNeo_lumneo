@@ -1,18 +1,21 @@
+# backend/memory/retriever.py
 """
 Lumneo 长期记忆系统 - MemoryRetriever 检索层
-Phase 1 核心记忆闭环
+Phase 3 完整修复版
 
-职责：
-- 按 scope + category 过滤检索
-- FTS5 MATCH 全文检索
-- 按 effective_importance 排序
-- Token 预算硬截断
-- 构造 System Prompt 记忆块
+修复：
+- #3: 格式化输出使用 \n 而非 \\n
+- #4: 强指代回溯设置 self._last_anaphora
+- #7: Token 预算防负数
+- #8: domain 投票在 project_tag 过滤之后
+- #9: @skill 显式引用更新 used_in_projects
+- #10: 摘要降级保留 content[:50] 而非清空
 """
+import re
 import math
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from backend.memory.config import (
     TOKEN_BUDGET_RETRIEVAL,
@@ -20,6 +23,7 @@ from backend.memory.config import (
     TOKEN_BUDGET_ANAPHORA,
     ANAPHORA_TRIGGER_WORDS,
     TIME_DECAY_CUTOFF,
+    DOMAIN_WHITELIST,
 )
 from backend.memory.models import MemoryEntry, MemoryFrontmatter
 from backend.memory.utils import read_markdown_file_sync
@@ -28,27 +32,16 @@ from backend.memory.manager import MemoryManager
 
 
 def estimate_tokens(text: str) -> int:
-    """
-    粗略估算文本的 Token 数。
-    中文按 1 字 ≈ 1 token，英文按 1 word ≈ 1.3 token。
-    """
+    """粗略估算 Token 数"""
     if not text:
         return 0
-
-    # 简单启发式：中文字符数 + 英文单词数 * 1.3
-    import re
     chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
     english_words = len(re.findall(r'[a-zA-Z]+', text))
-    return chinese_chars + int(english_words * 1.3) + 10  # +10 作为 frontmatter 开销
+    return chinese_chars + int(english_words * 1.3) + 10
 
 
 class MemoryRetriever:
-    """
-    记忆检索器。
-
-    负责从 memory 体系中检索相关记忆，按重要性排序，
-    并在 Token 预算内截断，最终格式化为 System Prompt 可注入的文本块。
-    """
+    """记忆检索器"""
 
     def __init__(
         self,
@@ -57,42 +50,34 @@ class MemoryRetriever:
     ):
         self.memory_mgr = memory_manager
         self.fts = fts_manager
+        self._last_anaphora: List[MemoryEntry] = []  # #4 修复：初始化
+
+    # ==================== 主入口 ====================
 
     async def retrieve_for_life(
         self,
         query: str,
         token_budget: int = TOKEN_BUDGET_RETRIEVAL,
     ) -> str:
-        """
-        Life Mode 检索：读取 life + work（含 skills，过滤 secret）。
-
-        Returns:
-            格式化的记忆文本块，可直接注入 System Prompt
-        """
+        """Life Mode：读取 life + work（含 skills，过滤 secret）"""
         # 1. 检索 life 记忆（过滤 secret）
         life_memories = await self._retrieve_scope(
-            query=query,
-            scope="life",
-            exclude_sensitivity="secret",
-            limit=20,
+            query=query, scope="life",
+            exclude_sensitivity="secret", limit=20,
         )
 
         # 2. 检索 work 记忆（含 skills）
         work_memories = await self._retrieve_scope(
-            query=query,
-            scope="work",
-            limit=20,
+            query=query, scope="work", limit=20,
         )
 
         # 3. 合并、去重、排序
-        all_memories = life_memories + work_memories
-        all_memories = self._deduplicate(all_memories)
+        all_memories = self._deduplicate(life_memories + work_memories)
         all_memories = self._sort_by_effective_importance(all_memories)
 
         # 4. Token 截断
         selected = self._truncate_by_token(all_memories, token_budget)
 
-        # 5. 格式化
         return self._format_memory_block(selected, mode="life")
 
     async def retrieve_for_chat(
@@ -101,53 +86,56 @@ class MemoryRetriever:
         project_tag: Optional[str] = None,
         token_budget: int = TOKEN_BUDGET_RETRIEVAL,
     ) -> str:
-        """
-        Chat Mode 检索：仅读取 work（含 skills），带 project_tag 过滤。
-
-        Args:
-            query: 用户输入作为检索 query
-            project_tag: 当前 Chat 的项目标签（MVP 阶段可传 None）
-            token_budget: Token 预算
-
-        Returns:
-            格式化的记忆文本块
-        """
-        # 1. 检索 work facts/preferences/people
-        work_memories = await self._retrieve_scope(
-            query=query,
-            scope="work",
-            limit=20,
-        )
-
-        # 2. 检索 skills（project_tag 过滤）
-        skills = await self._retrieve_skills(
-            query=query,
-            project_tag=project_tag,
-            limit=10,
-        )
-
-        # 3. 强指代回溯（如果 query 包含触发词）
+        """Chat Mode：仅读取 work，带 project_tag 过滤 + @skill 引用"""
+        # 1. 强指代回溯
         anaphora_memories = await self._retrieve_anaphora(query)
 
-        # 4. 合并、去重、排序
-        all_memories = work_memories + skills + anaphora_memories
-        all_memories = self._deduplicate(all_memories)
-        all_memories = self._sort_by_effective_importance(all_memories)
+        # 2. @skill 显式引用 (#9 修复：传入 project_tag)
+        explicit_skills = await self._retrieve_explicit_skill(query, project_tag)
 
-        # 5. Token 截断（skills 单独预留预算）
-        selected_work = self._truncate_by_token(
-            [m for m in all_memories if m.frontmatter.category != "skill"],
-            token_budget - TOKEN_BUDGET_SKILL,
-        )
-        selected_skills = self._truncate_by_token(
-            [m for m in all_memories if m.frontmatter.category == "skill"],
-            TOKEN_BUDGET_SKILL,
+        # 3. 常规 work 记忆检索
+        work_memories = await self._retrieve_scope(
+            query=query, scope="work", limit=20,
         )
 
-        selected = selected_work + selected_skills
+        # 4. Skill 动态注入（#8 修复：domain 投票在 project_tag 过滤之后）
+        dynamic_skills = await self._retrieve_skills_dynamic(
+            query=query, project_tag=project_tag, limit=10,
+        )
 
-        # 6. 格式化
-        return self._format_memory_block(selected, mode="chat")
+        # 5. 合并、去重
+        all_memories = self._deduplicate(
+            work_memories + dynamic_skills + explicit_skills + anaphora_memories
+        )
+
+        # 6. 与强指代回溯去重（anaphora 已单独获取，这里从常规结果中移除重复的）
+        anaphora_paths = {m.file_path for m in anaphora_memories}
+        filtered = [m for m in all_memories if m.file_path not in anaphora_paths]
+
+        # 7. 按 effective_importance 排序
+        filtered = self._sort_by_effective_importance(filtered)
+
+        # 8. Token 预算分配 (#7 修复：防负数)
+        # - 强指代回溯：独立 400 Token 池
+        # - Skills：独立 800 Token 池
+        # - 其他 work 记忆：剩余预算
+        self._last_anaphora = anaphora_memories  # #4 修复：保存 anaphora 引用
+        selected_anaphora = self._truncate_anaphora(anaphora_memories, TOKEN_BUDGET_ANAPHORA)
+
+        non_skill = [m for m in filtered if m.frontmatter.category != "skill"]
+        skill_items = [m for m in filtered if m.frontmatter.category == "skill"]
+
+        # #7 修复：防负数预算
+        work_budget = max(0, token_budget - TOKEN_BUDGET_SKILL)
+        selected_work = self._truncate_by_token(non_skill, work_budget)
+        selected_skills = self._truncate_by_token(skill_items, TOKEN_BUDGET_SKILL)
+
+        # 合并：work + skills + anaphora
+        final = selected_work + selected_skills + selected_anaphora
+
+        return self._format_memory_block(final, mode="chat")
+
+    # ==================== 检索子方法 ====================
 
     async def _retrieve_scope(
         self,
@@ -156,23 +144,11 @@ class MemoryRetriever:
         exclude_sensitivity: Optional[str] = None,
         limit: int = 20,
     ) -> List[MemoryEntry]:
-        """
-        检索指定 scope 的记忆。
-        匹配策略（从严格到宽松）：
-        1. 关键词匹配 key + content
-        2. 如果关键词没命中，至少匹配 key 字段
-        3. 如果 query 很短或没匹配，返回最近更新的 active 记忆兜底
-        """
-        from backend.memory.config import TIME_DECAY_CUTOFF
-        
-        # 取所有 active 记忆
+        """检索指定 scope 的记忆（宽松匹配 + 兜底）"""
         all_memories = await self.memory_mgr.search_memories(
-            scope=scope,
-            status="active",
-            limit=200,
+            scope=scope, status="active", limit=500,
         )
-        
-        # 过滤敏感度和 decay
+
         candidates = []
         for entry in all_memories:
             if exclude_sensitivity and entry.frontmatter.sensitivity == exclude_sensitivity:
@@ -180,191 +156,172 @@ class MemoryRetriever:
             if entry.effective_importance < TIME_DECAY_CUTOFF:
                 continue
             candidates.append(entry)
-        
+
         if not query or not query.strip():
-            # 无 query，返回最近更新的
             candidates.sort(key=lambda x: x.frontmatter.updated_at or "", reverse=True)
             return candidates[:limit]
-        
+
         query_lower = query.lower().strip()
-        keywords = [k for k in query_lower.split() if len(k) > 1]  # 过滤单字
-        
-        # 第一层：关键词匹配 key + content
+        keywords = [w for w in re.findall(r'[\u4e00-\u9fff]{2,}|[a-zA-Z]{2,}', query_lower)]
+
         matched = []
         for entry in candidates:
             text = (entry.frontmatter.key + " " + entry.content).lower()
             if any(kw in text for kw in keywords):
                 matched.append(entry)
-        
-        # 第二层：如果上面没命中，尝试只匹配 key（更宽松）
-        if not matched:
-            for entry in candidates:
-                key_lower = entry.frontmatter.key.lower()
-                # 简单同义词映射
-                synonym_map = {
-                    "后端": ["backend", "后端", "server"],
-                    "前端": ["frontend", "前端", "client"],
-                    "数据库": ["database", "db", "数据库", "sql"],
-                    "框架": ["framework", "框架", "fastapi", "react", "vue"],
-                }
-                for kw in keywords:
-                    # 直接匹配 key
-                    if kw in key_lower:
-                        matched.append(entry)
-                        break
-                    # 同义词匹配
-                    for syn_key, syn_list in synonym_map.items():
-                        if kw == syn_key or kw in syn_key:
-                            for syn in syn_list:
-                                if syn in key_lower:
-                                    matched.append(entry)
-                                    break
-                            break
-        
-        # 第三层：还是没命中，返回最近更新的几条兜底
+
         if not matched:
             candidates.sort(key=lambda x: x.frontmatter.updated_at or "", reverse=True)
             return candidates[:min(limit, 5)]
-        
-        # 按 effective_importance 排序
+
         matched = self._sort_by_effective_importance(matched)
         return matched[:limit]
 
-    # async def _retrieve_scope(
-    #     self,
-    #     query: str,
-    #     scope: str,
-    #     exclude_sensitivity: Optional[str] = None,
-    #     limit: int = 20,
-    # ) -> List[MemoryEntry]:
-    #     """
-    #     检索指定 scope 的记忆。
-    #     优先使用 FTS5，FTS5 不可用时回退到文件系统遍历。
-    #     """
-    #     results = []
-
-    #     # 尝试 FTS5 检索
-    #     if self.fts:
-    #         try:
-    #             fts_results = await self.fts.search(
-    #                 query=query,
-    #                 scope=scope,
-    #                 limit=limit * 2,  # 多取一些用于过滤
-    #             )
-
-    #             for r in fts_results:
-    #                 entry = await self.memory_mgr.read_memory(Path(r["path"]))
-    #                 if entry:
-    #                     # 过滤敏感度
-    #                     if exclude_sensitivity and entry.frontmatter.sensitivity == exclude_sensitivity:
-    #                         continue
-    #                     # 过滤 superseded
-    #                     if entry.frontmatter.status == "superseded":
-    #                         continue
-    #                     # 过滤 Time-Decay 过低的（Phase 4 完整实现，这里简单过滤）
-    #                     if entry.effective_importance < TIME_DECAY_CUTOFF:
-    #                         continue
-    #                     results.append(entry)
-    #         except Exception:
-    #             pass  # FTS5 失败则回退
-
-    #     # FTS5 无结果或失败，回退文件系统检索
-    #     if not results:
-    #         results = await self.memory_mgr.search_memories(
-    #             scope=scope,
-    #             status="active",
-    #             limit=limit,
-    #         )
-
-    #         # 简单关键词过滤（非 FTS5 的兜底方案）
-    #         if query:
-    #             keywords = query.lower().split()
-    #             filtered = []
-    #             for entry in results:
-    #                 text = (entry.frontmatter.key + " " + entry.content).lower()
-    #                 if any(kw in text for kw in keywords):
-    #                     filtered.append(entry)
-    #             results = filtered
-
-    #     return results[:limit]
-
-    async def _retrieve_skills(
+    async def _retrieve_skills_dynamic(
         self,
         query: str,
         project_tag: Optional[str] = None,
         limit: int = 10,
     ) -> List[MemoryEntry]:
         """
-        检索 Skill 记忆。
-        MVP 简化：关键词匹配 + project_tag 过滤。
-        Phase 3 会替换为 domain 投票聚类 + 熟练度门槛。
+        Skill 动态注入（#8 修复：先 project_tag 过滤，再 domain 投票）：
+        1. 召回所有 active skills
+        2. 关键词粗筛
+        3. project_tag 过滤 + 熟练度门槛
+        4. domain 投票聚类（取 Top 1-2 domain）
         """
-        skills = await self.memory_mgr.search_memories(
-            scope="work",
-            category="skill",
-            status="active",
-            limit=limit * 2,
+        # 1. 召回所有 active skills
+        all_skills = await self.memory_mgr.search_memories(
+            scope="work", category="skill", status="active", limit=100,
         )
 
-        # project_tag 过滤
-        if project_tag:
-            filtered = []
-            for s in skills:
-                source_project = s.frontmatter.source_project or "global"
-                used_projects = s.frontmatter.used_in_projects or []
-
-                # 匹配 source_project 或 used_in_projects
-                if source_project == project_tag or project_tag in used_projects:
-                    filtered.append(s)
-            skills = filtered
-        else:
-            # 无 project_tag 时只加载 global
-            skills = [s for s in skills if (s.frontmatter.source_project or "global") == "global"]
-
-        # 关键词过滤
+        # 2. 关键词粗筛
         if query:
-            keywords = query.lower().split()
+            query_lower = query.lower()
+            keywords = re.findall(r'[\u4e00-\u9fff]{2,}|[a-zA-Z]{2,}', query_lower)
             filtered = []
-            for s in skills:
+            for s in all_skills:
                 text = (s.frontmatter.key + " " + s.content + " " + (s.frontmatter.domain or "")).lower()
                 if any(kw in text for kw in keywords):
                     filtered.append(s)
-            skills = filtered
+            all_skills = filtered
 
-        return skills[:limit]
+        # #8 修复：先 project_tag 过滤 + 熟练度门槛
+        project_filtered = []
+        for s in all_skills:
+            fm = s.frontmatter
+
+            # project_tag 过滤
+            source_project = fm.source_project or "global"
+            used_projects = fm.used_in_projects or []
+
+            if project_tag:
+                if source_project != project_tag and project_tag not in used_projects:
+                    continue
+            else:
+                if source_project != "global":
+                    continue
+
+            # 熟练度门槛：verified=true 或 usage_count>=2 才自动注入
+            # proficiency=1 的新技能不参与自动注入（除非用户显式 @ 引用）
+            if fm.verified or (fm.usage_count or 0) >= 2:
+                project_filtered.append(s)
+
+        # #8 修复：再 domain 投票聚类（基于过滤后的结果）
+        domain_votes: Dict[str, int] = {}
+        for s in project_filtered:
+            d = s.frontmatter.domain or "general"
+            domain_votes[d] = domain_votes.get(d, 0) + 1
+
+        top_domains = sorted(domain_votes.keys(), key=lambda d: domain_votes[d], reverse=True)[:2]
+
+        # domain 过滤（只保留 Top 1-2 domain 的 skills）
+        qualified = []
+        for s in project_filtered:
+            fm = s.frontmatter
+            if fm.domain not in top_domains and fm.domain != "general":
+                continue
+            qualified.append(s)
+
+        # 按 effective_importance 排序，避免随机取 limit
+        qualified = self._sort_by_effective_importance(qualified)
+        return qualified[:limit]
+
+    async def _retrieve_explicit_skill(
+        self,
+        query: str,
+        project_tag: Optional[str] = None,  # #9 修复：接收 project_tag
+    ) -> List[MemoryEntry]:
+        """
+        解析 @skill_技能名 显式引用。
+        完全跳过 project_tag 过滤，强制加载最新版本。
+        #9 修复：更新 used_in_projects 和 usage_count
+        """
+        import re
+        pattern = r'@skill_([\w\u4e00-\u9fff]+)'
+        matches = re.findall(pattern, query)
+
+        if not matches:
+            return []
+
+        results = []
+        for skill_key in matches:
+            # 按 key 精确搜索
+            skills = await self.memory_mgr.search_memories(
+                scope="work", category="skill", key=skill_key, limit=1,
+            )
+            if skills:
+                skill = skills[0]
+                fm = skill.frontmatter
+
+                # #9 修复：更新 usage_count
+                new_usage = (fm.usage_count or 0) + 1
+
+                # #9 修复：追加 used_in_projects
+                used_projects = list(fm.used_in_projects or [])
+                current_project = project_tag or "global"
+                if current_project not in used_projects:
+                    used_projects.append(current_project)
+
+                await self.memory_mgr.update_memory(
+                    Path(skill.file_path),
+                    frontmatter_updates={
+                        "usage_count": new_usage,
+                        "used_in_projects": used_projects,
+                    },
+                )
+                # 更新内存对象
+                fm.usage_count = new_usage
+                fm.used_in_projects = used_projects
+                results.append(skill)
+
+        return results
 
     async def _retrieve_anaphora(self, query: str) -> List[MemoryEntry]:
         """
-        强指代回溯：检测"上次""之前"等词，检索最近 24h 更新的记忆。
-        Phase 3 会完善为独立 400 Token 池 + 三级降级。
+        强指代回溯：
+        - 命中触发词白名单
+        - 以 updated_at 为准，最近 24h Top 3
+        - 独立 Token 池，三级降级
         """
-        # 检测触发词
         has_anaphora = any(word in query for word in ANAPHORA_TRIGGER_WORDS)
         if not has_anaphora:
             return []
 
-        # 检索最近 24h 更新的记忆
-        from datetime import timedelta
         cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
 
         all_memories = await self.memory_mgr.search_memories(
-            scope="work",
-            status="active",
-            limit=50,
+            scope="work", status="active", limit=50,
         )
 
-        # 按 updated_at 过滤最近 24h
-        recent = []
-        for m in all_memories:
-            if m.frontmatter.updated_at and m.frontmatter.updated_at > cutoff:
-                recent.append(m)
-
-        # 按 updated_at 倒序取 Top 3
+        recent = [m for m in all_memories if m.frontmatter.updated_at and m.frontmatter.updated_at > cutoff]
         recent.sort(key=lambda x: x.frontmatter.updated_at or "", reverse=True)
+
         return recent[:3]
 
+    # ==================== 工具方法 ====================
+
     def _deduplicate(self, memories: List[MemoryEntry]) -> List[MemoryEntry]:
-        """按 file_path 去重"""
         seen = set()
         result = []
         for m in memories:
@@ -374,97 +331,114 @@ class MemoryRetriever:
         return result
 
     def _sort_by_effective_importance(self, memories: List[MemoryEntry]) -> List[MemoryEntry]:
-        """按 effective_importance 降序排序"""
         return sorted(memories, key=lambda x: x.effective_importance, reverse=True)
 
-    def _truncate_by_token(
-        self,
-        memories: List[MemoryEntry],
-        budget: int,
-    ) -> List[MemoryEntry]:
-        """
-        按 Token 预算硬截断。
-        优先保留排在前面的记忆，超长记忆只保留 frontmatter 摘要。
-        """
+    def _truncate_by_token(self, memories: List[MemoryEntry], budget: int) -> List[MemoryEntry]:
         selected = []
         used = 0
-
         for entry in memories:
-            # 估算当前记忆的 Token 消耗
             text = self._format_single_memory(entry, full_content=True)
             tokens = estimate_tokens(text)
-
             if used + tokens <= budget:
                 selected.append(entry)
                 used += tokens
             else:
-                # 尝试降级为仅 frontmatter
+                # #10 修复：降级为保留 content[:50] 的摘要，而非清空
                 summary_text = self._format_single_memory(entry, full_content=False)
                 summary_tokens = estimate_tokens(summary_text)
-
                 if used + summary_tokens <= budget:
-                    # 创建一个"降级版"entry（不修改原文件，仅用于注入）
-                    truncated_entry = MemoryEntry(
+                    # 保留前 50 字摘要
+                    truncated_content = entry.content[:50] if entry.content else ""
+                    truncated = MemoryEntry(
                         frontmatter=entry.frontmatter,
-                        content="",  # 不注入正文
+                        content=truncated_content,
                         file_path=entry.file_path,
                     )
-                    selected.append(truncated_entry)
+                    selected.append(truncated)
                     used += summary_tokens
-                # 否则跳过这条记忆
+        return selected
 
+    def _truncate_anaphora(self, memories: List[MemoryEntry], budget: int) -> List[MemoryEntry]:
+        """强指代回溯独立 Token 池 + 三级降级"""
+        selected = []
+        used = 0
+        for entry in memories:
+            # 第一级：完整正文
+            text = self._format_single_memory(entry, full_content=True)
+            tokens = estimate_tokens(text)
+            if used + tokens <= budget:
+                selected.append(entry)
+                used += tokens
+                continue
+
+            # 第二级：仅 Frontmatter + 前 50 字摘要
+            fm_text = f"[{entry.frontmatter.category}] {entry.frontmatter.key}: {entry.content[:50]}"
+            fm_tokens = estimate_tokens(fm_text)
+            if used + fm_tokens <= budget:
+                truncated = MemoryEntry(
+                    frontmatter=entry.frontmatter,
+                    content=entry.content[:50],
+                    file_path=entry.file_path,
+                )
+                selected.append(truncated)
+                used += fm_tokens
+                continue
+
+            # 第三级：仅 key + category（约 60 Token）
+            mini_text = f"[{entry.frontmatter.category}] {entry.frontmatter.key}"
+            mini_tokens = estimate_tokens(mini_text)
+            if used + mini_tokens <= budget:
+                mini = MemoryEntry(
+                    frontmatter=entry.frontmatter,
+                    content="",
+                    file_path=entry.file_path,
+                )
+                selected.append(mini)
+                used += mini_tokens
         return selected
 
     def _format_single_memory(self, entry: MemoryEntry, full_content: bool = True) -> str:
-        """格式化单条记忆为文本"""
         fm = entry.frontmatter
         scope_label = "生活" if entry.scope == "life" else "工作"
-
         if fm.category == "skill":
             prefix = f"[skill-{fm.domain or 'general'}]"
         else:
             prefix = f"[{scope_label}]"
-
         if full_content and entry.content:
             return f"{prefix} {fm.key}: {entry.content}"
         else:
-            return f"{prefix} {fm.key}"
+            # #10 修复：降级时保留前 50 字
+            snippet = entry.content[:50] if entry.content else ""
+            return f"{prefix} {fm.key}: {snippet}"
 
-    def _format_memory_block(
-        self,
-        memories: List[MemoryEntry],
-        mode: str = "life",
-    ) -> str:
-        """
-        将记忆列表格式化为 System Prompt 可注入的文本块。
-
-        Args:
-            memories: 记忆条目列表
-            mode: "life" 或 "chat"
-        """
+    def _format_memory_block(self, memories: List[MemoryEntry], mode: str = "life") -> str:
         if not memories:
             return ""
 
         lines = []
-
         if mode == "life":
             lines.append("## 相关记忆")
         else:
             lines.append("## 工作记忆")
 
-        # 分类输出
         facts = [m for m in memories if m.frontmatter.category not in ("skill", "pending")]
         skills = [m for m in memories if m.frontmatter.category == "skill"]
+        anaphora = [m for m in memories if m in getattr(self, '_last_anaphora', [])]
+
+        if anaphora:
+            lines.append("\n### 近期相关")
+            for entry in anaphora:
+                fm = entry.frontmatter
+                scope_label = "生活" if entry.scope == "life" else "工作"
+                content = entry.content[:150] if entry.content else ""
+                lines.append(f"· [{scope_label}] {fm.key}: {content}")
 
         if facts:
             for entry in facts:
                 fm = entry.frontmatter
                 scope_label = "生活" if entry.scope == "life" else "工作"
-
-                if entry.content:
-                    lines.append(f"· [{scope_label}] {fm.key}: {entry.content[:150]}")
-                else:
-                    lines.append(f"· [{scope_label}] {fm.key}")
+                content = entry.content[:150] if entry.content else ""
+                lines.append(f"· [{scope_label}] {fm.key}: {content}")
 
         if skills:
             lines.append("\n## 当前相关技能")
@@ -472,9 +446,10 @@ class MemoryRetriever:
                 fm = entry.frontmatter
                 prof = fm.proficiency or 1
                 verified = "已验证" if fm.verified else "待验证"
+                content = entry.content[:100] if entry.content else ""
                 lines.append(
-                    f"· [skill-{fm.domain or 'general'}] {fm.key}: "
-                    f"{entry.content[:100]}... (熟练度:{prof}, {verified})"
+                    f"· [skill-{fm.domain or 'general'}] {fm.key}: {content} "
+                    f"(熟练度:{prof}, {verified})"
                 )
 
         return "\n".join(lines)

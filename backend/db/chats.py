@@ -14,29 +14,31 @@ class ChatRecord:
     def __init__(self, row: aiosqlite.Row):
         self.id = row['id']
         self.title = row['title']
+        self.type = row['type']
         self.created_at = row['created_at']
     
     def to_dict(self):
         return {
             'id': self.id,
             'title': self.title,
+            'type': self.type,
             'created_at': self.created_at,
         }
 
 
-async def create_chat(title: str = "新对话") -> ChatRecord:
+async def create_chat(title: str = "新对话", chat_type: str = "chat") -> ChatRecord:
     """创建新对话"""
     db = await get_db()
     try:
         chat_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
         await db.execute(
-            "INSERT INTO chats (id, title, created_at) VALUES (?, ?, ?)",
-            (chat_id, title, now)
+            "INSERT INTO chats (id, title, type, created_at) VALUES (?, ?, ?, ?)", 
+            (chat_id, title, chat_type, now)
         )
         await db.commit()
         # 直接构造对象返回，避免再次查询
-        return ChatRecord({'id': chat_id, 'title': title, 'created_at': now})
+        return ChatRecord({'id': chat_id, 'title': title, 'type': chat_type, 'created_at': now})
     finally:
         await db.close()
 
@@ -56,7 +58,7 @@ async def update_chat_title(chat_id: str, title: str):
 async def list_chats() -> list[ChatRecord]:
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT id, title, created_at FROM chats ORDER BY created_at DESC")
+        cursor = await db.execute("SELECT id, title, type, created_at FROM chats ORDER BY created_at DESC")
         rows = await cursor.fetchall()
         return [ChatRecord(row) for row in rows]
     finally:
@@ -90,7 +92,5 @@ async def delete_chat(chat_id: str):
                 shutil.rmtree(abs_tool_dir)
             except Exception as e:
                 logger.error(f"删除对话工具关联文件夹失败 {abs_tool_dir}: {e}")
-        else:
-            logger.warning(f"工具文件夹不存在或路径异常，跳过删除: {abs_tool_dir}")
     finally:
         await db.close()

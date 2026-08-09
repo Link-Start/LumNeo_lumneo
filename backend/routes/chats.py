@@ -21,7 +21,11 @@ router = APIRouter(prefix="/api/chats", tags=["chats"])
 class ChatResponse(BaseModel):
     id: str
     title: str
+    type: str = "chat"
     created_at: Optional[str] = None
+
+class CreateChatRequest(BaseModel):
+    type: Optional[str] = "chat"
 
 class MessageIdResponse(BaseModel):
     id: int
@@ -64,8 +68,8 @@ class UpdateMessageRequest(BaseModel):
 
 # 创建新对话
 @router.post("/", response_model=ChatResponse)
-async def create_chat_route():
-    record = await create_chat()
+async def create_chat_route(req: CreateChatRequest = CreateChatRequest()):
+    record = await create_chat(chat_type=req.type)
     return record.to_dict()
 
 # 更新对话标题

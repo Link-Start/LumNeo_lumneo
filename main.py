@@ -7,6 +7,7 @@ import time
 import argparse
 import mimetypes
 import asyncio
+import datetime  # Phase 4 修复：移到顶部，供 lifespan 使用
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -20,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.routes import register_all_routers
 from backend.database import init_db
 from backend.mcp_client import MCPClientManager
-from backend.memory import MemoryManager, FTSIndexManager
+from backend.memory import MemoryManager, FTSIndexManager, Consolidator
 from config_loader import config
 
 
@@ -82,6 +83,7 @@ async def lifespan(app: FastAPI):
     app.state.init_error = None
     app.state.memory_manager = None
     app.state.fts_manager = None
+    app.state.consolidator = None
 
     async def bg_init_services():
         logger.info("🚀 后台开始异步初始化基础设施 (DB, MCP, Memory)...")
@@ -89,6 +91,7 @@ async def lifespan(app: FastAPI):
             await init_db()
 
             # 创建 MemoryManager（自动创建目录）
+            # #1 修复：先创建 MemoryManager，待 FTS 初始化后再注入
             memory_mgr = MemoryManager()
             app.state.memory_manager = memory_mgr
             # 初始化 FTS5
@@ -102,10 +105,83 @@ async def lifespan(app: FastAPI):
                 logger.info(f"🔄 FTS5 重建 {rebuilt}/{total} 个索引")
             
             app.state.fts_manager = fts_mgr
+
+            # #1 修复：将 fts_manager 注入 MemoryManager
+            memory_mgr.fts_manager = fts_mgr
+
             # 启动 access_count 定时刷盘任务
             flush_task = asyncio.create_task(memory_mgr.start_access_flush_loop())
             memory_mgr._access_flush_task = flush_task
+
+            # Consolidator 定时归档
+            consolidator = Consolidator(memory_mgr, None)
+            app.state.consolidator = consolidator
+
+            # #5 修复：启动 Consolidator 定时任务（每 2 小时检查一次）
+            async def _consolidator_loop():
+                while True:
+                    await asyncio.sleep(7200)  # 2 小时
+                    try:
+                        processed, extracted = await consolidator.run()
+                        if processed > 0:
+                            logger.info(f"🗄️ Consolidator: 处理 {processed} 条 timeline, 提取 {extracted} 条记忆")
+                    except Exception as e:
+                        logger.warning(f"Consolidator 定时任务出错: {e}")
             
+            app.state._consolidator_task = asyncio.create_task(_consolidator_loop())
+
+            # #5 修复：启动月度摘要定时任务（每月 1 号 03:00 执行）
+            async def _monthly_summary_loop():
+                while True:
+                    now = datetime.datetime.now()
+                    # 计算到下个月 1 号 03:00 的等待时间
+                    if now.day == 1 and now.hour < 3:
+                        # 本月 1 号，且还没到 3 点
+                        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
+                    else:
+                        # 计算下个月 1 号
+                        if now.month == 12:
+                            next_run = now.replace(year=now.year + 1, month=1, day=1, hour=3, minute=0, second=0, microsecond=0)
+                        else:
+                            next_run = now.replace(month=now.month + 1, day=1, hour=3, minute=0, second=0, microsecond=0)
+                    
+                    wait_seconds = (next_run - now).total_seconds()
+                    logger.info(f"📅 下次月度摘要生成: {next_run.isoformat()} (等待 {wait_seconds/3600:.1f} 小时)")
+                    await asyncio.sleep(wait_seconds)
+
+                    try:
+                        # 生成上个月的摘要
+                        target_month = now.month - 1 if now.month > 1 else 12
+                        target_year = now.year if now.month > 1 else now.year - 1
+                        summary_path = await consolidator.generate_monthly_summary(target_year, target_month)
+                        if summary_path:
+                            logger.info(f"📅 月度摘要已生成: {summary_path}")
+                    except Exception as e:
+                        logger.warning(f"月度摘要生成出错: {e}")
+            
+            app.state._monthly_task = asyncio.create_task(_monthly_summary_loop())
+
+            # Phase 4 新增：FTS5 每日定时全量重建（每日凌晨 4:00）
+            async def _fts_rebuild_loop():
+                while True:
+                    now = datetime.datetime.now()
+                    next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
+                    if next_run <= now:
+                        next_run += datetime.timedelta(days=1)
+                    
+                    wait_seconds = (next_run - now).total_seconds()
+                    logger.info(f"🔄 下次 FTS5 全量重建: {next_run.isoformat()} (等待 {wait_seconds/3600:.1f} 小时)")
+                    await asyncio.sleep(wait_seconds)
+                    
+                    try:
+                        if app.state.fts_manager:
+                            count = await app.state.fts_manager.rebuild_index()
+                            logger.info(f"🔄 FTS5 全量重建完成，共重建 {count} 个索引")
+                    except Exception as e:
+                        logger.warning(f"FTS5 定时重建出错: {e}")
+            
+            app.state._fts_rebuild_task = asyncio.create_task(_fts_rebuild_loop())
+
             mcp_manager = MCPClientManager()
             await mcp_manager.connect_from_config(config.mcp_config_path)
             app.state.mcp_manager = mcp_manager
@@ -147,7 +223,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"FTS 关闭异常: {e}")
 
-    # 关闭 MemoryManager（加超时保护）
+    # 取消 Consolidator 定时任务
+    if hasattr(app.state, '_consolidator_task'):
+        app.state._consolidator_task.cancel()
+        try:
+            await app.state._consolidator_task
+        except asyncio.CancelledError:
+            pass
+
+    # 取消月度摘要定时任务
+    if hasattr(app.state, '_monthly_task'):
+        app.state._monthly_task.cancel()
+        try:
+            await app.state._monthly_task
+        except asyncio.CancelledError:
+            pass
+
+    # Phase 4 新增：取消 FTS5 定时重建任务
+    if hasattr(app.state, '_fts_rebuild_task'):
+        app.state._fts_rebuild_task.cancel()
+        try:
+            await app.state._fts_rebuild_task
+        except asyncio.CancelledError:
+            pass
+
+    # 关闭 MemoryManager
     if app.state.memory_manager:
         try:
             await asyncio.wait_for(app.state.memory_manager.shutdown(), timeout=2.0)

@@ -1,3 +1,4 @@
+# backend/memory/state_manager.py
 """
 Lumneo 长期记忆系统 - StateManager 状态层
 Phase 1 核心记忆闭环

@@ -51,7 +51,7 @@
                   </template>
                   <!-- 助手消息 Markdown -->
                   <template v-else-if="msg.role === 'assistant' && !msg.tool_calls">
-                    <div v-if="!isMobile" style="position:absolute;left:-56px;top:4px;">
+                    <div v-if="!isMobile && modeType === 'chat'" style="position:absolute;left:-56px;top:4px;">
                       <div v-if="msg.model?.type==='online'" style="position:absolute;left:-6px;top:-7px;"><m-svg name="hat" :size="20"/></div>
                       <n-popover trigger="hover">
                         <template #trigger>
@@ -91,7 +91,7 @@
                   </template>
 
                   <!-- 操作按钮 -->
-                  <div v-if="!isLoading" :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')">
+                  <div v-if="!isLoading && modeType === 'chat'" :class="'message-actions ' + (msg.role === 'assistant' ? 'assistant-actions' : 'user-actions')">
                     <n-button text class="icon-btn" size="small" title="复制" @click="$emit('copy', msg)">
                       <template #icon><n-icon><m-svg :name="copySvgName" /></n-icon></template>
                     </n-button>
@@ -222,6 +222,7 @@ const customHtmlTags = ['thinking-group', 'reasoning', 'toolcalls', 'tokenusage'
 
 const props = defineProps({
   chatId: { type: String, default: 'nochat' },
+  modeType: { type: String, default: 'chat'},
   messages: { type: Array as PropType<Message[]>, required: true },
   isMobile: { type: Boolean, required: false },
   isLoading: { type: Boolean, required: true },

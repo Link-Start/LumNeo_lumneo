@@ -1,17 +1,18 @@
+# backend/memory/__init__.py
 """
 Lumneo 长期记忆系统
-Phase 1 核心记忆闭环
+Phase 2 + Phase 3 完整版
 
 使用方式：
     from backend.memory import MemoryManager, FTSIndexManager, MemoryRetriever
-    from backend.memory import MemoryExtractor, StateManager
-    from backend.memory.config import DEFAULT_MEMORY_DIR
+    from backend.memory import MemoryExtractor, StateManager, Consolidator
 """
 from backend.memory.manager import MemoryManager
 from backend.memory.fts_index import FTSIndexManager
 from backend.memory.retriever import MemoryRetriever
 from backend.memory.extractor import MemoryExtractor, MemoryExtractorTrigger
 from backend.memory.state_manager import StateManager
+from backend.memory.consolidator import Consolidator
 from backend.memory.models import (
     MemoryEntry,
     MemoryFrontmatter,
@@ -39,6 +40,7 @@ __all__ = [
     "MemoryExtractor",
     "MemoryExtractorTrigger",
     "StateManager",
+    "Consolidator",
     "MemoryEntry",
     "MemoryFrontmatter",
     "MemoryScope",

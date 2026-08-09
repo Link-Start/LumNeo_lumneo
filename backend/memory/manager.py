@@ -1,14 +1,10 @@
 # backend/memory/manager.py
 """
 Lumneo 长期记忆系统 - MemoryManager
-Phase 0 基础设施
+Phase 4 完整版
 
-职责：
-- MD 文件的读写、Frontmatter 解析/序列化
-- 并发锁（filelock + asyncio.Lock）
-- 按 scope/category 组织文件路径
-- 冲突检测与版本链管理
-- access_count 内存批量计数（Phase 0 预留接口）
+修复：
+- 4.6: write_timeline 集成 sensitivity 自动预检
 """
 import os
 import asyncio
@@ -35,6 +31,7 @@ from backend.memory.utils import (
     generate_pending_path,
     sanitize_filename,
     read_markdown_file_sync,
+    sensitivity_precheck,  # Phase 4: 自动预检
 )
 
 
@@ -56,8 +53,13 @@ class MemoryManager:
     - access_count 内存批量计数（减少文件写竞争）
     """
 
-    def __init__(self, memory_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        memory_dir: Optional[Path] = None,
+        fts_manager=None,
+    ):
         self.memory_dir = memory_dir or DEFAULT_MEMORY_DIR
+        self.fts_manager = fts_manager
         # 确保目录存在
         self._ensure_directories()
 
@@ -66,7 +68,6 @@ class MemoryManager:
         self._locks_lock = asyncio.Lock()  # 保护 _async_locks 字典本身
 
         # access_count 批量计数器
-        # path -> (increment_count, last_access_time)
         self._pending_access_updates: Dict[str, Tuple[int, str]] = {}
         self._access_flush_task: Optional[asyncio.Task] = None
         self._shutdown = False
@@ -105,6 +106,16 @@ class MemoryManager:
         file_lock = self._get_file_lock(file_path)
         return async_lock, file_lock
 
+    # ==================== FTS5 同步辅助 ====================
+
+    async def _sync_to_fts(self, file_path: Path):
+        """写入后同步 FTS5 索引"""
+        if self.fts_manager is not None:
+            try:
+                await self.fts_manager.sync_file(file_path)
+            except Exception:
+                pass
+
     # ==================== 基础 CRUD ====================
 
     async def create_memory(
@@ -118,17 +129,6 @@ class MemoryManager:
     ) -> MemoryEntry:
         """
         创建新的记忆文件。
-
-        Args:
-            scope: "life" 或 "work"
-            category: fact | preference | person | decision | skill | pending
-            key: 记忆的 key
-            content: Markdown 正文
-            frontmatter_data: 额外的 frontmatter 字段
-            file_path: 可选的自定义路径（覆盖自动生成）
-
-        Returns:
-            MemoryEntry
         """
         if file_path is None:
             file_path = generate_memory_path(scope, category, key, self.memory_dir)
@@ -157,6 +157,8 @@ class MemoryManager:
                 with open(file_path, "w", encoding=FILE_ENCODING) as f:
                     f.write(raw_text)
 
+        await self._sync_to_fts(file_path)
+
         return MemoryEntry(
             frontmatter=frontmatter,
             content=content,
@@ -166,12 +168,6 @@ class MemoryManager:
     async def read_memory(self, file_path: Path) -> Optional[MemoryEntry]:
         """
         读取记忆文件，并自动更新 access_count（内存批量计数）。
-
-        Args:
-            file_path: 文件路径
-
-        Returns:
-            MemoryEntry 或 None（文件不存在）
         """
         if not file_path.exists():
             return None
@@ -180,10 +176,8 @@ class MemoryManager:
 
         frontmatter, content = read_markdown_file_sync(file_path)
         if frontmatter is None:
-            # 无 frontmatter，构造一个基础的
             frontmatter = MemoryFrontmatter()
 
-        # 更新 access_count（内存批量）
         await self._bump_access_count(path_str)
 
         return MemoryEntry(
@@ -200,14 +194,6 @@ class MemoryManager:
     ) -> Optional[MemoryEntry]:
         """
         更新记忆文件。支持只更新正文、只更新 frontmatter、或两者都更新。
-
-        Args:
-            file_path: 文件路径
-            content: 新正文（None 表示不更新）
-            frontmatter_updates: 要更新的 frontmatter 字段（None 表示不更新）
-
-        Returns:
-            更新后的 MemoryEntry，或 None（文件不存在）
         """
         if not file_path.exists():
             return None
@@ -217,7 +203,6 @@ class MemoryManager:
 
         async with async_lock:
             with file_lock:
-                # 读取现有内容
                 with open(file_path, "r", encoding=FILE_ENCODING) as f:
                     raw_text = f.read()
 
@@ -225,7 +210,6 @@ class MemoryManager:
                 if frontmatter is None:
                     frontmatter = MemoryFrontmatter()
 
-                # 更新
                 new_content = content if content is not None else old_content
                 if frontmatter_updates:
                     for k, v in frontmatter_updates.items():
@@ -234,10 +218,11 @@ class MemoryManager:
 
                 frontmatter.updated_at = datetime.now().isoformat()
 
-                # 写回
                 new_raw = serialize_frontmatter(frontmatter, new_content)
                 with open(file_path, "w", encoding=FILE_ENCODING) as f:
                     f.write(new_raw)
+
+        await self._sync_to_fts(file_path)
 
         return MemoryEntry(
             frontmatter=frontmatter,
@@ -248,13 +233,6 @@ class MemoryManager:
     async def delete_memory(self, file_path: Path, hard: bool = False) -> bool:
         """
         删除记忆文件。
-
-        Args:
-            file_path: 文件路径
-            hard: True 则物理删除，False 则标记为 archived（默认 False）
-
-        Returns:
-            是否成功
         """
         if not file_path.exists():
             return False
@@ -266,9 +244,13 @@ class MemoryManager:
             async with async_lock:
                 with file_lock:
                     os.remove(file_path)
+            if self.fts_manager is not None:
+                try:
+                    await self.fts_manager.remove_file(file_path)
+                except Exception:
+                    pass
             return True
         else:
-            # 软删除：标记 archived
             entry = await self.update_memory(
                 file_path,
                 frontmatter_updates={"status": "archived"}
@@ -285,16 +267,7 @@ class MemoryManager:
     ) -> ConflictResult:
         """
         检查同 key 是否已有活跃记忆。
-
-        Args:
-            key: 记忆的 key
-            scope: "life" 或 "work"
-            category: 可选的类别过滤
-
-        Returns:
-            ConflictResult
         """
-        # 搜索同 key 的 active 记忆
         candidates = await self.search_memories(
             scope=scope,
             category=category,
@@ -322,21 +295,11 @@ class MemoryManager:
     ) -> Tuple[MemoryEntry, Optional[MemoryEntry]]:
         """
         创建新记忆并处理版本链（若存在冲突）。
-
-        流程：
-        1. 检查同 key 是否有 active 记忆
-        2. 若有，将旧记忆标记 superseded，新记忆标记 supersedes
-        3. 写入新记忆文件
-        4. 更新旧记忆文件
-
-        Returns:
-            (new_entry, old_entry_or_None)
         """
         conflict = await self.check_conflict(key, scope, category)
 
         now = datetime.now().isoformat()
 
-        # 准备新文件 frontmatter
         fm_data = frontmatter_data or {}
         fm_data["key"] = key
         fm_data["category"] = category
@@ -349,13 +312,11 @@ class MemoryManager:
         old_entry = None
 
         if conflict.has_conflict and conflict.existing_path:
-            # 有冲突，建立版本链
             old_path = Path(conflict.existing_path)
             old_filename = old_path.name
 
             fm_data["supersedes"] = [old_filename]
 
-            # 更新旧文件
             old_entry = await self.update_memory(
                 old_path,
                 frontmatter_updates={
@@ -365,7 +326,6 @@ class MemoryManager:
                 }
             )
 
-        # 创建新文件
         new_entry = await self.create_memory(
             scope=scope,
             category=category,
@@ -380,10 +340,6 @@ class MemoryManager:
     async def mark_superseded(self, file_path: Path, superseded_by: str) -> bool:
         """
         将指定记忆标记为 superseded。
-
-        Args:
-            file_path: 文件路径
-            superseded_by: 取代它的新文件名称
         """
         entry = await self.update_memory(
             file_path,
@@ -396,10 +352,10 @@ class MemoryManager:
 
     async def update_status(self, file_path: Path, status: str) -> bool:
         """
-        更新记忆状态（active/superseded/archived）。
+        更新记忆状态（active/superseded/archived/retry_pending）。
         """
-        if status not in MEMORY_STATUS:
-            raise ValueError(f"Invalid status: {status}. Must be one of {MEMORY_STATUS}")
+        if status not in MEMORY_STATUS + ["retry_pending"]:
+            raise ValueError(f"Invalid status: {status}")
 
         entry = await self.update_memory(
             file_path,
@@ -420,21 +376,9 @@ class MemoryManager:
     ) -> List[MemoryEntry]:
         """
         基于文件系统的轻量检索（非 FTS5，用于精确过滤）。
-
-        性能说明：遍历文件系统，适合 < 2000 条记忆的场景。
-        大规模检索应使用 FTSIndexManager。
-
-        Args:
-            scope: "life" | "work"
-            category: 类别过滤
-            key: key 精确匹配
-            status: 状态过滤
-            domain: 领域过滤（仅 skill）
-            limit: 返回数量上限
         """
         results = []
 
-        # 确定搜索根目录
         if scope == "life":
             search_roots = [self.memory_dir / "life"]
         elif scope == "work":
@@ -457,7 +401,6 @@ class MemoryManager:
 
                     fm = entry.frontmatter
 
-                    # 过滤
                     if category and fm.category != category:
                         continue
                     if key and fm.key != key:
@@ -484,7 +427,7 @@ class MemoryManager:
         """
         return await self.search_memories(scope=scope, category=category, limit=limit)
 
-    # ==================== Timeline 操作 ====================
+    # ==================== Timeline 操作（4.6 修复）====================
 
     async def write_timeline(
         self,
@@ -492,32 +435,69 @@ class MemoryManager:
         content: str,
         sensitivity: str = "normal",
         status: str = "active",
-    ) -> Path:
+    ) -> Tuple[Path, str]:
         """
         写入 Timeline 日文件。
 
-        Args:
-            date_str: 日期 "YYYY-MM-DD"
-            content: 正文内容
-            sensitivity: normal | private | secret
-            status: active | archived
+        Phase 4 修复：
+        - 集成 sensitivity 自动预检
+        - 追加时保留最严格的 sensitivity（secret > private > normal）
+        - 追加时若现有 status 为 archived，保持 archived
 
         Returns:
-            文件路径
+            (file_path, final_sensitivity) - 文件路径和最终生效的敏感度
         """
         file_path = generate_timeline_path(date_str, self.memory_dir)
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Timeline 的 frontmatter 较简单
+        now = datetime.now().isoformat()
+
+        # 读取现有文件以合并 frontmatter
+        existing_fm = None
+        existing_content = ""
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding=FILE_ENCODING) as f:
+                    existing_raw = f.read()
+                existing_fm, existing_content = parse_frontmatter(existing_raw)
+            except Exception:
+                pass
+
+        # Phase 4: sensitivity 自动预检
+        auto_detected = sensitivity_precheck(content)
+        sensitivity_priority = {"secret": 3, "private": 2, "normal": 1}
+
+        # 取传入值和自动检测的最严格者
+        input_pri = sensitivity_priority.get(sensitivity, 0)
+        auto_pri = sensitivity_priority.get(auto_detected, 0)
+        final_sensitivity = auto_detected if auto_pri > input_pri else sensitivity
+
+        # 与现有文件取最严格
+        if existing_fm and existing_fm.sensitivity:
+            old_pri = sensitivity_priority.get(existing_fm.sensitivity, 0)
+            final_pri = sensitivity_priority.get(final_sensitivity, 0)
+            if old_pri > final_pri:
+                final_sensitivity = existing_fm.sensitivity
+
+        # status 保持 archived（一旦归档不再自动激活）
+        final_status = status
+        if existing_fm and existing_fm.status == "archived":
+            final_status = "archived"
+
+        # Timeline 的 frontmatter
         fm = MemoryFrontmatter(
             category="timeline",
             key=date_str,
             date=date_str,
-            sensitivity=sensitivity,
-            status=status,
-            created_at=datetime.now().isoformat(),
-            updated_at=datetime.now().isoformat(),
+            sensitivity=final_sensitivity,
+            status=final_status,
+            created_at=existing_fm.created_at if existing_fm else now,
+            updated_at=now,
         )
+
+        # 内容追加
+        if existing_content:
+            content = existing_content + "\n\n---\n\n" + content
 
         raw_text = serialize_frontmatter(fm, content)
 
@@ -526,19 +506,12 @@ class MemoryManager:
 
         async with async_lock:
             with file_lock:
-                # Timeline 是追加还是覆盖？
-                # v6 报告说"写入当日 timeline"，按日维度，同一天多次对话应追加
-                if file_path.exists():
-                    with open(file_path, "r", encoding=FILE_ENCODING) as f:
-                        existing = f.read()
-                    _, old_content = parse_frontmatter(existing)
-                    content = old_content + "\n\n---\n\n" + content
-                    raw_text = serialize_frontmatter(fm, content)
-
                 with open(file_path, "w", encoding=FILE_ENCODING) as f:
                     f.write(raw_text)
 
-        return file_path
+        await self._sync_to_fts(file_path)
+
+        return file_path, final_sensitivity
 
     async def read_timeline(self, date_str: str) -> Optional[MemoryEntry]:
         """读取指定日期的 Timeline"""
@@ -556,15 +529,6 @@ class MemoryManager:
     ) -> Path:
         """
         创建 Pending 待确认文件。
-
-        Args:
-            source_timeline: 来源 timeline 路径
-            summary: 待确认摘要
-            original_quote: 原始引用
-            expires_days: 过期天数
-
-        Returns:
-            文件路径
         """
         from datetime import timedelta
 
@@ -605,14 +569,13 @@ class MemoryManager:
                 with open(file_path, "w", encoding=FILE_ENCODING) as f:
                     f.write(raw_text)
 
+        await self._sync_to_fts(file_path)
+
         return file_path
 
     async def get_pending_list(self) -> List[Tuple[Path, MemoryFrontmatter, str]]:
         """
         获取所有未过期的 pending 文件列表。
-
-        Returns:
-            [(file_path, frontmatter, content), ...]
         """
         now = datetime.now()
         pending_dir = self.memory_dir / "life" / "pending"
@@ -627,12 +590,10 @@ class MemoryManager:
                 if not entry:
                     continue
 
-                # 检查是否过期
                 if entry.frontmatter.expires_at:
                     try:
                         expires = datetime.fromisoformat(entry.frontmatter.expires_at)
                         if expires < now:
-                            # 已过期，删除
                             await self.delete_memory(f, hard=True)
                             continue
                     except ValueError:
@@ -647,42 +608,39 @@ class MemoryManager:
     async def confirm_pending(
         self,
         pending_path: Path,
-        action: str,  # "confirm" | "ignore" | "escalate"
+        action: str,
     ) -> bool:
         """
         处理 Pending 文件的用户确认。
-
-        Args:
-            pending_path: pending 文件路径
-            action: confirm(确认入库) / ignore(忽略删除) / escalate(标记secret)
-
-        Returns:
-            是否成功处理
         """
         entry = await self.read_memory(pending_path)
         if not entry:
             return False
 
         if action == "confirm":
-            # 提取为 fact，写入 life/facts/
-            # 简化处理：将 summary 作为 content 创建新 fact
             summary_match = entry.content.split("## 待确认摘要")
             if len(summary_match) > 1:
                 summary = summary_match[1].split("##")[0].strip()
             else:
                 summary = entry.content[:200]
 
+            key_text = summary[:40].replace("\n", " ")
+            if "。" in key_text:
+                key_text = key_text.split("。")[0]
+            if len(key_text) > 20:
+                key_text = key_text[:20]
+            fact_key = key_text.strip() or (entry.frontmatter.key or "pending_fact")
+
             await self.create_memory(
                 scope="life",
                 category="fact",
-                key=entry.frontmatter.key or "pending_fact",
+                key=fact_key,
                 content=summary,
                 frontmatter_data={
                     "source_timeline": entry.frontmatter.source_timeline,
                     "sensitivity": "normal",
                 }
             )
-            # 删除 pending
             await self.delete_memory(pending_path, hard=True)
             return True
 
@@ -691,7 +649,6 @@ class MemoryManager:
             return True
 
         elif action == "escalate":
-            # 提升原始 timeline 为 secret
             if entry.frontmatter.source_timeline:
                 timeline_path = self.memory_dir / entry.frontmatter.source_timeline
                 if timeline_path.exists():
@@ -709,7 +666,6 @@ class MemoryManager:
     async def _bump_access_count(self, path_str: str):
         """
         增加 access_count（内存批量计数）。
-        不直接写文件，累积到 pending_access_updates。
         """
         now = datetime.now().isoformat()
 
@@ -719,7 +675,6 @@ class MemoryManager:
         else:
             self._pending_access_updates[path_str] = (1, now)
 
-        # 检查是否达到刷盘阈值
         total_pending = sum(c for c, _ in self._pending_access_updates.values())
         if total_pending >= ACCESS_COUNT_BATCH_SIZE:
             await self._flush_access_counts()
@@ -762,7 +717,6 @@ class MemoryManager:
     async def start_access_flush_loop(self):
         """
         启动定时刷盘任务（每 ACCESS_COUNT_FLUSH_INTERVAL 秒）。
-        应在应用启动时调用。
         """
         while not self._shutdown:
             await asyncio.sleep(ACCESS_COUNT_FLUSH_INTERVAL)
