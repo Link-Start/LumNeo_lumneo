@@ -1,7 +1,6 @@
 # backend/memory/__init__.py
 """
 Lumneo 长期记忆系统
-Phase 2 + Phase 3 完整版
 
 使用方式：
     from backend.memory import MemoryManager, FTSIndexManager, MemoryRetriever
@@ -29,6 +28,7 @@ from backend.memory.utils import (
     generate_memory_path,
     generate_timeline_path,
     generate_pending_path,
+    generate_monthly_summary_path,
     sensitivity_precheck,
     normalize_domain,
 )
@@ -54,6 +54,7 @@ __all__ = [
     "generate_memory_path",
     "generate_timeline_path",
     "generate_pending_path",
+    "generate_monthly_summary_path",
     "sensitivity_precheck",
     "normalize_domain",
 ]

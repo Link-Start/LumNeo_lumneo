@@ -18,6 +18,7 @@ from backend.db.models import list_models as list_models_db
 from backend.utils.base import resource_path, get_current_time, get_local_ip, get_typeName
 from backend.utils.collaboration_strategy import select_model_by_strategy
 from config_loader import config
+from backend.bootstrap import logger
 
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -194,7 +195,6 @@ async def _after_chat_memory_task(
             # 同步更新 FTS5 索引
             fts_mgr = fastapi_request.app.state.fts_manager
             if fts_mgr and extracted:
-                # MVP：下次启动时一致性校验会重建，这里暂不实时同步
                 pass
         
         # 3. Life Mode：更新 state.md
@@ -223,8 +223,7 @@ async def _after_chat_memory_task(
                 )
                 
     except Exception as e:
-        # 静默失败，不打扰用户
-        # logger.warning(f"记忆提取失败: {e}")
+        logger.warning(f"记忆提取失败: {e}")
         pass
 
 # ========== 聊天接口 ==========
@@ -238,6 +237,10 @@ async def chat(
     try:
         cfg = request.llm_config
         collab_reason = None
+        # 显式初始化 collab_config，避免 is_executing_plan=True 时 UnboundLocalError
+        collab_config = None
+        # 保存用户原始请求的 reasoning_effort，避免协作策略覆盖后丢失
+        original_reasoning_effort = request.llm_config.reasoning_effort if request.llm_config else 'high'
 
         # ========== 模型协作策略介入 ==========
         # 执行已确认的计划时，跳过模型协作策略的自动切换
@@ -273,7 +276,7 @@ async def chat(
                 if cfg is None or cfg.model_id != selected_id:
                     selected_model = model_map.get(selected_id)
                     if selected_model:
-                        reasoning_effort = cfg.reasoning_effort if cfg else 'high'
+                        reasoning_effort = original_reasoning_effort
                         model_name = selected_model.get('modelName', '')
                         if model_name and any(
                             re.search(pattern, model_name, re.IGNORECASE)
@@ -298,7 +301,7 @@ async def chat(
         if collab_config and collab_config.fallback_enabled:
             primary_model = model_map.get(collab_config.primary_model_id) if 'model_map' in locals() else None
             if primary_model and (cfg is None or cfg.model_id != primary_model.get('id')):
-                reasoning_effort = cfg.reasoning_effort if cfg else 'high'
+                reasoning_effort = original_reasoning_effort
                 p_name = primary_model.get('modelName', '')
                 if p_name and any(
                     re.search(pattern, p_name, re.IGNORECASE)
@@ -347,8 +350,13 @@ async def chat(
 
             return StreamingResponse(response_generator(), media_type="text/event-stream")
 
-        # 准备 System Prompt 和 Tools
-        messages = request.messages.copy()
+        # 使用深拷贝，避免修改原始请求中的消息对象
+        import copy
+        messages = copy.deepcopy(request.messages)
+
+        # 保存一份不含 System Prompt 的原始对话消息，用于后续记忆提取
+        # 避免将 System Prompt 内容混入记忆库
+        chat_messages_for_memory = copy.deepcopy(request.messages)
 
         # 基础 System Prompt
         system_prompt = BASE_SYSTEM_PROMPT.replace("{{workspace_path}}", backend.workspace_path)
@@ -493,7 +501,7 @@ async def chat(
             # 将蓝图指令追加到 System Prompt 中
             system_prompt += blueprint_instruction
 
-        # ========== Phase 1: 记忆检索注入 ==========
+        # ========== 记忆检索注入 ==========
         memory_mgr = fastapi_request.app.state.memory_manager
         fts_mgr = fastapi_request.app.state.fts_manager
         
@@ -528,7 +536,7 @@ async def chat(
                     last_user_msg,
                     project_tag=request.project_tag,
                 )
-                print(f"🔍 检索结果: {memory_block}")
+                # logger.info(f"检索结果: {memory_block}")
             
             # 将记忆块追加到 System Prompt
             if state_block:
@@ -615,7 +623,7 @@ async def chat(
                     current_cfg and 
                     current_cfg.model_id != primary_cfg.model_id):
                     # logger.warning(f"[故障回退] 模型 {current_cfg.model_name} 调用失败: {str(e)[:200]}，尝试回退到主模型 {primary_cfg.model_name}")
-                    print(primary_cfg)
+                    # logger.info(f"故障回退主模型配置: {primary_cfg}")
                     fallback_reason = f"[故障回退] 原模型调用失败，已切换至主模型 「 {primary_cfg.name} · {get_typeName(primary_cfg.type)} 」"
                     fallback_info = {
                         "model_id": primary_cfg.model_id,
@@ -634,12 +642,21 @@ async def chat(
                     return
             
             # === 流式结束后异步提取记忆 ===
-            asyncio.create_task(_after_chat_memory_task(
+            # 保存 Task 引用，避免被 GC 提前回收且便于异常追踪
+            memory_task = asyncio.create_task(_after_chat_memory_task(
                 request=request,
-                messages=messages,
+                messages=chat_messages_for_memory,
                 fastapi_request=fastapi_request,
                 cfg=current_cfg,
             ))
+            # 将任务存入 app.state，防止被垃圾回收
+            if not hasattr(fastapi_request.app.state, 'background_tasks'):
+                fastapi_request.app.state.background_tasks = set()
+            fastapi_request.app.state.background_tasks.add(memory_task)
+            # 添加回调，完成后从集合中移除
+            def _remove_task(t):
+                fastapi_request.app.state.background_tasks.discard(t)
+            memory_task.add_done_callback(_remove_task)
             # =============================================
 
         # 流式响应
@@ -648,7 +665,7 @@ async def chat(
             media_type="text/event-stream"
         )
     except Exception as e:
-        # logger.error(f"对话服务错误：{e}")
+        logger.error(f"对话服务错误：{e}")
         error_trace = traceback.format_exc()
         raise HTTPException(
             status_code=500, detail=f"服务崩溃: {error_trace}"
@@ -657,10 +674,10 @@ async def chat(
 @router.get("/tools")
 async def get_tools(mcp_manager=Depends(get_mcp_manager)):
     local_tools = get_local_tools()
-    enable_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
+    dangerous_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
     mcp_tools = await get_mcp_tools(mcp_manager)
-    enable_tools.extend(mcp_tools)
-    return {"tools": enable_tools}
+    dangerous_tools.extend(mcp_tools)
+    return {"tools": dangerous_tools}
 
 @router.get("/tools-info")
 async def get_tools_info(mcp_manager=Depends(get_mcp_manager)):

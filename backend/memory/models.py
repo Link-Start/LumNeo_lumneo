@@ -1,7 +1,6 @@
 # backend/memory/models.py
 """
 Lumneo 长期记忆系统 - 数据模型
-Phase 0 基础设施
 """
 from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Dict, Any
@@ -67,9 +66,17 @@ class MemoryFrontmatter:
     source_project: Optional[str] = None
     source_chat_id: Optional[str] = None
 
+    # State 专属字段（life/core/state.md）
+    mood: Optional[str] = None
+    energy_level: Optional[str] = None
+    focus_topic: Optional[str] = None
+    last_user_emotion: Optional[str] = None
+    pending_tasks: Optional[List[str]] = None
+
     # Timeline 专属字段
     date: Optional[str] = None
     sensitivity: Optional[str] = None          # normal | private | secret
+    retry_count: int = 0
 
     # Pending 专属字段
     expires_at: Optional[str] = None
@@ -79,7 +86,7 @@ class MemoryFrontmatter:
         """转换为字典，自动过滤 None 值"""
         d = asdict(self)
         # 过滤 None 值，保持 frontmatter 简洁
-        return {k: v for k, v in d.items() if v is not None and v != []}
+        return {k: v for k, v in d.items() if v is not None}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MemoryFrontmatter":
@@ -113,12 +120,14 @@ class MemoryEntry:
         from backend.memory.config import TIME_DECAY_LAMBDA
 
         base = self.frontmatter.importance
-        if not self.frontmatter.last_accessed:
+        # last_accessed 为空时 fallback 到 created_at，避免新记忆永不衰减
+        time_ref = self.frontmatter.last_accessed or self.frontmatter.created_at
+        if not time_ref:
             return float(base)
 
         try:
-            last_access = datetime.fromisoformat(self.frontmatter.last_accessed)
-            days = (datetime.now() - last_access).total_seconds() / 86400
+            ref_time = datetime.fromisoformat(time_ref)
+            days = (datetime.now() - ref_time).total_seconds() / 86400
             return base * math.exp(-TIME_DECAY_LAMBDA * days)
         except (ValueError, TypeError):
             return float(base)

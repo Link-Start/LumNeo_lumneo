@@ -128,7 +128,9 @@ class LLMOrchestrator:
                 segments.append({"type": "error", "content": f"❌ {str(e)}"})
                 break
 
-            state.first_token_time = None
+            # 注意：不要在此处重置 first_token_time
+            # 它由 StreamParser 在收到第一个 token 时设置
+            # 重置会导致最终统计 gen_time 时可能为 None
 
             # 流式解析
             async for chunk in self.stream_parser.parse(
@@ -335,7 +337,11 @@ class LLMOrchestrator:
 
         # 最终 token 统计
         if state.last_usage and state.last_usage.get("completion_tokens", 0) > 0:
-            gen_time = time.time() - (state.first_token_time or time.time())
+            # 安全计算生成时间：first_token_time 未设置时回退到 start_time
+            if state.first_token_time:
+                gen_time = time.time() - state.first_token_time
+            else:
+                gen_time = time.time() - start_time
             tokens = state.last_usage["completion_tokens"]
             speed = f"{tokens / gen_time:.2f} token/s" if gen_time > 0 else "⚡瞬间完成"
             token_info = {

@@ -91,7 +91,6 @@ async def lifespan(app: FastAPI):
             await init_db()
 
             # 创建 MemoryManager（自动创建目录）
-            # #1 修复：先创建 MemoryManager，待 FTS 初始化后再注入
             memory_mgr = MemoryManager()
             app.state.memory_manager = memory_mgr
             # 初始化 FTS5
@@ -105,8 +104,6 @@ async def lifespan(app: FastAPI):
                 logger.info(f"🔄 FTS5 重建 {rebuilt}/{total} 个索引")
             
             app.state.fts_manager = fts_mgr
-
-            # #1 修复：将 fts_manager 注入 MemoryManager
             memory_mgr.fts_manager = fts_mgr
 
             # 启动 access_count 定时刷盘任务
@@ -114,13 +111,14 @@ async def lifespan(app: FastAPI):
             memory_mgr._access_flush_task = flush_task
 
             # Consolidator 定时归档
-            consolidator = Consolidator(memory_mgr, None)
+            consolidator = Consolidator(memory_mgr, app)
             app.state.consolidator = consolidator
 
-            # #5 修复：启动 Consolidator 定时任务（每 2 小时检查一次）
+            # 启动 Consolidator 定时任务（每 2 小时检查一次）
             async def _consolidator_loop():
                 while True:
                     await asyncio.sleep(7200)  # 2 小时
+                    # await asyncio.sleep(120)  # 2 分钟
                     try:
                         processed, extracted = await consolidator.run()
                         if processed > 0:
@@ -130,7 +128,7 @@ async def lifespan(app: FastAPI):
             
             app.state._consolidator_task = asyncio.create_task(_consolidator_loop())
 
-            # #5 修复：启动月度摘要定时任务（每月 1 号 03:00 执行）
+            # 启动月度摘要定时任务（每月 1 号 03:00 执行）
             async def _monthly_summary_loop():
                 while True:
                     now = datetime.datetime.now()
@@ -150,6 +148,8 @@ async def lifespan(app: FastAPI):
                     await asyncio.sleep(wait_seconds)
 
                     try:
+                        # 重新获取当前时间，避免 sleep 跨月后使用过期 now
+                        now = datetime.datetime.now()
                         # 生成上个月的摘要
                         target_month = now.month - 1 if now.month > 1 else 12
                         target_year = now.year if now.month > 1 else now.year - 1
@@ -161,7 +161,7 @@ async def lifespan(app: FastAPI):
             
             app.state._monthly_task = asyncio.create_task(_monthly_summary_loop())
 
-            # Phase 4 新增：FTS5 每日定时全量重建（每日凌晨 4:00）
+            # FTS5 每日定时全量重建（每日凌晨 4:00）
             async def _fts_rebuild_loop():
                 while True:
                     now = datetime.datetime.now()

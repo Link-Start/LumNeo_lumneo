@@ -1,7 +1,6 @@
 # backend/memory/fts_index.py
 """
 Lumneo 长期记忆系统 - FTS5 全文索引管理
-Phase 0 基础设施
 
 设计原则：
 - MD 文件为唯一真相源，FTS5 为可重建缓存
@@ -10,6 +9,7 @@ Phase 0 基础设施
 """
 import os
 import asyncio
+import aiofiles
 import aiosqlite
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
@@ -55,8 +55,8 @@ class FTSIndexManager:
                 domain,
                 project_tag,
                 indexed_at UNINDEXED,
-                content='',
-                tokenize='{FTS5_TOKENIZER}'
+                tokenize='{FTS5_TOKENIZER}',
+                content=''
             )
         """)
 
@@ -74,7 +74,8 @@ class FTSIndexManager:
     async def sync_file(
         self,
         file_path: Path,
-        project_tag: Optional[str] = None
+        project_tag: Optional[str] = None,
+        update_meta: bool = True,
     ):
         """
         同步单个 MD 文件到 FTS5 索引。
@@ -83,16 +84,17 @@ class FTSIndexManager:
         - 新文件：直接 INSERT
         - 更新文件：先 DELETE 再 INSERT
         - 同时更新 fts_index_meta
+        - update_meta=False 时保留原 md_updated_at（用于 access_count 刷盘等轻量更新）
         """
         if not file_path.exists():
             # 文件不存在则删除索引
             await self._remove_from_index(str(file_path))
             return
 
-        # 读取文件内容
+        # 异步读取文件内容（避免阻塞事件循环）
         try:
-            with open(file_path, "r", encoding=FILE_ENCODING) as f:
-                raw_text = f.read()
+            async with aiofiles.open(file_path, "r", encoding=FILE_ENCODING) as f:
+                raw_text = await f.read()
         except Exception:
             return
 
@@ -100,7 +102,16 @@ class FTSIndexManager:
 
         path_str = str(file_path)
         now = datetime.now().isoformat()
+
+        # 先从 meta 表读取旧的 md_updated_at，避免 update_meta=False 时丢失原始值
         md_updated_at = now
+        cursor = await self.db.execute(
+            f"SELECT md_updated_at FROM {FTS5_META_TABLE_NAME} WHERE path = ?",
+            (path_str,)
+        )
+        row = await cursor.fetchone()
+        if row and row[0]:
+            md_updated_at = row[0]
 
         key = ""
         category = ""
@@ -113,22 +124,30 @@ class FTSIndexManager:
             if frontmatter.updated_at:
                 md_updated_at = frontmatter.updated_at
 
-        # 从文件名推断 category（如果 frontmatter 没有）
         if not category and file_path.name:
-            parts = file_path.name.split("_", 1)
-            if parts:
-                category = parts[0]
+            # timeline 文件走路径判断，不从文件名 infer
+            if "/timeline/" in str(file_path):
+                category = "timeline"
+            else:
+                parts = file_path.name.split("_", 1)
+                if parts and parts[0] in ("fact", "preference", "person", "decision", "skill", "pending", "state"):
+                    category = parts[0]
 
-        # 从文件路径推断 project_tag（如果未提供）
+        # 优先使用 Frontmatter 中的 source_project，其次路径推断，最后 global
         if not project_tag:
-            project_tag = self._infer_project_tag(file_path)
+            if frontmatter and frontmatter.source_project:
+                project_tag = frontmatter.source_project
+            else:
+                project_tag = self._infer_project_tag(file_path)
 
         # 检查是否已存在
         cursor = await self.db.execute(
-            f"SELECT path FROM {FTS5_META_TABLE_NAME} WHERE path = ?",
+            f"SELECT path, md_updated_at FROM {FTS5_META_TABLE_NAME} WHERE path = ?",
             (path_str,)
         )
-        exists = await cursor.fetchone()
+        row = await cursor.fetchone()
+        exists = row is not None
+        existing_md_updated = row[1] if row else None
 
         if exists:
             # 更新：先删后插
@@ -145,11 +164,19 @@ class FTSIndexManager:
 
         # 更新/插入 meta
         if exists:
-            await self.db.execute(f"""
-                UPDATE {FTS5_META_TABLE_NAME} 
-                SET indexed_at = ?, md_updated_at = ?
-                WHERE path = ?
-            """, (now, md_updated_at, path_str))
+            if update_meta:
+                await self.db.execute(f"""
+                    UPDATE {FTS5_META_TABLE_NAME} 
+                    SET indexed_at = ?, md_updated_at = ?
+                    WHERE path = ?
+                """, (now, md_updated_at, path_str))
+            else:
+                # 保留原 md_updated_at，仅更新 indexed_at
+                await self.db.execute(f"""
+                    UPDATE {FTS5_META_TABLE_NAME} 
+                    SET indexed_at = ?
+                    WHERE path = ?
+                """, (now, path_str))
         else:
             await self.db.execute(f"""
                 INSERT INTO {FTS5_META_TABLE_NAME}(path, indexed_at, md_updated_at)
@@ -173,6 +200,22 @@ class FTSIndexManager:
             (path_str,)
         )
         await self.db.commit()
+
+    @staticmethod
+    def _escape_fts5_query(query: str) -> str:
+        """
+        转义 FTS5 MATCH 查询中的特殊字符。
+        将查询包裹在双引号内，并转义内部的双引号。
+        """
+        if not query:
+            return '""'
+        # 按空白字符分词，每个词单独转义后 AND 连接
+        terms = [t.strip() for t in query.split() if t.strip()]
+        escaped = []
+        for term in terms:
+            safe = term.replace('"', '""')
+            escaped.append(f'"{safe}"')
+        return " AND ".join(escaped) if escaped else '""'
 
     async def search(
         self,
@@ -198,8 +241,9 @@ class FTSIndexManager:
             结果列表，每项包含 path, content, key, category, domain, project_tag
         """
         # 构建 WHERE 子句
+        safe_query = self._escape_fts5_query(query)
         conditions = [f"{FTS5_TABLE_NAME} MATCH ?"]
-        params: List[Any] = [query]
+        params: List[Any] = [safe_query]
 
         if category:
             conditions.append("category = ?")
@@ -208,6 +252,10 @@ class FTSIndexManager:
         if domain:
             conditions.append("domain = ?")
             params.append(domain)
+
+        if scope:
+            conditions.append("path LIKE ?")
+            params.append(f"%/{scope}/%")
 
         if project_tag:
             conditions.append("project_tag = ?")
@@ -279,14 +327,14 @@ class FTSIndexManager:
             total += 1
             path_str = str(file_path)
 
-            # 读取文件 updated_at
+            # 异步读取文件 updated_at
             try:
-                with open(file_path, "r", encoding=FILE_ENCODING) as f:
-                    raw = f.read()
+                async with aiofiles.open(file_path, "r", encoding=FILE_ENCODING) as f:
+                    raw = await f.read()
                 frontmatter, _ = parse_frontmatter(raw)
                 md_updated = frontmatter.updated_at if frontmatter else None
                 if not md_updated:
-                    stat = os.stat(file_path)
+                    stat = await asyncio.to_thread(os.stat, file_path)
                     md_updated = datetime.fromtimestamp(stat.st_mtime).isoformat()
             except Exception:
                 continue

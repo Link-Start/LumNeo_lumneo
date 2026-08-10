@@ -1,12 +1,11 @@
 # backend/memory/utils.py
 """
 Lumneo 长期记忆系统 - 工具函数
-Phase 0 基础设施
 """
 import re
 import yaml
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional
 from datetime import datetime
 
 from backend.memory.config import (
@@ -79,7 +78,11 @@ def sanitize_filename(key: str) -> str:
     # 限制长度
     if len(safe) > 100:
         safe = safe[:100]
-    return safe.strip()
+    safe = safe.strip()
+    # 处理空字符串或仅含非法字符的情况
+    if not safe:
+        safe = "untitled"
+    return safe
 
 
 def generate_memory_path(
@@ -107,9 +110,7 @@ def generate_memory_path(
     # 确定子目录
     if scope == "life":
         if category == "skill":
-            # life 下没有独立的 skills 目录，skill 统一在 work/skills/
-            # 但 life 模式可以读取 work skills
-            subdir = MEMORY_DIRS["work"]["skills"]
+            raise ValueError("skill category is not allowed in life scope")
         elif category in ("fact", "preference", "person"):
             subdir = MEMORY_DIRS["life"]["facts"]
         elif category == "pending":
@@ -198,8 +199,8 @@ def sensitivity_precheck(text: str) -> str:
     # secret 模式：身份证号、手机号、密码、地址
     secret_patterns = [
         r"\d{17}[\dXx]",           # 身份证号
-        r"1[3-9]\d{9}",              # 手机号
-        r"密码[是为:]+?\S+",          # 密码
+        r"(?<!\d)1[3-9]\d{9}(?!\d)",              # 手机号
+        r"(?<![a-zA-Z0-9_])密码[是为:\s]*\S{1,30}",  # 密码
         r"地址[是为:]+?\S+",          # 地址
         r"\d{4}\s?年\s?\d{1,2}\s?月\s?\d{1,2}\s?日",  # 完整生日
     ]
@@ -285,3 +286,11 @@ def read_markdown_file_sync(file_path: Path) -> Tuple[Optional[MemoryFrontmatter
         raw = f.read()
 
     return parse_frontmatter(raw)
+
+def estimate_tokens(text: str) -> int:
+    """粗略估算 Token 数"""
+    if not text:
+        return 0
+    chinese_chars = len(re.findall(r'[一-鿿]', text))
+    english_words = len(re.findall(r'[a-zA-Z]+', text))
+    return chinese_chars + int(english_words * 1.3) + 10

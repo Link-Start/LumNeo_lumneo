@@ -18,6 +18,26 @@
                 <n-button secondary @click="selectFolder" size="large">选择</n-button>
               </n-input-group>
             </n-form-item>
+            <n-form-item label="归档模型">
+          <template #label>
+            <n-tooltip placement="top" :keep-alive-on-hover="false">
+              <template #trigger>
+                <span style="cursor: help; border-bottom: 1px dashed #999">归档模型</span>
+              </template>
+              用于后台记忆归档的专用模型。建议选择成本低、速度快的模型。<br/>
+              如果未配置，后台自动归档将跳过
+            </n-tooltip>
+          </template>
+          <n-select
+            v-model:value="archiveModelId"
+            :options="archiveModelOptions"
+            placeholder="选择归档专用模型"
+            clearable
+            style="width: 280px"
+            @update:value="saveArchiveModel"
+            @clear="clearArchiveModel"
+          />
+        </n-form-item>
         </n-form>
 
         <!-- ========== 角色管理 ========== -->
@@ -70,7 +90,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
-import { NForm, NFormItem, NInputGroup, NInput, NSwitch, NButton, NSpace, NDivider, NIcon, NPopconfirm, NSelect, useMessage } from 'naive-ui'
+import { NForm, NFormItem, NInputGroup, NInput, NSwitch, NButton, NText, NTooltip, NSpace, NDivider, NIcon, NPopconfirm, NSelect, useMessage } from 'naive-ui'
 import { Add, CreateOutline, TrashOutline, BookOutline } from '@vicons/ionicons5'
 import { useConfigStore } from '@/stores/config'
 import EditProfileModal from '@/components/Modals/EditProfileModal.vue'
@@ -86,10 +106,24 @@ const configStore = useConfigStore()
 const message = useMessage()
 
 const profileId = ref()
+const archiveModelId = ref(localStorage.getItem('archiveModelId') || null)
 
 watch(() => profileStore.activeProfileId, (val) => {
   profileId.value = val
 })
+
+watch(() => configStore.modelList.length, (len) => {
+  if (len > 0 && !archiveModelId.value) {
+    archiveModelId.value = localStorage.getItem('archiveModelId') || null
+  }
+})
+
+const archiveModelOptions = computed(() =>
+  configStore.modelList.map(m => ({
+    label: `${m.name} (${m.type === 'local' ? '本地' : '云端'})`,
+    value: m.id
+  }))
+)
 
 const workspacePath = ref(localStorage.getItem('workspacePath') || '')
 async function selectFolder() {
@@ -166,6 +200,30 @@ const deleteCurrentProfile = async () => {
 
 const handleProfile = (val: boolean) => {
   localStorage.setItem('enableProfile', val.toString())
+}
+
+const saveArchiveModel = async (value: string) => {
+  const res = await fetch('/api/memory/archive-model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model_id: value
+    })
+  })
+  if (res.ok) {
+    message.success('归档模型已设置，后台归档将在下次定时任务时生效')
+    localStorage.setItem('archiveModelId', value)
+  }
+}
+
+const clearArchiveModel = async () => {
+  await fetch('/api/memory/archive-model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({model_id: null})  // 空配置
+  })
+  message.info('归档模型已清除，后台归档将跳过')
+  localStorage.removeItem('archiveModelId') 
 }
 
 onMounted(() => {

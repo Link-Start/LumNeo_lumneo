@@ -1,7 +1,6 @@
 # backend/memory/extractor.py
 """
 Lumneo 长期记忆系统 - MemoryExtractor 提取层
-Phase 3 完整版
 
 职责：
 - 对话结束后异步调用 LLM，提取结构化记忆
@@ -14,8 +13,8 @@ import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from backend.memory.config import DOMAIN_WHITELIST
 from backend.memory.utils import normalize_domain, sensitivity_precheck
+from backend.memory.config import TRIGGER_THRESHOLD_HOURS
 
 
 # ==================== 提取 Prompt 模板 ====================
@@ -93,7 +92,9 @@ class MemoryExtractor:
         try:
             raw_response = await self._call_llm(prompt)
             extracted = self._parse_extraction(raw_response)
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"LLM 提取调用失败: {e}")
             return []
 
         # 后处理
@@ -119,6 +120,8 @@ class MemoryExtractor:
                 item["domain"] = normalize_domain(item.get("domain"))
                 item["source_project"] = source_project or item.get("source_project", "global")
                 item["used_in_projects"] = [item["source_project"]]
+                # 添加 confirmed_by 字段
+                item["confirmed_by"] = "ai_auto"
 
                 # 三段式结构写入 content
                 scenario = item.get("scenario", "")
@@ -185,6 +188,9 @@ class MemoryExtractor:
         if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
             text = text[arr_start:arr_end+1]
 
+        # 清洗不可见控制字符，避免 json.loads 失败
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+
         try:
             parsed = json.loads(text)
             if isinstance(parsed, list):
@@ -195,6 +201,18 @@ class MemoryExtractor:
                         return parsed[key]
                 return [parsed]
         except json.JSONDecodeError:
+            import logging
+            logging.getLogger(__name__).warning(f"JSON 解析失败，尝试备选解析: {text[:200]}")
+            # 备选：尝试 ast.literal_eval 解析
+            try:
+                import ast
+                parsed = ast.literal_eval(text)
+                if isinstance(parsed, list):
+                    return parsed
+                elif isinstance(parsed, dict):
+                    return [parsed]
+            except (ValueError, SyntaxError) as e2:
+                logging.getLogger(__name__).warning(f"备选解析也失败: {e2}")
             return []
 
 
@@ -206,10 +224,19 @@ class MemoryExtractorTrigger:
         messages: List[Dict[str, str]],
         round_count: int,
         last_extract_round: int,
+        last_extract_time: Optional[float] = None,
     ) -> bool:
         """判断是否触发记忆提取"""
+        # 轮次阈值
         if round_count - last_extract_round >= 20:
             return True
+
+        # 时间间隔阈值（小时）
+        if last_extract_time is not None:
+            from time import time
+            hours_since_last = (time() - last_extract_time) / 3600
+            if hours_since_last >= TRIGGER_THRESHOLD_HOURS:
+                return True
 
         recent = messages[-6:] if len(messages) > 6 else messages
         recent_text = " ".join(m.get("content", "") for m in recent)
@@ -225,10 +252,14 @@ class MemoryExtractorTrigger:
         skill_words = ["总结", "方法", "方案", "最佳实践", "踩坑", "经验", "复用"]
         has_skill = any(w in recent_text for w in skill_words)
 
-        if has_code or has_decision or has_preference or has_skill:
-            if round_count >= 10:
+        # has_code 独立判断，不受轮次门槛限制
+        if has_code:
+            return True
+        # decision / preference：轮次 ≥ 10
+        if (has_decision or has_preference) and round_count >= 10:
                 return True
-            if has_decision or has_preference:
-                return True
+        # skill：独立低门槛（≥5 轮即可触发），技能信号不应被埋没
+        if has_skill and round_count >= 5:
+            return True
 
         return False

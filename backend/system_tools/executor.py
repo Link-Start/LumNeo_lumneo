@@ -3,7 +3,7 @@
 脚本执行器 —— 安全执行技能库内的脚本
 
 安全策略：
-1. 路径越权防护：脚本必须严格位于 skill_dir 内（resolve 后用 relative_to 校验）
+1. 路径越权防护：脚本必须严格位于 skills_dir 内（resolve 后用 relative_to 校验）
 2. 后缀白名单：仅允许 .py / .sh
 3. 参数注入防护：shlex 分割 + shell=False + 禁止空字节
 4. 环境变量脱敏：剥离 SECRET / TOKEN / PASSWORD 等敏感变量
@@ -94,7 +94,7 @@ def _validate_script_path(script_path: str) -> Tuple[Optional[Path], Optional[st
 
     # 解析技能库根目录
     try:
-        skill_root = Path(config.skill_dir).resolve()
+        skill_root = Path(config.skills_dir).resolve()
     except (OSError, ValueError) as e:
         return None, f"技能库根目录配置异常 — {e}"
 
@@ -210,7 +210,7 @@ async def execute_script(
     安全执行技能目录下的脚本。
 
     Args:
-        script_path: 脚本路径，必须在 ``config.skill_dir`` 内。
+        script_path: 脚本路径，必须在 ``config.skills_dir`` 内。
         args:        传给脚本的命令行参数（空格分隔的字符串）。
         timeout:     超时秒数，默认 60，上限 300。
 

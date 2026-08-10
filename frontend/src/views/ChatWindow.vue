@@ -752,6 +752,7 @@ onUnmounted(() => {
 .life-entry-btn {
   color: var(--text-secondary);
   transition: color 0.2s, background 0.2s;
+  padding: 0 8px;
 }
 .life-entry-btn:hover {
   color: #f59e0b;

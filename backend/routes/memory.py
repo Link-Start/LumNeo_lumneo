@@ -5,7 +5,10 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-router = APIRouter(prefix="/api", tags=["memory"])
+router = APIRouter(prefix="/api/memory", tags=["memory"])
+
+class ArchiveModelRequest(BaseModel):
+    model_id: Optional[str] = Field(default=None, description="归档专用模型 ID，为空则清除配置")
 
 class ConsolidateRequest(BaseModel):
     force: bool = Field(default=False, description="是否强制运行，忽略触发门控")
@@ -14,6 +17,36 @@ class ConsolidateRequest(BaseModel):
 class PendingActionRequest(BaseModel):
     path: str = Field(..., description="pending 文件路径")
     action: str = Field(..., description="操作: confirm(确认入库) / ignore(忽略删除) / escalate(标记secret)")
+
+@router.post("/archive-model")
+async def set_archive_model(fastapi_request: Request, req: ArchiveModelRequest):
+    """
+    设置归档专用模型
+    """
+    if req.model_id:
+        # 验证 model_id 是否存在于数据库
+        from backend.db.models import list_models
+        models = await list_models()
+        model = next((m for m in models if m.id == req.model_id), None)
+        if not model:
+            raise HTTPException(status_code=404, detail="指定的模型不存在")
+
+        # 同时存储 model_id 和完整配置字典，供 Consolidator 使用
+        model_dict = model.to_dict()
+        fastapi_request.app.state.archive_model_id = req.model_id
+        fastapi_request.app.state.archive_model_config = {
+            'type': model_dict.get('type', 'local'),
+            'model_name': model_dict.get('modelName') or model_dict.get('model_name'),
+            'base_url': model_dict.get('baseUrl') or model_dict.get('base_url'),
+            'api_key': model_dict.get('apiKey') or model_dict.get('api_key'),
+        }
+    else:
+        # 清除配置
+        if hasattr(fastapi_request.app.state, 'archive_model_id'):
+            del fastapi_request.app.state.archive_model_id
+        if hasattr(fastapi_request.app.state, 'archive_model_config'):
+            del fastapi_request.app.state.archive_model_config
+    return {"success": True, "model_id": req.model_id}
 
 @router.post("/consolidate")
 async def consolidate_memory(fastapi_request: Request, req: ConsolidateRequest):
@@ -101,7 +134,7 @@ async def pending_action(fastapi_request: Request, req: PendingActionRequest):
         raise HTTPException(status_code=400, detail="无效的操作，可选: confirm / ignore / escalate")
 
     try:
-        # #6 修复：路径遍历防护
+        # 路径遍历防护
         # 1. 拒绝绝对路径
         raw_path = req.path
         if raw_path.startswith("/") or raw_path.startswith("\\"):

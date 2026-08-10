@@ -1,20 +1,13 @@
 # backend/memory/consolidator.py
 """
 Lumneo 长期记忆系统 - Consolidator 记忆压缩/归档
-Phase 4 完整版
-
-增强：
-- 成本追踪与告警（日成本上限 $0.5）
-- 指数退避重试（1s → 2s → 4s，最多 3 次）
-- 失败标记 retry_pending，下次优先重试
-- 单次 Token 截断保留完整句子边界
 """
-import os
 import json
+import aiofiles
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from backend.memory.config import (
     CONSOLIDATOR_DAILY_LIMIT,
@@ -23,14 +16,15 @@ from backend.memory.config import (
     PENDING_EXPIRE_DAYS,
     FILE_ENCODING,
 )
-from backend.memory.models import MemoryFrontmatter, MemoryEntry
+from backend.memory.models import MemoryEntry
 from backend.memory.utils import (
-    parse_frontmatter,
     read_markdown_file_sync,
-    sensitivity_precheck,
     normalize_domain,
+    generate_monthly_summary_path,
 )
 from backend.memory.manager import MemoryManager
+from backend.memory.utils import estimate_tokens
+from backend.bootstrap import logger
 
 
 # ==================== Consolidator Prompt ====================
@@ -77,18 +71,87 @@ class Consolidator:
     def __init__(
         self,
         memory_manager: MemoryManager,
-        llm_service=None,
+        app=None,
         daily_cost_limit: float = 0.5,  # 日成本上限 $0.5
     ):
         self.memory_mgr = memory_manager
-        self.llm_service = llm_service
+        self.app = app
         self.daily_cost_limit = daily_cost_limit
+
+        self._llm_service = None
+        self._last_archive_config = None
 
         # 熔断计数器
         self._daily_call_count = 0
         self._daily_cost_usd = 0.0
-        self._last_reset_date = datetime.now().date()
+        self._max_retries = 3
+        self._last_reset_date = datetime.now(datetime.timezone.utc).date()
         self._lock = asyncio.Lock()
+
+        # 熔断计数器持久化路径
+        self._daily_stats_path = self.memory_mgr.memory_dir / ".consolidator_stats.json"
+        # 尝试加载持久化的日统计
+        self._load_daily_stats()
+
+    def _load_daily_stats(self):
+        """从磁盘加载日统计，避免重启后熔断计数清零（__init__ 中同步调用）"""
+        try:
+            if self._daily_stats_path.exists():
+                with open(self._daily_stats_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                saved_date = data.get("date")
+                today = datetime.now(datetime.timezone.utc).date().isoformat()
+                if saved_date == today:
+                    self._daily_call_count = data.get("call_count", 0)
+                    self._daily_cost_usd = data.get("cost_usd", 0.0)
+                else:
+                    self._daily_call_count = 0
+                    self._daily_cost_usd = 0.0
+        except Exception as e:
+            logger.warning(f"加载日统计失败: {e}")
+
+    async def _save_daily_stats(self):
+        """持久化日统计到磁盘（异步，避免阻塞事件循环）"""
+        try:
+            data = {
+                "date": self._last_reset_date.isoformat(),
+                "call_count": self._daily_call_count,
+                "cost_usd": self._daily_cost_usd,
+            }
+            self._daily_stats_path.parent.mkdir(parents=True, exist_ok=True)
+            async with aiofiles.open(self._daily_stats_path, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(data))
+        except Exception as e:
+            logger.warning(f"保存日统计失败: {e}")
+
+    async def _get_llm_service(self):
+        """
+        动态获取归档模型 LLM 服务。
+        前端通过 /api/archive-model 设置配置后，此处自动生效。
+        """
+        if not self.app or not hasattr(self.app, 'state'):
+            return None
+
+        archive_config = getattr(self.app.state, 'archive_model_config', None)
+        if not archive_config:
+            return None
+
+        # 配置没变，复用已有实例
+        if self._llm_service and self._last_archive_config == archive_config:
+            return self._llm_service
+
+        # 创建新的 LLMService
+        from backend.services.llm_service import LLMService
+        self._llm_service = LLMService(
+            model_type=archive_config.get('type', 'online'),
+            model_name=archive_config.get('model_name'),
+            base_url=archive_config.get('base_url'),
+            api_key=archive_config.get('api_key', ''),
+            thinking='enabled',
+            reasoning_effort='high',
+        )
+        self._last_archive_config = archive_config
+        return self._llm_service
 
     async def run(self, force: bool = False) -> Tuple[int, int]:
         """
@@ -102,11 +165,12 @@ class Consolidator:
         """
         async with self._lock:
             # 1. 日上限熔断 + 成本重置
-            today = datetime.now().date()
+            today = datetime.now(datetime.timezone.utc).date()
             if today != self._last_reset_date:
                 self._daily_call_count = 0
                 self._daily_cost_usd = 0.0
                 self._last_reset_date = today
+                await self._save_daily_stats()
 
             if not force and self._daily_call_count >= CONSOLIDATOR_DAILY_LIMIT:
                 return 0, 0  # 已达日上限
@@ -148,6 +212,7 @@ class Consolidator:
                     extracted_total += count
                     self._daily_call_count += 1
 
+            await self._save_daily_stats()
             return processed, extracted_total
 
     async def _list_active_timelines(self) -> List[MemoryEntry]:
@@ -167,7 +232,8 @@ class Consolidator:
                 entry = await self.memory_mgr.read_memory(md_file)
                 if entry and entry.frontmatter.status in ("active", "retry_pending"):
                     results.append(entry)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"读取 timeline 失败 {md_file}: {e}")
                 continue
 
         # retry_pending 优先处理，然后按日期排序（旧的优先）
@@ -249,16 +315,24 @@ class Consolidator:
             return 0
 
         # normal 内容：调用 LLM 提取
-        # Token 上限截断（保留完整句子边界）
-        if len(content) > CONSOLIDATOR_MAX_INPUT_TOKENS:
-            truncated = content[:CONSOLIDATOR_MAX_INPUT_TOKENS]
+        # 动态获取归档模型服务
+        llm_service = await self._get_llm_service()
+        if not llm_service:
+            # 未配置归档模型，跳过处理，保持 active，等配置后再处理
+            return 0
+        # 使用 estimate_tokens 进行真实 Token 估算，而非字符数
+        if estimate_tokens(content) > CONSOLIDATOR_MAX_INPUT_TOKENS:
+            # 按比例截断字符数（中文 1 字 ≈ 1 token，英文 1 词 ≈ 1.3 token）
+            # 保守估计：按 1 token / 2 chars 计算截断点
+            trunc_chars = int(CONSOLIDATOR_MAX_INPUT_TOKENS * 2)
+            truncated = content[:trunc_chars]
             last_period = max(truncated.rfind("。"), truncated.rfind("\n"))
             if last_period > 0:
                 content = truncated[:last_period + 1] + "\n[内容截断，剩余部分待续处理]"
             else:
                 content = truncated + "\n[内容截断]"
 
-        # Phase 4 修复：指数退避重试调用 LLM
+        # 指数退避重试调用 LLM
         extracted = None
         for attempt in range(3):  # 最多 3 次
             try:
@@ -269,8 +343,20 @@ class Consolidator:
                 await asyncio.sleep(wait_time)
 
         if extracted is None:
-            # 全部重试失败，标记为 retry_pending，下次优先处理
-            await self.memory_mgr.update_status(file_path, "retry_pending")
+            # 读取当前重试次数
+            entry = await self.memory_mgr.read_memory(file_path)
+            current_retries = entry.frontmatter.retry_count if entry else 0
+            if current_retries >= self._max_retries:
+                # 超过最大重试次数，标记为 archived，不再处理
+                await self.memory_mgr.update_status(file_path, "archived")
+                logger.warning(f"Timeline {file_path} 重试 {current_retries} 次后仍失败，标记为 archived")
+            else:
+                # 增加重试次数，标记为 retry_pending
+                await self.memory_mgr.update_memory(
+                    file_path,
+                    frontmatter_updates={"retry_count": current_retries + 1}
+                )
+                await self.memory_mgr.update_status(file_path, "retry_pending")
             return -1
 
         if not extracted:
@@ -278,13 +364,17 @@ class Consolidator:
             await self.memory_mgr.update_status(file_path, "archived")
             return 0
 
+        # 从 timeline 文件路径推断 scope
+        inferred_scope = self._infer_scope_from_path(file_path)
+
         # 写入记忆 + 冲突检测
         count = 0
         for item in extracted:
             try:
-                await self._write_extracted_memory(item, fm.date)
+                await self._write_extracted_memory(item, fm.date, inferred_scope)
                 count += 1
-            except Exception:
+            except Exception as e:
+                logger.warning(f"写入提取的记忆失败 {file_path} key={item.get('key', 'unknown')}: {e}")
                 continue
 
         # 标记 timeline 为 archived
@@ -301,7 +391,8 @@ class Consolidator:
 
     async def _call_llm_for_extraction(self, timeline_content: str) -> List[Dict[str, Any]]:
         """调用 LLM 提取结构化记忆（带成本估算）"""
-        if not self.llm_service:
+        llm_service = await self._get_llm_service()
+        if not llm_service:
             return []
 
         prompt = CONSOLIDATOR_PROMPT.format(timeline_content=timeline_content)
@@ -309,9 +400,9 @@ class Consolidator:
         try:
             chunks = []
             # 粗略估算 input tokens（1 token ≈ 4 字符）
-            input_tokens_estimate = len(prompt) // 4
+            input_tokens_estimate = estimate_tokens(prompt)
 
-            async for chunk in self.llm_service.generate_response(
+            async for chunk in llm_service.generate_response(
                 messages=[
                     {"role": "system", "content": "你是一个记忆归档助手，只输出 JSON。"},
                     {"role": "user", "content": prompt}
@@ -321,9 +412,9 @@ class Consolidator:
                 chunks.append(chunk)
 
             raw = "".join(chunks)
-            output_tokens_estimate = len(raw) // 4
+            output_tokens_estimate = estimate_tokens(raw)
 
-            # Phase 4：成本估算（按 GPT-4o-mini 费率估算：$0.0015/1K input, $0.002/1K output）
+            # 成本估算（按 GPT-4o-mini 费率估算：$0.0015/1K input, $0.002/1K output）
             cost = (input_tokens_estimate / 1000 * 0.0015) + (output_tokens_estimate / 1000 * 0.002)
             self._daily_cost_usd += cost
 
@@ -362,7 +453,16 @@ class Consolidator:
         except json.JSONDecodeError:
             return []
 
-    async def _write_extracted_memory(self, item: Dict[str, Any], source_date: Optional[str]):
+    def _infer_scope_from_path(self, file_path: Path) -> str:
+        """从文件路径推断 scope"""
+        path_str = str(file_path)
+        if "/life/" in path_str:
+            return "life"
+        elif "/work/" in path_str:
+            return "work"
+        return "life"
+
+    async def _write_extracted_memory(self, item: Dict[str, Any], source_date: Optional[str], scope: Optional[str] = None):
         """写入提取的记忆，处理冲突"""
         category = item.get("category", "fact")
         key = item.get("key", "未命名")
@@ -370,6 +470,9 @@ class Consolidator:
 
         if not key or not content:
             return
+
+        # 使用传入的 scope
+        target_scope = scope or ("work" if category == "skill" else "life")
 
         # 构建 frontmatter
         fm_data = {
@@ -388,6 +491,8 @@ class Consolidator:
             fm_data["usage_count"] = 0
             fm_data["source_project"] = item.get("source_project", "global")
             fm_data["used_in_projects"] = [fm_data["source_project"]]
+            # 添加 confirmed_by 字段
+            fm_data["confirmed_by"] = "ai_auto"
 
             # 三段式结构写入 content
             scenario = item.get("scenario", "")
@@ -405,47 +510,36 @@ class Consolidator:
             if parts:
                 content = "\n".join(parts)
 
-        # 冲突检测
-        conflict_key = item.get("conflict_with")
-        if conflict_key:
+        # ===== 统一冲突检测（只查一次）=====
+        conflict = await self.memory_mgr.check_conflict(
+            key=key,
+            scope=target_scope,
+            category=category,
+        )
+
+        if conflict.has_conflict:
             await self.memory_mgr.create_with_supersedes(
-                scope="life" if category != "skill" else "work",
+                scope=target_scope,
+                category=category,
+                key=key,
+                content=content,
+                frontmatter_data=fm_data,
+                conflict=conflict,
+            )
+        else:
+            await self.memory_mgr.create_memory(
+                scope=target_scope,
                 category=category,
                 key=key,
                 content=content,
                 frontmatter_data=fm_data,
             )
-        else:
-            conflict = await self.memory_mgr.check_conflict(
-                key=key,
-                scope="life" if category != "skill" else "work",
-                category=category,
-            )
-
-            if conflict.has_conflict:
-                await self.memory_mgr.create_with_supersedes(
-                    scope="life" if category != "skill" else "work",
-                    category=category,
-                    key=key,
-                    content=content,
-                    frontmatter_data=fm_data,
-                )
-            else:
-                await self.memory_mgr.create_memory(
-                    scope="life" if category != "skill" else "work",
-                    category=category,
-                    key=key,
-                    content=content,
-                    frontmatter_data=fm_data,
-                )
 
     async def generate_monthly_summary(self, year: int, month: int) -> Optional[Path]:
         """
         生成月度摘要（每月 1 号调用）。
         读取上月所有 archived timeline，生成摘要文件。
         """
-        from backend.memory.utils import generate_monthly_summary_path
-
         monthly_path = generate_monthly_summary_path(year, month, self.memory_mgr.memory_dir)
 
         # 读取该月所有 archived timeline
@@ -458,10 +552,16 @@ class Consolidator:
         entries = []
         for md_file in sorted(timeline_dir.glob("*.md")):
             try:
-                entry = await self.memory_mgr.read_memory(md_file)
-                if entry and entry.frontmatter.status == "archived":
-                    entries.append(entry)
-            except Exception:
+                # 使用只读方式解析，避免触发 access_count 更新
+                frontmatter, content = await asyncio.to_thread(read_markdown_file_sync, md_file)
+                if frontmatter and frontmatter.status == "archived":
+                    entries.append(MemoryEntry(
+                        frontmatter=frontmatter,
+                        content=content,
+                        file_path=str(md_file),
+                    ))
+            except Exception as e:
+                logger.warning(f"读取 timeline 失败 {md_file}: {e}")
                 continue
 
         if not entries:
@@ -477,9 +577,9 @@ class Consolidator:
 
         summary_content = "\n".join(lines)
 
-        # 写入 monthly 文件
+        # 使用 aiofiles 异步写入
         monthly_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(monthly_path, "w", encoding=FILE_ENCODING) as f:
-            f.write(summary_content)
+        async with aiofiles.open(monthly_path, "w", encoding=FILE_ENCODING) as f:
+            await f.write(summary_content)
 
         return monthly_path

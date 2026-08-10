@@ -118,7 +118,7 @@ async def upload_skill_folder(
     path_parts = first_file_path.split("/")
     folder_name = path_parts[0] 
 
-    skills_root = config.skill_dir
+    skills_root = config.skills_dir
     skill_path = os.path.join(skills_root, folder_name)
     
     # 安全检查

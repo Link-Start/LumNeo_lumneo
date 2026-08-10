@@ -1,14 +1,13 @@
 # backend/memory/state_manager.py
 """
 Lumneo 长期记忆系统 - StateManager 状态层
-Phase 1 核心记忆闭环
 
 职责：
 - 管理 life/core/state.md 的动态更新
 - 每次 Life Mode 对话结束后，评估并更新 mood/energy/focus 等字段
 - 让 AI 具备情绪连续性
 """
-import yaml
+import aiofiles
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -59,7 +58,7 @@ class StateManager:
             return self._default_state()
 
         try:
-            with open(self.state_path, "r", encoding=FILE_ENCODING) as f:
+            async with aiofiles.open(self.state_path, "r", encoding=FILE_ENCODING) as f:
                 raw = f.read()
             frontmatter, content = parse_frontmatter(raw)
 
@@ -159,29 +158,22 @@ class StateManager:
         return None
 
     async def _write_state(self, state: Dict[str, Any]):
-        """将 state 写入 state.md"""
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 分离 frontmatter 和正文
         content_fields = ["_content", "recent_notes"]
         content_parts = []
-
+        # 先 copy，避免 pop 修改原始入参
+        state_copy = dict(state)
         for field in content_fields:
-            if field in state:
-                val = state.pop(field)
+            if field in state_copy:
+                val = state_copy.pop(field)
                 if val:
                     content_parts.append(str(val))
-
         content = "\n\n".join(content_parts) if content_parts else ""
-
-        # 构建 frontmatter
-        fm = MemoryFrontmatter.from_dict(state)
+        fm = MemoryFrontmatter.from_dict(state_copy)
         fm.category = "state"
         fm.key = "current_state"
-
         raw = serialize_frontmatter(fm, content)
-
-        with open(self.state_path, "w", encoding=FILE_ENCODING) as f:
+        async with aiofiles.open(self.state_path, "w", encoding=FILE_ENCODING) as f:
             f.write(raw)
 
     def _default_state(self) -> Dict[str, Any]:

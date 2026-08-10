@@ -1,7 +1,6 @@
 # backend/memory/config.py
 """
 Lumneo 长期记忆系统 - 配置常量
-Phase 0 基础设施
 """
 from pathlib import Path
 from typing import Set, List
