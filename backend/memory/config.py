@@ -31,7 +31,7 @@ SENSITIVITY_LEVELS = ["normal", "private", "secret"]
 MEMORY_CATEGORIES = ["fact", "preference", "person", "decision", "skill", "pending"]
 
 # ==================== 记忆状态 ====================
-MEMORY_STATUS = ["active", "superseded", "archived"]
+MEMORY_STATUS = ["active", "superseded", "archived", "retry_pending"]
 
 # ==================== 触发阈值 ====================
 TRIGGER_THRESHOLD_ROUNDS: int = 20      # 累计轮次阈值

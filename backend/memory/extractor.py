@@ -13,8 +13,8 @@ import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from backend.memory.utils import normalize_domain, sensitivity_precheck
-from backend.memory.config import TRIGGER_THRESHOLD_HOURS
+from backend.memory.utils import normalize_domain, sensitivity_precheck, parse_json_extraction
+from backend.memory.config import TRIGGER_THRESHOLD_HOURS, TRIGGER_THRESHOLD_ROUNDS
 
 
 # ==================== 提取 Prompt 模板 ====================
@@ -42,7 +42,7 @@ FACT_EXTRACTION_PROMPT = """你是一个记忆提取助手。请从以下对话�
 
 **输出格式**：JSON 数组
 [
-  {
+  {{
     "category": "fact" | "preference" | "decision" | "skill",
     "key": "关键词",
     "content": "详细描述（Markdown）",
@@ -52,7 +52,7 @@ FACT_EXTRACTION_PROMPT = """你是一个记忆提取助手。请从以下对话�
     "scenario": "...（仅 skill）",
     "solution": "...（仅 skill）",
     "pitfalls": "...（仅 skill）"
-  }
+  }}
 ]
 
 **注意**：
@@ -91,7 +91,7 @@ class MemoryExtractor:
 
         try:
             raw_response = await self._call_llm(prompt)
-            extracted = self._parse_extraction(raw_response)
+            extracted = parse_json_extraction(raw_response)
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"LLM 提取调用失败: {e}")
@@ -174,48 +174,6 @@ class MemoryExtractor:
             return "".join(chunks)
         return "[]"
 
-    def _parse_extraction(self, raw: str) -> List[Dict[str, Any]]:
-        if not raw or not raw.strip():
-            return []
-
-        text = raw.strip()
-        code_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if code_block:
-            text = code_block.group(1).strip()
-
-        arr_start = text.find("[")
-        arr_end = text.rfind("]")
-        if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
-            text = text[arr_start:arr_end+1]
-
-        # 清洗不可见控制字符，避免 json.loads 失败
-        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return parsed
-            elif isinstance(parsed, dict):
-                for key in ("memories", "facts", "skills", "results", "data"):
-                    if key in parsed and isinstance(parsed[key], list):
-                        return parsed[key]
-                return [parsed]
-        except json.JSONDecodeError:
-            import logging
-            logging.getLogger(__name__).warning(f"JSON 解析失败，尝试备选解析: {text[:200]}")
-            # 备选：尝试 ast.literal_eval 解析
-            try:
-                import ast
-                parsed = ast.literal_eval(text)
-                if isinstance(parsed, list):
-                    return parsed
-                elif isinstance(parsed, dict):
-                    return [parsed]
-            except (ValueError, SyntaxError) as e2:
-                logging.getLogger(__name__).warning(f"备选解析也失败: {e2}")
-            return []
-
-
 class MemoryExtractorTrigger:
     """提取触发器"""
 
@@ -228,7 +186,7 @@ class MemoryExtractorTrigger:
     ) -> bool:
         """判断是否触发记忆提取"""
         # 轮次阈值
-        if round_count - last_extract_round >= 20:
+        if round_count - last_extract_round >= TRIGGER_THRESHOLD_ROUNDS:
             return True
 
         # 时间间隔阈值（小时）
@@ -257,7 +215,7 @@ class MemoryExtractorTrigger:
             return True
         # decision / preference：轮次 ≥ 10
         if (has_decision or has_preference) and round_count >= 10:
-                return True
+            return True
         # skill：独立低门槛（≥5 轮即可触发），技能信号不应被埋没
         if has_skill and round_count >= 5:
             return True

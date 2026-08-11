@@ -2,16 +2,16 @@
 """
 Lumneo 长期记忆系统 - 数据模型
 """
+from enum import Enum
+import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-from enum import Enum
 
 
 class MemoryScope(str, Enum):
     LIFE = "life"
     WORK = "work"
-
 
 class MemoryCategory(str, Enum):
     FACT = "fact"
@@ -21,18 +21,62 @@ class MemoryCategory(str, Enum):
     SKILL = "skill"
     PENDING = "pending"
 
-
 class MemoryStatus(str, Enum):
     ACTIVE = "active"
     SUPERSEDED = "superseded"
     ARCHIVED = "archived"
-
+    RETRY_PENDING = "retry_pending"
 
 class Sensitivity(str, Enum):
     NORMAL = "normal"
     PRIVATE = "private"
     SECRET = "secret"
 
+class VerificationSource(str, Enum):
+    """
+    记忆可信来源
+    LLM: 模型推断
+    SYSTEM: 系统规则验证
+    USER: 用户明确确认
+    """
+    LLM = "llm"
+    SYSTEM = "system"
+    USER = "user"
+
+class CandidateStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    NEED_CONFIRM = "need_confirm"
+
+@dataclass
+class MemoryIdentity:
+    id: str = field(
+        default_factory=lambda:
+        "mem_" + uuid.uuid4().hex[:12]
+    )
+
+@dataclass
+class MemoryTrust:
+    confidence: float = 0.5
+    verification_source: VerificationSource = (VerificationSource.LLM)
+
+@dataclass
+class MemoryProvenance:
+    evidence: str = ""
+    source_message: str = ""
+    conversation_id: Optional[str] = None
+    extracted_by: str = ("memory_extractor")
+
+@dataclass
+class MemoryCandidate:
+    content: str
+    category: str
+    confidence: float = 0.5
+    evidence: str = ""
+    source_message: str = ""
+    status: CandidateStatus = (CandidateStatus.PENDING)
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 @dataclass
 class MemoryFrontmatter:
@@ -95,44 +139,64 @@ class MemoryFrontmatter:
         filtered = {k: v for k, v in data.items() if k in known_fields}
         return cls(**filtered)
 
-
 @dataclass
 class MemoryEntry:
-    """完整记忆条目（Frontmatter + 正文）"""
-    frontmatter: MemoryFrontmatter
-    content: str = ""           # Markdown 正文（不含 frontmatter）
-    file_path: Optional[str] = None  # 文件绝对路径
+    identity: MemoryIdentity = field(default_factory=MemoryIdentity)
+    frontmatter: MemoryFrontmatter = field(default_factory=MemoryFrontmatter)   # 新增
+    content: str = ""
+    category: str = ""
+    scope: str = ""
+    importance: float = 0.5
+    trust: MemoryTrust = field(default_factory=MemoryTrust)
+    provenance: MemoryProvenance = field(default_factory=MemoryProvenance)
+    status: str = "active"
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    access_count: int = 0
+    supersedes: List[str] = field(default_factory=list)
+    derived_from: List[str] = field(default_factory=list)
+    file_path: Optional[str] = None   # 新增
 
     @property
-    def scope(self) -> str:
-        """根据文件路径推断 scope"""
-        if self.file_path:
-            if "/life/" in self.file_path:
-                return "life"
-            elif "/work/" in self.file_path:
-                return "work"
-        return "unknown"
+    def id(self):
+        return self.identity.id
 
     @property
     def effective_importance(self) -> float:
-        """计算经时间衰减后的有效重要性"""
+        """计算时间衰减后的有效重要性，用于排序"""
         import math
-        from backend.memory.config import TIME_DECAY_LAMBDA
+        from datetime import datetime, timezone
+        try:
+            from backend.memory.config import TIME_DECAY_LAMBDA
+        except Exception:
+            TIME_DECAY_LAMBDA = 0.01
 
-        base = self.frontmatter.importance
-        # last_accessed 为空时 fallback 到 created_at，避免新记忆永不衰减
-        time_ref = self.frontmatter.last_accessed or self.frontmatter.created_at
-        if not time_ref:
-            return float(base)
+        # 优先使用 frontmatter.importance（int 1-5），否则回退到 self.importance（float）
+        if getattr(self, "frontmatter", None) is not None and self.frontmatter.importance is not None:
+            importance = float(self.frontmatter.importance)
+        else:
+            importance = float(self.importance)
+
+        # 时间基准：last_accessed > updated_at > created_at（frontmatter 优先）
+        fm = getattr(self, "frontmatter", None)
+        base = None
+        if fm is not None:
+            base = fm.last_accessed or fm.updated_at or fm.created_at
+        if not base:
+            base = self.created_at
 
         try:
-            ref_time = datetime.fromisoformat(time_ref)
-            days = (datetime.now() - ref_time).total_seconds() / 86400
-            return base * math.exp(-TIME_DECAY_LAMBDA * days)
+            last_dt = datetime.fromisoformat(base)
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
-            return float(base)
+            last_dt = datetime.now(timezone.utc)
 
-
+        now = datetime.now(timezone.utc)
+        days = (now - last_dt).total_seconds() / 86400
+        decay = math.exp(-TIME_DECAY_LAMBDA * days)
+        return importance * decay
+    
 @dataclass
 class TimelineEntry:
     """Timeline 日文件条目"""

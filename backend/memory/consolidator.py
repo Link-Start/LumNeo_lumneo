@@ -7,7 +7,7 @@ import aiofiles
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.memory.config import (
     CONSOLIDATOR_DAILY_LIMIT,
@@ -23,7 +23,7 @@ from backend.memory.utils import (
     generate_monthly_summary_path,
 )
 from backend.memory.manager import MemoryManager
-from backend.memory.utils import estimate_tokens
+from backend.memory.utils import estimate_tokens, parse_json_extraction
 from backend.bootstrap import logger
 
 
@@ -85,7 +85,7 @@ class Consolidator:
         self._daily_call_count = 0
         self._daily_cost_usd = 0.0
         self._max_retries = 3
-        self._last_reset_date = datetime.now(datetime.timezone.utc).date()
+        self._last_reset_date = datetime.now(timezone.utc).date()
         self._lock = asyncio.Lock()
 
         # 熔断计数器持久化路径
@@ -100,7 +100,7 @@ class Consolidator:
                 with open(self._daily_stats_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 saved_date = data.get("date")
-                today = datetime.now(datetime.timezone.utc).date().isoformat()
+                today = datetime.now(timezone.utc).date().isoformat()
                 if saved_date == today:
                     self._daily_call_count = data.get("call_count", 0)
                     self._daily_cost_usd = data.get("cost_usd", 0.0)
@@ -165,7 +165,7 @@ class Consolidator:
         """
         async with self._lock:
             # 1. 日上限熔断 + 成本重置
-            today = datetime.now(datetime.timezone.utc).date()
+            today = datetime.now(timezone.utc).date()
             if today != self._last_reset_date:
                 self._daily_call_count = 0
                 self._daily_cost_usd = 0.0
@@ -206,11 +206,21 @@ class Consolidator:
                     break
 
                 # 处理单条 timeline
+                # 返回值约定：
+                #   >0  : LLM 提取成功并写入了记忆
+                #    0  : 处理完成但无提取（含 secret/private/空结果/未配置模型）
+                #   -1  : LLM 调用失败（已标记 retry_pending / archived）
                 count = await self._process_single_timeline(timeline_entry)
                 if count >= 0:
                     processed += 1
-                    extracted_total += count
-                    self._daily_call_count += 1
+                    if count > 0:
+                        extracted_total += count
+                    # 仅在实际发生过 LLM 调用时计入日限额
+                    sensitivity = (timeline_entry.frontmatter.sensitivity or "normal")
+                    if sensitivity == "normal":
+                        llm = await self._get_llm_service()
+                        if llm is not None:
+                            self._daily_call_count += 1
 
             await self._save_daily_stats()
             return processed, extracted_total
@@ -414,44 +424,16 @@ class Consolidator:
             raw = "".join(chunks)
             output_tokens_estimate = estimate_tokens(raw)
 
-            # 成本估算（按 GPT-4o-mini 费率估算：$0.0015/1K input, $0.002/1K output）
-            cost = (input_tokens_estimate / 1000 * 0.0015) + (output_tokens_estimate / 1000 * 0.002)
+            # 成本估算：使用偏保守的通用费率，支持通过 archive_model_config 覆盖
+            archive_cfg = getattr(getattr(self.app, "state", None), "archive_model_config", None) or {}
+            in_price = float(archive_cfg.get("input_price_per_1k", 0.005))
+            out_price = float(archive_cfg.get("output_price_per_1k", 0.015))
+            cost = (input_tokens_estimate / 1000 * in_price) + (output_tokens_estimate / 1000 * out_price)
             self._daily_cost_usd += cost
 
-            return self._parse_json_extraction(raw)
+            return parse_json_extraction(raw)
         except Exception:
             raise  # 抛出异常让上层处理重试
-
-    def _parse_json_extraction(self, raw: str) -> List[Dict[str, Any]]:
-        """解析 LLM 返回的 JSON"""
-        if not raw or not raw.strip():
-            return []
-
-        import re
-        text = raw.strip()
-
-        # 提取 markdown 代码块
-        code_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-        if code_block:
-            text = code_block.group(1).strip()
-
-        # 找 JSON 数组
-        arr_start = text.find("[")
-        arr_end = text.rfind("]")
-        if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
-            text = text[arr_start:arr_end+1]
-
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return parsed
-            elif isinstance(parsed, dict):
-                for key in ("memories", "facts", "skills", "results"):
-                    if key in parsed and isinstance(parsed[key], list):
-                        return parsed[key]
-                return [parsed]
-        except json.JSONDecodeError:
-            return []
 
     def _infer_scope_from_path(self, file_path: Path) -> str:
         """从文件路径推断 scope"""

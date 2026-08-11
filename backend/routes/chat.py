@@ -184,7 +184,7 @@ async def _after_chat_memory_task(
                 fm_data = {k: v for k, v in item.items() 
                           if k not in ("category", "key", "content")}
                 
-                await memory_mgr.create_memory(
+                await memory_mgr.create_with_supersedes(
                     scope=scope,
                     category=category,
                     key=key,

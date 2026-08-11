@@ -5,7 +5,7 @@ Lumneo 长期记忆系统 - 工具函数
 import re
 import yaml
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict, Any
 from datetime import datetime
 
 from backend.memory.config import (
@@ -44,11 +44,14 @@ def parse_frontmatter(raw_text: str) -> Tuple[Optional[MemoryFrontmatter], str]:
         return None, raw_text.strip()
 
 
-def serialize_frontmatter(frontmatter: MemoryFrontmatter, content: str) -> str:
+def serialize_frontmatter(frontmatter: MemoryFrontmatter, content: str, update_updated_at: bool = True) -> str:
     """
     将 Frontmatter 和正文序列化为完整的 Markdown 文件内容。
     """
     data = frontmatter.to_dict()
+    if update_updated_at:
+        data["updated_at"] = datetime.now().isoformat()
+
     # 确保基础字段存在
     data.setdefault("category", frontmatter.category)
     data.setdefault("key", frontmatter.key)
@@ -294,3 +297,31 @@ def estimate_tokens(text: str) -> int:
     chinese_chars = len(re.findall(r'[一-鿿]', text))
     english_words = len(re.findall(r'[a-zA-Z]+', text))
     return chinese_chars + int(english_words * 1.3) + 10
+
+
+def parse_json_extraction(raw: str) -> List[Dict[str, Any]]:
+    """统一解析 LLM 返回的 JSON 数组"""
+    if not raw or not raw.strip():
+        return []
+    import re, json
+    text = raw.strip()
+    code_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if code_block:
+        text = code_block.group(1).strip()
+    arr_start = text.find("[")
+    arr_end = text.rfind("]")
+    if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
+        text = text[arr_start:arr_end+1]
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return parsed
+        elif isinstance(parsed, dict):
+            for key in ("memories", "facts", "skills", "results", "data"):
+                if key in parsed and isinstance(parsed[key], list):
+                    return parsed[key]
+            return [parsed]
+    except json.JSONDecodeError:
+        pass
+    return []

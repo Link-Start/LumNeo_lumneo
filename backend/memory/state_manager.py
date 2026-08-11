@@ -10,7 +10,7 @@ Lumneo 长期记忆系统 - StateManager 状态层
 import aiofiles
 from pathlib import Path
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.memory.config import DEFAULT_MEMORY_DIR, FILE_ENCODING
 from backend.memory.utils import parse_frontmatter, serialize_frontmatter
@@ -107,7 +107,7 @@ class StateManager:
                 pass  # 评估失败不影响原有 state
 
         # 更新时间戳
-        current["updated_at"] = datetime.now().isoformat()
+        current["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # 写入文件
         await self._write_state(current)
@@ -186,8 +186,8 @@ class StateManager:
             "focus_topic": "",
             "last_user_emotion": "中性",
             "pending_tasks": [],
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def format_state_for_prompt(self, state: Optional[Dict[str, Any]] = None) -> str:

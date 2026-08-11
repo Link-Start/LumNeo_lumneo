@@ -190,8 +190,8 @@ class MemoryRetriever:
                 continue
             if exclude_sensitivity and entry.frontmatter.sensitivity == exclude_sensitivity:
                 continue
-            if entry.effective_importance < TIME_DECAY_CUTOFF:
-                continue
+            # if entry.effective_importance < TIME_DECAY_CUTOFF:
+            #     continue
             # project_tag 过滤（FTS 结果可能未过滤，这里补一刀）
             if project_tag:
                 fm = entry.frontmatter
@@ -484,9 +484,21 @@ class MemoryRetriever:
                 used += mini_tokens
         return selected
 
+    @staticmethod
+    def _infer_scope(entry: MemoryEntry) -> str:
+        """从 entry.scope 或 file_path 推断 scope（多数创建点未显式设置 scope）"""
+        if entry.scope in ("life", "work"):
+            return entry.scope
+        path = entry.file_path or ""
+        if "/life/" in path:
+            return "life"
+        if "/work/" in path:
+            return "work"
+        return "work"
+
     def _format_single_memory(self, entry: MemoryEntry, full_content: bool = True) -> str:
         fm = entry.frontmatter
-        scope_label = "生活" if entry.scope == "life" else "工作"
+        scope_label = "生活" if self._infer_scope(entry) == "life" else "工作"
         if fm.category == "skill":
             prefix = f"[skill-{fm.domain or 'general'}]"
         else:
@@ -501,7 +513,8 @@ class MemoryRetriever:
     def _format_memory_block(self, memories: List[MemoryEntry], mode: str = "life") -> str:
         if not memories:
             return ""
-
+        # 先定义 anaphora_paths
+        anaphora_paths = {m.file_path for m in getattr(self, '_last_anaphora', []) if m.file_path}
         lines = []
         if mode == "life":
             lines.append("## 相关记忆")
@@ -510,22 +523,20 @@ class MemoryRetriever:
 
         facts = [m for m in memories if m.frontmatter.category not in ("skill", "pending") and m.file_path not in anaphora_paths]
         skills = [m for m in memories if m.frontmatter.category == "skill"]
-        # 使用 file_path 集合比对，避免对象身份比较失效
-        anaphora_paths = {m.file_path for m in getattr(self, '_last_anaphora', []) if m.file_path}
         anaphora = [m for m in memories if m.file_path in anaphora_paths]
 
         if anaphora:
             lines.append("\n### 近期相关")
             for entry in anaphora:
                 fm = entry.frontmatter
-                scope_label = "生活" if entry.scope == "life" else "工作"
+                scope_label = "生活" if self._infer_scope(entry) == "life" else "工作"
                 content = entry.content[:150] if entry.content else ""
                 lines.append(f"· [{scope_label}] {fm.key}: {content}")
 
         if facts:
             for entry in facts:
                 fm = entry.frontmatter
-                scope_label = "生活" if entry.scope == "life" else "工作"
+                scope_label = "生活" if self._infer_scope(entry) == "life" else "工作"
                 content = entry.content[:150] if entry.content else ""
                 lines.append(f"· [{scope_label}] {fm.key}: {content}")
 

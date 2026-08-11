@@ -44,8 +44,8 @@ class FTSIndexManager:
         初始化 FTS5 虚拟表和辅助表。
         幂等操作，可安全重复调用。
         """
-        # 主 FTS5 虚拟表
-        # content='' 表示不存储内容，仅索引
+        # 主 FTS5 虚拟表（完整存储 content，便于检索直接返回正文）
+        # 注意：不使用 content=''（contentless），否则无法 SELECT content 列
         await self.db.execute(f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS {FTS5_TABLE_NAME} USING fts5(
                 path UNINDEXED,
@@ -55,8 +55,7 @@ class FTSIndexManager:
                 domain,
                 project_tag,
                 indexed_at UNINDEXED,
-                tokenize='{FTS5_TOKENIZER}',
-                content=''
+                tokenize='{FTS5_TOKENIZER}'
             )
         """)
 
@@ -203,19 +202,23 @@ class FTSIndexManager:
 
     @staticmethod
     def _escape_fts5_query(query: str) -> str:
-        """
-        转义 FTS5 MATCH 查询中的特殊字符。
-        将查询包裹在双引号内，并转义内部的双引号。
-        """
+        """转义 FTS5 查询，支持中文逐字匹配"""
         if not query:
             return '""'
-        # 按空白字符分词，每个词单独转义后 AND 连接
-        terms = [t.strip() for t in query.split() if t.strip()]
-        escaped = []
-        for term in terms:
-            safe = term.replace('"', '""')
-            escaped.append(f'"{safe}"')
-        return " AND ".join(escaped) if escaped else '""'
+        query = query.strip()
+        # 拆分为单字（中文）或单词（英文）
+        import re
+        tokens = []
+        # 匹配中文字符或英文单词
+        for m in re.finditer(r'[\u4e00-\u9fa5]|[a-zA-Z]+', query):
+            token = m.group()
+            if token:
+                tokens.append(token)
+        if not tokens:
+            return '""'
+        # 每个 token 加 * 后缀，支持前缀匹配
+        wildcard_terms = [f'"{t}"*' for t in tokens]
+        return " AND ".join(wildcard_terms)
 
     async def search(
         self,
@@ -294,18 +297,52 @@ class FTSIndexManager:
                 "project_tag": row[5],
             })
 
+        # ===== 兜底：如果 FTS5 匹配失败，使用 LIKE 查询 =====
+        if not results and query:
+            # 直接从 fts_index 表用 LIKE 查询 content 或 key
+            like_pattern = f"%{query}%"
+            conditions = ["(content LIKE ? OR key LIKE ?)"]
+            params = [like_pattern, like_pattern]
+
+            if category:
+                conditions.append("category = ?")
+                params.append(category)
+            if domain:
+                conditions.append("domain = ?")
+                params.append(domain)
+            if scope:
+                conditions.append("path LIKE ?")
+                params.append(f"%/{scope}/%")
+            if project_tag:
+                conditions.append("project_tag = ?")
+                params.append(project_tag)
+
+            where_clause = " AND ".join(conditions)
+            sql = f"""
+                SELECT path, content, key, category, domain, project_tag
+                FROM {FTS5_TABLE_NAME}
+                WHERE {where_clause}
+                LIMIT ?
+            """
+            params.append(limit)
+            cursor = await self.db.execute(sql, params)
+            like_rows = await cursor.fetchall()
+            for row in like_rows:
+                results.append({
+                    "path": row[0],
+                    "content": row[1],
+                    "key": row[2],
+                    "category": row[3],
+                    "domain": row[4],
+                    "project_tag": row[5],
+                })
+
         return results
 
     async def startup_consistency_check(
         self,
         memory_dir: Optional[Path] = None
     ) -> Tuple[int, int]:
-        """
-        启动一致性校验：扫描所有 MD 文件，与 FTS5 索引对比。
-
-        Returns:
-            (rebuilt_count, total_count) - 重建的文件数和扫描的总数
-        """
         root = memory_dir or DEFAULT_MEMORY_DIR
         if not root.exists():
             return 0, 0
@@ -313,40 +350,44 @@ class FTSIndexManager:
         rebuilt = 0
         total = 0
 
-        # 获取所有已索引的路径
         cursor = await self.db.execute(
             f"SELECT path, md_updated_at FROM {FTS5_META_TABLE_NAME}"
         )
         indexed_rows = await cursor.fetchall()
-        indexed_map = {row[0]: row[1] for row in indexed_rows}
+        indexed_map = {}
+        for row in indexed_rows:
+            try:
+                indexed_map[row[0]] = row[1]
+            except IndexError:
+                continue
 
-        # 扫描文件系统
         md_files = list(root.rglob("*.md"))
 
         for file_path in md_files:
             total += 1
             path_str = str(file_path)
 
-            # 异步读取文件 updated_at
             try:
                 async with aiofiles.open(file_path, "r", encoding=FILE_ENCODING) as f:
                     raw = await f.read()
                 frontmatter, _ = parse_frontmatter(raw)
-                md_updated = frontmatter.updated_at if frontmatter else None
-                if not md_updated:
+
+                if frontmatter and frontmatter.updated_at:
+                    if isinstance(frontmatter.updated_at, str):
+                        md_updated = frontmatter.updated_at
+                    else:
+                        md_updated = frontmatter.updated_at.isoformat()
+                else:
                     stat = await asyncio.to_thread(os.stat, file_path)
                     md_updated = datetime.fromtimestamp(stat.st_mtime).isoformat()
             except Exception:
                 continue
 
             indexed_updated = indexed_map.get(path_str)
-
             if not indexed_updated or md_updated > indexed_updated:
-                # 需要重建
                 await self.sync_file(file_path)
                 rebuilt += 1
 
-        # 清理已不存在文件的索引
         current_paths = {str(p) for p in md_files}
         for indexed_path in list(indexed_map.keys()):
             if indexed_path not in current_paths:

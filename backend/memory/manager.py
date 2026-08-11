@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 
+from contextlib import asynccontextmanager
 from filelock import FileLock
 
 from backend.memory.config import (
@@ -94,23 +95,34 @@ class MemoryManager:
     async def _get_async_lock(self, file_path: str) -> asyncio.Lock:
         """获取指定文件的协程级锁"""
         async with self._locks_lock:
-            if file_path not in self._async_locks:
-                self._async_locks[file_path] = asyncio.Lock()
-            return self._async_locks[file_path]
+            lock = self._async_locks.get(file_path)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._async_locks[file_path] = lock
+            return lock
 
     def _get_file_lock(self, file_path: str) -> FileLock:
         """获取指定文件的进程级锁（filelock）"""
         lock_path = f"{file_path}.lock"
         return FileLock(lock_path, timeout=30)
 
-    async def _acquire_locks(self, file_path: str):
+    @asynccontextmanager
+    async def _locked(self, file_path: str):
         """
-        同时获取协程锁和文件锁。
-        返回 (async_lock, file_lock)，需要配合 async with 使用。
+        同时获取协程锁 + 进程级文件锁。
+        FileLock 的 acquire/release 放到线程池执行，避免阻塞事件循环。
+        用法::
+            async with self._locked(path_str):
+                ...  # 临界区
         """
         async_lock = await self._get_async_lock(file_path)
         file_lock = self._get_file_lock(file_path)
-        return async_lock, file_lock
+        async with async_lock:
+            await asyncio.to_thread(file_lock.acquire)
+            try:
+                yield
+            finally:
+                await asyncio.to_thread(file_lock.release)
 
     # ==================== FTS5 同步辅助 ====================
 
@@ -122,6 +134,16 @@ class MemoryManager:
             except Exception as e:
                 # 记录错误但不阻塞主流程
                 logger.warning(f"FTS5 索引同步失败 {file_path}: {e}")
+
+    @staticmethod
+    def _infer_scope_from_path(file_path) -> str:
+        """从路径推断 life/work scope"""
+        path_str = str(file_path)
+        if "/life/" in path_str:
+            return "life"
+        if "/work/" in path_str:
+            return "work"
+        return "life"
 
     # ==================== 基础 CRUD ====================
 
@@ -156,13 +178,10 @@ class MemoryManager:
         raw_text = serialize_frontmatter(frontmatter, content)
 
         path_str = str(file_path)
-        async_lock, file_lock = await self._acquire_locks(path_str)
-
-        async with async_lock:
-            with file_lock:
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(file_path, "w", encoding=FILE_ENCODING) as f:
-                    f.write(raw_text)
+        async with self._locked(path_str):
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "w", encoding=FILE_ENCODING) as f:
+                f.write(raw_text)
 
         await self._sync_to_fts(file_path)
 
@@ -170,6 +189,8 @@ class MemoryManager:
             frontmatter=frontmatter,
             content=content,
             file_path=path_str,
+            scope=self._infer_scope_from_path(file_path),
+            category=frontmatter.category or category,
         )
 
     async def read_memory(self, file_path: Path, skip_access_count: bool = False) -> Optional[MemoryEntry]:
@@ -192,6 +213,8 @@ class MemoryManager:
             frontmatter=frontmatter,
             content=content,
             file_path=path_str,
+            scope=self._infer_scope_from_path(file_path),
+            category=frontmatter.category or "",
         )
 
     async def update_memory(
@@ -207,38 +230,35 @@ class MemoryManager:
             return None
 
         path_str = str(file_path)
-        async_lock, file_lock = await self._acquire_locks(path_str)
+        async with self._locked(path_str):
+            with open(file_path, "r", encoding=FILE_ENCODING) as f:
+                raw_text = f.read()
 
-        async with async_lock:
-            with file_lock:
-                with open(file_path, "r", encoding=FILE_ENCODING) as f:
-                    raw_text = f.read()
+            frontmatter, old_content = parse_frontmatter(raw_text)
+            if frontmatter is None:
+                frontmatter = MemoryFrontmatter()
 
-                frontmatter, old_content = parse_frontmatter(raw_text)
-                if frontmatter is None:
-                    frontmatter = MemoryFrontmatter()
+            new_content = content if content is not None else old_content
+            if frontmatter_updates:
+                for k, v in frontmatter_updates.items():
+                    if hasattr(frontmatter, k):
+                        expected_type = type(getattr(frontmatter, k))
+                        # 如果目标字段有值，且传入值类型不匹配，尝试转换
+                        if expected_type is not type(None) and not isinstance(v, expected_type):
+                            try:
+                                v = expected_type(v)
+                            except (ValueError, TypeError):
+                                logger.warning(
+                                    f"类型不匹配: {k} 期望 {expected_type.__name__}, 得到 {type(v).__name__}"
+                                )
+                                continue
+                        setattr(frontmatter, k, v)
 
-                new_content = content if content is not None else old_content
-                if frontmatter_updates:
-                    for k, v in frontmatter_updates.items():
-                        if hasattr(frontmatter, k):
-                            expected_type = type(getattr(frontmatter, k))
-                            # 如果目标字段有值，且传入值类型不匹配，尝试转换
-                            if expected_type is not type(None) and not isinstance(v, expected_type):
-                                try:
-                                    v = expected_type(v)
-                                except (ValueError, TypeError):
-                                    logger.warning(
-                                        f"类型不匹配: {k} 期望 {expected_type.__name__}, 得到 {type(v).__name__}"
-                                    )
-                                    continue
-                            setattr(frontmatter, k, v)
+            frontmatter.updated_at = datetime.now().isoformat()
 
-                frontmatter.updated_at = datetime.now().isoformat()
-
-                new_raw = serialize_frontmatter(frontmatter, new_content)
-                with open(file_path, "w", encoding=FILE_ENCODING) as f:
-                    f.write(new_raw)
+            new_raw = serialize_frontmatter(frontmatter, new_content)
+            with open(file_path, "w", encoding=FILE_ENCODING) as f:
+                f.write(new_raw)
 
         await self._sync_to_fts(file_path)
 
@@ -246,6 +266,8 @@ class MemoryManager:
             frontmatter=frontmatter,
             content=new_content,
             file_path=path_str,
+            scope=self._infer_scope_from_path(file_path),
+            category=frontmatter.category or "",
         )
 
     async def delete_memory(self, file_path: Path, hard: bool = False) -> bool:
@@ -258,10 +280,8 @@ class MemoryManager:
         path_str = str(file_path)
 
         if hard:
-            async_lock, file_lock = await self._acquire_locks(path_str)
-            async with async_lock:
-                with file_lock:
-                    os.remove(file_path)
+            async with self._locked(path_str):
+                os.remove(file_path)
             if self.fts_manager is not None:
                 try:
                     await self.fts_manager.remove_file(file_path)
@@ -328,7 +348,7 @@ class MemoryManager:
         fm_data["updated_at"] = now
 
         # 使用安全的时间戳格式（避免 Windows 文件名非法字符）
-        safe_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")[:-3]
+        safe_suffix = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         new_path = generate_memory_path(scope, category, key, self.memory_dir, suffix=safe_suffix)
 
         old_entry = None
@@ -506,10 +526,7 @@ class MemoryManager:
 
         now = datetime.now().isoformat()
         path_str = str(file_path)
-        async_lock, file_lock = await self._acquire_locks(path_str)
-
-        async with async_lock:
-            with file_lock:
+        async with self._locked(path_str):
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 # 读取-合并-写入全流程在锁内执行
                 existing_fm = None
@@ -617,10 +634,7 @@ class MemoryManager:
         raw_text = serialize_frontmatter(fm, content)
 
         path_str = str(file_path)
-        async_lock, file_lock = await self._acquire_locks(path_str)
-
-        async with async_lock:
-            with file_lock:
+        async with self._locked(path_str):
                 with open(file_path, "w", encoding=FILE_ENCODING) as f:
                     f.write(raw_text)
 
@@ -772,9 +786,7 @@ class MemoryManager:
                 if not file_path.exists():
                     continue
 
-                async_lock, file_lock = await self._acquire_locks(path_str)
-                async with async_lock:
-                    with file_lock:
+                async with self._locked(path_str):
                         with open(file_path, "r", encoding=FILE_ENCODING) as f:
                             raw = f.read()
 
@@ -785,9 +797,12 @@ class MemoryManager:
                         fm.access_count = (fm.access_count or 0) + count
                         fm.last_accessed = last_access
 
-                        new_raw = serialize_frontmatter(fm, content)
+                        new_raw = serialize_frontmatter(fm, content, update_updated_at=False)
                         with open(file_path, "w", encoding=FILE_ENCODING) as f:
                             f.write(new_raw)
+
+                # 同步 FTS（保留原 md_updated_at，避免启动一致性校验误判）
+                await self._sync_to_fts(file_path, update_meta=False)
 
             except Exception:
                 continue
