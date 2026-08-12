@@ -33,8 +33,18 @@ Agent Runtime
       ↓
 Memory OS
       ↓
+Digital Life
+      ↓
 Hardware OS
 ```
+
+
+其中：
+
+- Agent Runtime 让 AI 能够行动
+- Memory OS 让 AI 能够记忆和积累经验
+- Digital Life 探索具有持续身份、经验和成长能力的 AI 形态
+- Hardware OS 让 AI 能够连接真实世界
 
 让 AI 从一次性的助手，成长为长期协作的工程伙伴。
 
@@ -203,15 +213,16 @@ AI + 工具 + 硬件能力。
 
 LumNeo 的长期目标：
 
-> 构建面向工程领域的 AI 原生操作系统。
+> 构建面向工程领域的 AI 原生操作系统，并探索具备长期记忆、持续成长能力的数字生命。
 
+LumNeo 的演进路线：
 
 | 阶段 | 版本 | 目标 | 状态 |
 |---|---|---|---|
-| Phase 1 | v1.x | Agent Runtime 基础能力 | ✅ 当前 |
-| Phase 2 | v2.x | Memory OS，让 AI 记住项目经验 | 🚧 规划 |
+| Phase 1 | v1.x | Agent Runtime，让 AI 能够行动 | ✅ 当前 |
+| Phase 2 | v2.x | Memory OS，让 AI 能够记忆项目经验 | 🚧 规划 |
+| Phase 2+ | Digital Life | 让 AI 形成持续身份、经验积累和长期协作能力 | 🌱 探索 |
 | Phase 3 | v3.x | Hardware OS，让 AI 连接真实设备 | 🔜 规划 |
-
 
 ---
 
@@ -236,7 +247,9 @@ LumNeo 的长期目标：
 
 # Phase 2 — Memory OS（未来）
 
-目标：让 AI 不再每次从零开始。
+目标：
+
+让 AI 不再每次从零开始，并逐渐形成持续的数字生命基础。
 
 包括：
 
@@ -244,7 +257,9 @@ LumNeo 的长期目标：
 - 工程经验积累
 - 历史问题追踪
 - 决策记录
+- 用户偏好理解
 - 长期协作能力
+- 记忆治理与演化
 
 
 ---
@@ -268,7 +283,7 @@ LumNeo 的长期目标：
 # 🏗️ 架构
 
 ```
-                 LumNeo
+                  LumNeo
 
                     |
                     |
@@ -280,9 +295,9 @@ LumNeo 的长期目标：
 
         -------------------------
 
-        MCP Runtime
-        Skill System
-        Tool Engine
+                MCP Runtime
+                Skill System
+                Tool Engine
 
         -------------------------
 
@@ -292,11 +307,19 @@ LumNeo 的长期目标：
 
                     |
 
-              Memory OS
+                 Memory OS
 
                     |
 
-          Hardware Runtime
+            Digital Life Layer
+
+                    |
+
+             Hardware Runtime
+
+                    |
+
+        Physical World Interface
 
 ```
 
@@ -505,7 +528,9 @@ LumNeo 起源于一个简单想法：
 
 > 如果 AI 不只是聊天，而是真的理解我的项目、记住我的经验，并帮助我创造真实世界的东西，会发生什么？
 
-这就是 LumNeo 正在探索的方向。
+LumNeo 正在探索：
+
+一种具备长期记忆、持续学习和工程协作能力的数字生命形态。
 
 
 **LumNeo — Building the AI-native engineering workspace.**
