@@ -46,7 +46,7 @@ class AppConfig:
         self.cache_dir = self.data_dir / self.raw_config.get("cache_dir", "data/cache")
         self.logs_dir = self.data_dir / self.raw_config.get("logs_dir", "logs")
         self.temp_dir = self.data_dir / self.raw_config.get("temp_dir", "temp")
-        self.skill_dir = self.data_dir / self.raw_config.get("skills_dir", "skills")
+        self.skills_dir = self.data_dir / self.raw_config.get("skills_dir", "skills")
         self.generate_dir = self.data_dir / self.raw_config.get("generate_dir", "data/generate")
         
         # mcp_config.json 路径：可以是绝对路径或相对于 data_dir
@@ -73,7 +73,7 @@ class AppConfig:
 
     def _ensure_dirs(self):
         """确保所有可写目录存在（data_dir 及其子目录）"""
-        dirs = [self.data_dir, self.uploads_dir, self.cache_dir, self.logs_dir, self.temp_dir, self.skill_dir, self.generate_dir]
+        dirs = [self.data_dir, self.uploads_dir, self.cache_dir, self.logs_dir, self.temp_dir, self.skills_dir, self.generate_dir]
         for d in dirs:
             try:
                 d.mkdir(parents=True, exist_ok=True)
@@ -86,10 +86,10 @@ class AppConfig:
                 self.cache_dir = fallback_base / "cache"
                 self.logs_dir = fallback_base / "logs"
                 self.temp_dir = fallback_base / "temp"
-                self.skill_dir = fallback_base / "skills_library"
+                self.skills_dir = fallback_base / "skills"
                 self.mcp_config_path = fallback_base / "mcp_config.json"
                 # 再次创建
-                for d2 in [self.data_dir, self.uploads_dir, self.cache_dir, self.logs_dir, self.temp_dir, self.skill_dir]:
+                for d2 in [self.data_dir, self.uploads_dir, self.cache_dir, self.logs_dir, self.temp_dir, self.skills_dir]:
                     d2.mkdir(parents=True, exist_ok=True)
                 break
 
