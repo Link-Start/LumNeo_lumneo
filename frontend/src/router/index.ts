@@ -8,12 +8,18 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/chat',
+    name: 'chatIndex',
     component: () => import('@/views/ChatWindow.vue')
   },
   {
     path: '/chat/:id',
     name: 'chat',
     component: () => import('@/views/ChatWindow.vue')
+  },
+  {
+    path: '/life',
+    name: 'life',
+    component: () => import('@/views/LifeWindow.vue')
   },
 ]
 

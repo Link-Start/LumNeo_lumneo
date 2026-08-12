@@ -1,10 +1,10 @@
 <template>
-  <div class="app-container" :class="[configStore.themeMode]">
+  <div class="app-container" :class="[configStore.themeMode, { 'life-mode': chatStore.mode === 'life' }]">
     <!-- 移动端侧边栏遮罩 -->
     <div v-if="isMobile && sidebarOpen" class="sidebar-overlay" @click="sidebarCollapsed = true; sidebarOpen = false"></div>
 
     <!-- ========== 侧边栏（折叠式） ========== -->
-     <Transition name="sidebar">
+     <Transition v-if="route.params.id" name="sidebar">
       <aside v-if="!sidebarCollapsed" class="sidebar-panel border-marquee-right" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
           <div class="logo-text">
@@ -21,6 +21,7 @@
           </n-button>
         </div>
         <div class="btn-main">
+          <span class="mode-badge chat" style="position:absolute;right:60px;top:20px;">工作协作</span>
           <n-button block strong secondary size="large" class="new-chat-btn" @click="createChat">
             <template #icon><m-svg name="add"/></template>
             创建新对话
@@ -28,7 +29,7 @@
         </div>
         <n-scrollbar content-style="padding:0 16px" style="max-height: calc(100vh - 200px);">
           <n-list hoverable clickable :show-divider="false">
-            <n-list-item v-for="chat in chatStore.chats" :key="chat.id"
+            <n-list-item v-for="chat in chatStore.currentModeChats" :key="chat.id"
               @click="openChat(chat.id)"
               :class="{ active: chat.id === chatStore.activeChatId }">
               <div class="chat-item-row">
@@ -73,6 +74,12 @@
             </template>
             系统设置
           </n-button>
+          <n-button text class="life-entry-btn" @click="enterLifeMode">
+            <template #icon>
+              <n-icon><SparklesOutline /></n-icon>
+            </template>
+            数字生命
+          </n-button>
         </div>
       </aside>
     </Transition>
@@ -81,7 +88,7 @@
     <main
       class="main-stage"
       :style="{
-        paddingLeft: (!isMobile && !sidebarCollapsed) ? '260px' : '0'
+        paddingLeft: (!isMobile && !sidebarCollapsed && route.params.id) ? '320px' : '0'
       }"
       @dragenter="onDragEnter($event, isLoading)"
       @dragover="onDragOver"
@@ -261,7 +268,7 @@ import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NInput, NList, NListItem, NIcon, NScrollbar, NFlex, NSelect, NModal, NPopconfirm, NPopover, NQrCode, useMessage } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
-import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline } from '@vicons/ionicons5'
+import { SettingsOutline, DocumentOutline, MenuOutline, QrCodeOutline, SparklesOutline } from '@vicons/ionicons5'
 import { useChatStore, type Message } from '@/stores/chat'
 import { useConfigStore, fileConfig } from '@/stores/config'
 import { useProfileStore } from '@/stores/profiles'
@@ -294,7 +301,7 @@ const collaborationStore = useCollaborationStore()
 const message = useMessage()
 
 const isMobile = ref(false)
-const sidebarOpen = ref(false)
+const sidebarOpen = ref(true)
 const qrCodeUrl = ref('')
 const showQRCode = ref(true)
 const showPanelModal = ref(false)
@@ -433,6 +440,11 @@ const onSaveEdit = async () => {
   await saveEdit(() => onRegenerateFromCurrentHistory())
 }
 
+// ========== 进入数字生命模式 ==========
+function enterLifeMode() {
+  router.push({ name: 'life' })
+}
+
 // ========== 动效与初始化 ==========
 const isRender = ref(false)
 
@@ -458,7 +470,7 @@ watch(() => chatStore.activeChatId, async (newId) => {
   }
 }, { immediate: true })
 
-const sidebarCollapsed = ref(true)
+const sidebarCollapsed = ref(false)
 const showSettings = ref(false)
 
 const profileOptions = computed(() =>
@@ -656,12 +668,12 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   height: 100%;
-  width: 260px;
+  width: 320px;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
-  padding: 16px 0;
+  padding: 16px 0 0 0;
   gap: 12px;
   overflow: hidden;
   z-index: 1006;
@@ -723,10 +735,29 @@ onUnmounted(() => {
 .new-chat-btn:active {
   transform: scale(1.02);
 }
+
+/* 侧边栏底部：系统设置 + 数字生命入口 */
 .sidebar-footer {
   position: fixed;
-  bottom:60px; left:30px; right:0;
-  z-index:100;
+  bottom: 40px;
+  left: 16px;
+  right: 16px;
+  width: 288px;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.life-entry-btn {
+  color: var(--text-secondary);
+  transition: color 0.2s, background 0.2s;
+  padding: 0 8px;
+}
+.life-entry-btn:hover {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 8px;
 }
 
 /* ========== 主区域 ========== */
@@ -896,5 +927,18 @@ onUnmounted(() => {
 :deep(.edit-modal-fullscreen .n-input .n-input__textarea-el) {
   min-height: 100% !important;
   height: 100% !important;
+}
+/* 模式标签 */
+.mode-badge {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+.mode-badge.chat {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
 }
 </style>
