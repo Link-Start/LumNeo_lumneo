@@ -120,7 +120,8 @@ LumNeo 基于 Model Context Protocol（MCP）构建。
 - 🔍 数据查询与信息检索
 - 🌐 外部 API 服务
 - 🛠️ 本地自动化工具
-- 🔧 硬件设备与工程工具链
+- 🔧 硬件设备与工程工具链  
+
 
 无需修改 LumNeo 核心代码，即可通过扩展 MCP Server 为 Agent 增加新的能力。
 
@@ -130,9 +131,10 @@ LumNeo 基于 Model Context Protocol（MCP）构建。
 - SSE
 - streamable-http
 
-三种 MCP 通信方式。
+三种 MCP 通信方式。  
 
-未来，MCP 将继续作为 LumNeo 连接外部能力、Skill 生态和工程系统的重要基础能力层。
+未来，MCP 将继续作为 LumNeo 连接外部能力、Skill 生态和工程系统的重要基础能力层。 
+ 
 ---
 
 ## 🧩 Skill 系统：让 AI 拥有专业能力
