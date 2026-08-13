@@ -10,76 +10,129 @@
 ![License](https://img.shields.io/github/license/lumneo/LumNeo)
 ![Stars](https://img.shields.io/github/stars/lumneo/LumNeo?style=social)
 
-> **Build AI that builds hardware.**  
-> **让 AI 不只是聊天，而是真正参与工程创造。**
+> **Build AI that builds.**  
+> **让 AI 不只是聊天，而是真正参与创造。**
+
+LumNeo 是一个面向工程领域的 AI Agent Runtime。
 
 它从 AI Agent Runtime 开始，
-逐步向 Memory OS 和 Hardware OS 演进，
-探索一种具有持续记忆、身份与成长能力的 **Digital Life（数字生命）**。
+逐步向 Skill、Memory OS 和 Hardware OS 演进，
+探索一种让 AI 能够使用工具、积累经验，并参与长期工程协作的新型工作方式。
 
-LumNeo 不是又一个 AI 聊天客户端，而是在探索一种新的 AI 工作方式：
+LumNeo 不是又一个 AI 聊天客户端，而是在探索下一代 AI 工作方式：
 
-
-- AI 可以使用真实工具
-- AI 可以执行复杂工作流
-- AI 可以理解项目上下文
-- AI 可以持续积累经验
-- AI 可以连接现实世界设备
+- AI 可以使用真实工具，将语言能力转化为行动能力
+- AI 可以组合专业 Skill，执行复杂任务和工作流程
+- AI 可以理解项目上下文，参与长期工程协作
+- AI 可以积累经验，并将有效经验沉淀为可复用能力
+- AI 可以通过 Memory OS 探索长期记忆和经验演化能力
+- AI 可以通过 Hardware OS 逐步连接真实设备，参与物理世界创造
 
 当前版本专注于打造：
 
 > **一个开放、可扩展、本地优先的 AI Agent Runtime。**
 
+LumNeo 让 AI Agent 从单次任务执行，逐步演化为具备工具、技能与经验积累能力的长期工程伙伴。  
+
 未来 LumNeo 将逐步演化：
 
 ```
- Agent Runtime
+Agent Runtime
       ↓
-   Memory OS
+Skill & Capability Layer
       ↓
- Digital Life
+Memory OS
       ↓
-  Hardware OS
+Digital Life
+      ↓
+Hardware OS
+      ↓
+───────────────
+Physical World
 ```
-
 
 其中：
 
-- Agent Runtime 让 AI 能够行动
-- Memory OS 让 AI 能够记忆和积累经验
-- Digital Life 探索具有持续身份、经验和成长能力的 AI 形态
-- Hardware OS 让 AI 能够连接真实世界
+- **Agent Runtime** 让 AI 能够行动  
+  提供智能体运行环境，使 AI 能够调用工具、执行任务、编排工作流，并与外部系统交互。
 
-> 让 AI 从一次性的助手，成长为长期协作的工程伙伴。
+- **Skill & Capability Layer** 让 AI 能够拥有和扩展专业能力  
+  将工具、流程和专业知识封装为可复用 Skill，并为未来 Memory OS 的经验沉淀和能力演化提供基础。
 
+- **Memory OS** 让 AI 能够记忆和积累经验  
+  管理项目上下文、历史经验、决策记录和长期知识，通过证据、置信度与生命周期治理，让经验能够被可靠复用。
+
+- **Digital Life** 探索具有持续身份、经验和成长能力的 AI 形态  
+  通过长期记忆、能力积累和身份连续性，让 AI 从一次性的任务执行者逐步成长为长期协作伙伴。
+
+- **Hardware OS** 让 AI 能够连接真实世界  
+  将 AI 能力扩展到设备、仿真环境和工程工具链，使 AI 能够参与硬件开发、调试和物理世界交互。
+
+- **Physical World** 代表 AI 能力最终作用的现实空间  
+  通过 Hardware OS 将软件智能、工程知识和设备能力连接起来，使 AI 能够参与真实世界中的设计、制造辅助和自动化过程。
 
 ---
 
+LumNeo 遵循三个核心原则：
+
+## Local First
+
+数据和上下文优先保存在用户设备，
+保护隐私，并支持本地 AI 工作流。
+
+## Experience Evolution
+
+让 AI 不只是完成任务，
+而是将有效经验沉淀为未来可复用能力。
+
+## Open Extension
+
+通过 MCP、Skill 和开放接口，
+让 AI 能力可以持续扩展。
+
+---
+
+
+## 🚀 LumNeo 与传统 AI 助手的区别
+
+| | 传统 AI 助手 | LumNeo |
+|-|-|-|
+| 交互方式 | 对话为中心 | Agent + Tool |
+| 能力来源 | Prompt | Skill + MCP |
+| 上下文 | 临时会话 | 长期项目记忆 |
+| 工作方式 | 回答问题 | 执行任务 |
+| 扩展方式 | 插件 | 开放能力生态 |
+| 目标 | 提供答案 | 参与创造 |
+
+
+
 # ✨ 为什么选择 LumNeo？
 
-## 🔌 MCP 原生架构：让 AI 连接真实世界
+## 🔌 MCP 原生架构：让 AI 从聊天走向行动
 
 LumNeo 基于 Model Context Protocol（MCP）构建。
 
+不同于传统 AI 聊天应用，LumNeo 不将 AI 限制在文本交互中，而是通过 MCP 将 AI Agent 连接到真实工具、外部系统和工程环境。
+
 通过 MCP Server，AI Agent 可以扩展各种能力：
 
-- 文件操作
-- 数据查询
-- 外部 API
-- 本地工具
-- 硬件设备
+- 📄 文件与项目管理
+- 🔍 数据查询与信息检索
+- 🌐 外部 API 服务
+- 🛠️ 本地自动化工具
+- 🔧 硬件设备与工程工具链
 
-无需修改核心代码，即可接入新的能力。
+无需修改 LumNeo 核心代码，即可通过扩展 MCP Server 为 Agent 增加新的能力。
 
-当前版本已经支持：
+当前版本支持：
 
 - stdio
 - SSE
 - streamable-http
 
-三种 MCP 传输方式。
+三种 MCP 通信方式。
 
-
+未来，MCP 将继续作为 LumNeo 连接外部能力、Skill 生态和工程系统的重要基础能力层。
 ---
 
 ## 🧩 Skill 系统：让 AI 拥有专业能力
@@ -226,14 +279,20 @@ LumNeo 的演进路线：
 |---|---|---|---|
 | Phase 1 | v1.x | Agent Runtime，让 AI 能够行动 | ✅ 当前 |
 | Phase 2 | v2.x | Memory OS，让 AI 能够记忆项目经验 | 🚧 规划 |
-| Phase 2+ | Digital Life | 让 AI 形成持续身份、经验积累和长期协作能力 | 🌱 探索 |
+| Long-term Vision | Digital Life | 让 AI 形成持续身份、经验积累和长期协作能力 | 🌱 探索 |
 | Phase 3 | v3.x | Hardware OS，让 AI 连接真实设备 | 🔜 规划 |
 
 
+## 🏗️ LumNeo Architecture
 
 <img src="screenshots/ARCHITECTURE.png"  alt="LumNeo Architecture">
 
 ---
+
+> 当前 LumNeo 仍处于早期阶段。
+> 现阶段重点是验证 AI Agent Runtime 的基础能力，
+> 包括 MCP、Skill、工具调用和本地工作流。
+> Memory OS 与 Hardware OS 将在后续版本逐步探索。
 
 # Phase 1 — Agent Runtime （当前版本）
 
@@ -256,18 +315,20 @@ LumNeo 的演进路线：
 
 目标：
 
-让 AI 不再每次从零开始，并逐渐形成持续的数字生命基础。
+让 AI 不再每次从零开始，而是能够理解长期上下文、积累工程经验，并逐步形成持续成长的能力基础。
+
+Memory OS 将成为 LumNeo 从 AI Agent Runtime 走向 Digital Life 的核心认知层。
 
 包括：
 
-- 项目上下文记忆
-- 工程经验积累
-- 历史问题追踪
-- 决策记录
-- 用户偏好理解
-- 长期协作能力
-- 记忆治理与演化
-
+- 项目上下文记忆（Project Context）
+- 工程经验积累（Engineering Experience）
+- 历史问题与解决方案追踪（Problem Solving History）
+- 工程决策记录（Decision Records）
+- 用户偏好与协作方式理解（User Preference & Collaboration Pattern）
+- 经验沉淀与 Skill 演化（Experience → Memory → Skill → Capability）
+- 长期协作能力（Long-term Collaboration）
+- 记忆治理与生命周期管理（Evidence / Confidence / Lifecycle）
 
 ---
 
@@ -277,7 +338,7 @@ LumNeo 的演进路线：
 
 包括：
 
-- 官方硬件接入模板
+- 硬件接入模板
 - 串口调试
 - 固件管理
 - 编译烧录
@@ -484,14 +545,12 @@ Copyright © 2026 LumNeo
 
 # 🌱 Vision
 
-LumNeo 起源于一个简单想法：
+LumNeo 希望探索一种新的 AI 工程范式：
 
-> 如果 AI 不只是聊天，而是真的理解我的项目、记住我的经验，并帮助我创造真实世界的东西，会发生什么？
-
-LumNeo 正在探索：
-
-一种具备长期记忆、持续学习和工程协作能力的数字生命形态。
-
+让 AI 从工具调用开始，
+通过 Skill 获得能力，
+通过 Memory 积累经验，
+最终成为能够长期参与创造的工程伙伴。
 
 **LumNeo — Building the AI-native engineering workspace.**
 
