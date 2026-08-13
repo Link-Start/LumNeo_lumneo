@@ -63,6 +63,31 @@ class AppConfig:
         # 其他配置项
         self.max_upload_size = int(self.raw_config.get("max_upload_size_mb", 100)) * 1024 * 1024
 
+        # ========== MemoryOS 路径解析 ==========
+        memory_cfg = self.raw_config.get("memory", {})
+        memory_data_raw = memory_cfg.get("data_dir", "data/memory")
+        # 支持绝对路径或相对于 data_dir
+        if Path(memory_data_raw).is_absolute():
+            self.memory_data_dir = Path(memory_data_raw)
+        else:
+            self.memory_data_dir = self.data_dir / memory_data_raw
+
+        # 固定子目录
+        self.memory_index_dir = self.memory_data_dir / "index"
+        self.memory_governance_dir = self.memory_data_dir / "governance"
+        # 索引数据库路径
+        index_db_name = memory_cfg.get("index_db", "fts5.db")
+        self.memory_index_db = self.memory_index_dir / index_db_name
+
+        # 检索参数（保留供后续使用）
+        retrieval_cfg = memory_cfg.get("retrieval", {})
+        self.memory_alpha = retrieval_cfg.get("alpha", 0.65)
+        self.memory_decay_coefficient = retrieval_cfg.get("decay_coefficient", 0.05)
+
+        # 治理参数
+        governance_cfg = memory_cfg.get("governance", {})
+        self.memory_review_timeout_days = governance_cfg.get("review_timeout_days", 7)
+
     def _resolve_path(self, path_str: str, base: Path) -> Path:
         """将路径字符串解析为 Path 对象，支持绝对路径和相对路径"""
         p = Path(path_str)
@@ -90,6 +115,51 @@ class AppConfig:
                 self.mcp_config_path = fallback_base / "mcp_config.json"
                 # 再次创建
                 for d2 in [self.data_dir, self.uploads_dir, self.cache_dir, self.logs_dir, self.temp_dir, self.skills_dir]:
+                    d2.mkdir(parents=True, exist_ok=True)
+                break
+
+        # ========== MemoryOS 目录创建 ==========
+        # 定义 MemoryOS 所有子目录（按 ADR-009 §2）
+        memory_subdirs = [
+            self.memory_data_dir,
+            self.memory_data_dir / "identity",
+            self.memory_data_dir / "episodic",
+            self.memory_data_dir / "semantic",
+            self.memory_data_dir / "procedural",
+            self.memory_governance_dir,
+            self.memory_governance_dir / "needs_review",
+            self.memory_governance_dir / "rejected",
+            self.memory_governance_dir / "conflicts",
+            self.memory_governance_dir / "auto_actions",
+            self.memory_governance_dir / "index_rebuild_log",
+            self.memory_index_dir,
+        ]
+        for d in memory_subdirs:
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                # 如果 memory_data_dir 权限不足，尝试 fallback 到应用 data_dir 下的 memory
+                fallback_memory = self.data_dir / "memory"
+                # 重新设定 memory_data_dir 为 fallback
+                self.memory_data_dir = fallback_memory
+                self.memory_index_dir = fallback_memory / "index"
+                self.memory_governance_dir = fallback_memory / "governance"
+                self.memory_index_db = self.memory_index_dir / "fts5.db"
+                # 重新创建 fallback 子目录
+                for d2 in [
+                    fallback_memory,
+                    fallback_memory / "identity",
+                    fallback_memory / "episodic",
+                    fallback_memory / "semantic",
+                    fallback_memory / "procedural",
+                    fallback_memory / "governance",
+                    fallback_memory / "governance/needs_review",
+                    fallback_memory / "governance/rejected",
+                    fallback_memory / "governance/conflicts",
+                    fallback_memory / "governance/auto_actions",
+                    fallback_memory / "governance/index_rebuild_log",
+                    fallback_memory / "index",
+                ]:
                     d2.mkdir(parents=True, exist_ok=True)
                 break
 
