@@ -50,7 +50,8 @@ LumNeo 不是又一个 AI 聊天客户端，而是在探索一种新的 AI 工�
 - Digital Life 探索具有持续身份、经验和成长能力的 AI 形态
 - Hardware OS 让 AI 能够连接真实世界
 
-让 AI 从一次性的助手，成长为长期协作的工程伙伴。
+> 让 AI 从一次性的助手，成长为长期协作的工程伙伴。
+
 
 ---
 
@@ -228,6 +229,10 @@ LumNeo 的演进路线：
 | Phase 2+ | Digital Life | 让 AI 形成持续身份、经验积累和长期协作能力 | 🌱 探索 |
 | Phase 3 | v3.x | Hardware OS，让 AI 连接真实设备 | 🔜 规划 |
 
+
+
+<img src="screenshots/ARCHITECTURE.png"  alt="LumNeo Architecture">
+
 ---
 
 # Phase 1 — Agent Runtime
@@ -280,53 +285,6 @@ LumNeo 的演进路线：
 - 编译烧录
 - 设备状态理解
 - 硬件开发辅助
-
-
----
-
-# 🏗️ 架构
-
-```
-                  LumNeo
-
-                    |
-                    |
-
-              AI Agent Layer
-
-                    |
-                    |
-
-        -------------------------
-
-                MCP Runtime
-                Skill System
-                Tool Engine
-
-        -------------------------
-
-                    |
-
-          Project Context Layer
-
-                    |
-
-                 Memory OS
-
-                    |
-
-            Digital Life Layer
-
-                    |
-
-             Hardware Runtime
-
-                    |
-
-        Physical World Interface
-
-```
-
 
 ---
 
@@ -538,3 +496,10 @@ LumNeo 正在探索：
 
 
 **LumNeo — Building the AI-native engineering workspace.**
+
+
+## ️🖼️ 界面预览
+
+<img src="screenshots/p1.png" alt="主界面">
+
+---
