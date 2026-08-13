@@ -235,9 +235,7 @@ LumNeo 的演进路线：
 
 ---
 
-# Phase 1 — Agent Runtime
-
-当前版本：
+# Phase 1 — Agent Runtime （当前版本）
 
 ✅ MCP 支持  
 ✅ Skill 系统  
