@@ -1,4 +1,4 @@
-# LumNeo — AI Agent Runtime for Engineering Workflows
+# LumNeo — AI Engineering OS
 
 ![Vue 3](https://img.shields.io/badge/vue%203-%2335495e.svg?style=flat&logo=vuedotjs&logoColor=%234FC08D)
 ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=flat&logo=vite&logoColor=white)
@@ -13,29 +13,33 @@
 > **Build AI that builds hardware.**  
 > **让 AI 不只是聊天，而是真正参与工程创造。**
 
-LumNeo 是一个开源的 **AI Agent Runtime（智能体运行环境）**。
+它从 AI Agent Runtime 开始，
+逐步向 Memory OS 和 Hardware OS 演进，
+探索一种具有持续记忆、身份与成长能力的 **Digital Life（数字生命）**。
 
-它不是又一个 AI 聊天客户端，而是在探索下一代 AI 工作方式：
+LumNeo 不是又一个 AI 聊天客户端，而是在探索一种新的 AI 工作方式：
+
 
 - AI 可以使用真实工具
 - AI 可以执行复杂工作流
 - AI 可以理解项目上下文
+- AI 可以持续积累经验
 - AI 可以连接现实世界设备
 
 当前版本专注于打造：
 
-> **一个开放、可扩展、本地优先的 AI Agent 工作台。**
+> **一个开放、可扩展、本地优先的 AI Agent Runtime。**
 
 未来 LumNeo 将逐步演化：
 
 ```
-Agent Runtime
+ Agent Runtime
       ↓
-Memory OS
+   Memory OS
       ↓
-Digital Life
+ Digital Life
       ↓
-Hardware OS
+  Hardware OS
 ```
 
 
