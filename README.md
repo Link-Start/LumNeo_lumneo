@@ -13,11 +13,9 @@
 > **Build AI that builds.**  
 > **让 AI 不只是聊天，而是真正参与创造。**
 
-LumNeo 是一个面向工程领域的 AI Agent Runtime。
+LumNeo 目前是一个面向工程领域的 AI Agent Runtime。
 
-它从 AI Agent Runtime 开始，
-逐步向 Skill、Memory OS 和 Hardware OS 演进，
-探索一种让 AI 能够使用工具、积累经验，并参与长期工程协作的新型工作方式。
+它以 AI Agent Runtime 为基础，正在构建 Memory OS 与 Hardware OS 两个核心能力层，探索下一代 AI 工程系统。
 
 LumNeo 不是又一个 AI 聊天客户端，而是在探索下一代 AI 工作方式：
 
@@ -37,18 +35,27 @@ LumNeo 让 AI Agent 从单次任务执行，逐步演化为具备工具、技能
 未来 LumNeo 将逐步演化：
 
 ```
-Agent Runtime
-      ↓
-Skill & Capability Layer
-      ↓
-Memory OS
-      ↓
-Digital Life
-      ↓
-Hardware OS
-      ↓
-───────────────
-Physical World
+           LumNeo AI Engineering OS
+
+
+                 Agent Runtime
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+ Skill & Capability Layer      Tool / MCP Runtime
+          │                         │
+          └────────────┬────────────┘
+                       │
+              ┌────────┴────────┐
+              │                 │
+          Memory OS          Hardware OS
+              │                 │
+              │                 │
+       Digital Life       Engineering Reality
+              │                 │
+              └────────┬────────┘
+                       │
+                Physical World
 ```
 
 其中：
@@ -134,7 +141,7 @@ LumNeo 基于 Model Context Protocol（MCP）构建。
 三种 MCP 通信方式。  
 
 未来，MCP 将继续作为 LumNeo 连接外部能力、Skill 生态和工程系统的重要基础能力层。 
- 
+
 ---
 
 ## 🧩 Skill 系统：让 AI 拥有专业能力
@@ -280,21 +287,21 @@ LumNeo 的演进路线：
 | 阶段 | 版本 | 目标 | 状态 |
 |---|---|---|---|
 | Phase 1 | v1.x | Agent Runtime，让 AI 能够行动 | ✅ 当前 |
-| Phase 2 | v2.x | Memory OS，让 AI 能够记忆项目经验 | 🚧 规划 |
-| Long-term Vision | Digital Life | 让 AI 形成持续身份、经验积累和长期协作能力 | 🌱 探索 |
-| Phase 3 | v3.x | Hardware OS，让 AI 连接真实设备 | 🔜 规划 |
+| Phase 2 | v2.x | Memory OS，让 AI 能够记忆和积累经验 | 🚧 开发中 |
+| Long-term Vision | Digital Life | 探索持续身份和成长能力 | 🌱 探索 |
+| Phase 3 | v3.x | Hardware OS，让 AI 连接工程设备 | 🚧 开发中 |
 
 
-## 🏗️ LumNeo Architecture
+## 🏗️ 架构
 
 <img src="screenshots/ARCHITECTURE.png"  alt="LumNeo Architecture">
 
 ---
 
-> 当前 LumNeo 仍处于早期阶段。
-> 现阶段重点是验证 AI Agent Runtime 的基础能力，
-> 包括 MCP、Skill、工具调用和本地工作流。
-> Memory OS 与 Hardware OS 将在后续版本逐步探索。
+> 当前 LumNeo 仍处于早期阶段。  
+> 现阶段重点是验证 AI Agent Runtime 的基础能力。  
+> 包括 MCP、Skill、工具调用和本地工作流。  
+> Memory OS 与 Hardware OS 已进入开发阶段。  
 
 # Phase 1 — Agent Runtime （当前版本）
 
@@ -313,13 +320,13 @@ LumNeo 的演进路线：
 
 ---
 
-# Phase 2 — Memory OS（未来）
+# Phase 2 — Memory OS（核心研发中）
 
 目标：
 
-让 AI 不再每次从零开始，而是能够理解长期上下文、积累工程经验，并逐步形成持续成长的能力基础。
+让 AI 不再每次从零开始，而是能够理解长期上下文、积累工程经验，并形成持续协作能力。
 
-Memory OS 将成为 LumNeo 从 AI Agent Runtime 走向 Digital Life 的核心认知层。
+Memory OS 将成为 LumNeo 的认知基础层。
 
 包括：
 
@@ -334,9 +341,11 @@ Memory OS 将成为 LumNeo 从 AI Agent Runtime 走向 Digital Life 的核心认
 
 ---
 
-# Phase 3 — Hardware OS（未来）
+# Phase 3 — Hardware OS（并行研发）
 
-目标：让 AI 参与真实硬件开发流程。
+目标：
+
+让 AI Agent 从软件环境进入真实工程环境。
 
 包括：
 
@@ -476,7 +485,7 @@ build.bat
     },
     "hardware-serial": {
       "command": "python",
-      "args": ["-m", "hardware_mcp", "--port", "COM3"]
+      "args": ["-m", "hardware_mcp"]
     }
   }
 }
