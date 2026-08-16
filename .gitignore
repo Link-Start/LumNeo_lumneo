@@ -20,22 +20,21 @@ backend/modules/__pycache__
 backend/error-log
 backend/token.json
 
-frontend/node_modules
-frontend/dist
-frontend/dist-ssr
-frontend/package-lock.json
-frontend/auto-imports.d.ts
-frontend/components.d.ts
-frontend/stats.html
-frontend/package-lock.json
+apps/desktop/node_modules
+apps/desktop/dist
+apps/desktop/dist-ssr
+apps/desktop/package-lock.json
+apps/desktop/auto-imports.d.ts
+apps/desktop/components.d.ts
+apps/desktop/stats.html
+apps/desktop/package-lock.json
 *.local
 
 mcp_config.json
 *.spec
 
 # Editor directories and files
-frontend/.vscode/*
-!.vscode/extensions.json
+.vscode
 .idea
 .DS_Store
 *.suo
