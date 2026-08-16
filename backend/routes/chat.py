@@ -47,7 +47,7 @@ class StrategyParams(BaseModel):
     blueprint_mode: bool = Field(default=False, description="蓝图模式")
     approval_mode: bool = Field(default=True, description="审批模式")
     auto_decision: bool = Field(default=False, description="自主决策（低风险免审批）")
-    max_iterations: int = Field(default=10, ge=1, le=100, description="最大迭代轮次")
+    max_iterations: int = Field(default=10, ge=1, le=500, description="最大迭代轮次")
     max_parallel: int = Field(default=5, ge=1, le=20, description="最大并行数")
     tool_timeout: int = Field(default=30, ge=5, le=600, description="工具超时（秒）")
     retry_count: int = Field(default=2, ge=0, le=10, description="自动重试次数")

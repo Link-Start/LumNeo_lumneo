@@ -169,7 +169,7 @@ import { NForm, NFormItem, NInput, NModal, NDivider, NTag, NFlex, NCheckboxGroup
   NCheckbox, NText, NAvatar, NButton, NUpload, NTooltip, useMessage, type UploadCustomRequestOptions } from 'naive-ui'
 import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { Add } from '@vicons/ionicons5'
-import mSvg from '@/components/MSvg.vue'
+import mSvg from '@/components/mSvg.vue'
 import { useProfileStore } from '@/stores/profiles'
 import { useToolStore } from '@/stores/tools'
 import { SkillItem, useSkillStore } from '@/stores/skills'

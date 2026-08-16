@@ -77,7 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { NModal, NTag, NButton, NSpin } from 'naive-ui'
-import MSvg from '@/components/MSvg.vue'
+import MSvg from '@/components/mSvg.vue'
 import { formatDuration, copyToClipboard } from '@/utils/common'
 import { useToolStore } from '@/stores/tools'
 

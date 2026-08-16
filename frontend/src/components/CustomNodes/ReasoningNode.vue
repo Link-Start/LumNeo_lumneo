@@ -28,7 +28,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import MSvg from '@/components/MSvg.vue'
+import MSvg from '@/components/mSvg.vue'
 import MarkdownRender from 'markstream-vue'
 
 const props = defineProps<{

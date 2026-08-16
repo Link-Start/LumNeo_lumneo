@@ -271,7 +271,7 @@ import { useCollaborationStore } from '@/stores/collaboration'
 
 import SettingsDrawer from '@/components/SettingsDrawer/index.vue'
 import Introduction from '@/components/Introduction.vue'
-import mSvg from '@/components/MSvg.vue'
+import mSvg from '@/components/mSvg.vue'
 import MessageList from '@/components/MessageList.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import ProfilePanel from '@/components/ProfilePanel.vue'

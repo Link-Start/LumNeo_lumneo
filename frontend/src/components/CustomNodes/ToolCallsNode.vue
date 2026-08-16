@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import MSvg from '@/components/MSvg.vue'
+import MSvg from '@/components/mSvg.vue'
 import ToolCallDetail from './ToolCallDetail.vue'
 import { useToolStore } from '@/stores/tools'
 

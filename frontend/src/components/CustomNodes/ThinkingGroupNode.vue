@@ -50,7 +50,7 @@
 import { ref, computed } from 'vue'
 import ReasoningNode from '@/components/CustomNodes/ReasoningNode.vue'
 import ToolCallsNode from '@/components/CustomNodes/ToolCallsNode.vue'
-import MSvg from '@/components/MSvg.vue'
+import MSvg from '@/components/mSvg.vue'
 
 const props = defineProps<{
   items: string

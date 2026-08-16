@@ -75,7 +75,7 @@ import { Add, CreateOutline, TrashOutline, BookOutline } from '@vicons/ionicons5
 import { useConfigStore } from '@/stores/config'
 import EditProfileModal from '@/components/Modals/EditProfileModal.vue'
 import EditSkillModal from '@/components/Modals/EditSkillModal.vue'
-import MSvg from '@/components/MSvg.vue'
+import MSvg from '@/components/mSvg.vue'
 import { useChatStore } from '@/stores/chat'
 import { useProfileStore } from '@/stores/profiles'
 
