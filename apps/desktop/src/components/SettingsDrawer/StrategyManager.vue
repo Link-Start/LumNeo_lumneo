@@ -160,7 +160,10 @@ const iterationOptions = [
     { label: '15 轮', value: 15 },
     { label: '20 轮', value: 20 },
     { label: '30 轮', value: 30 },
-    { label: '50 轮', value: 50 }
+    { label: '50 轮', value: 50 },
+    { label: '100 轮', value: 100 },
+    { label: '200 轮', value: 200 },
+    { label: '500 轮', value: 500 }
 ]
 
 const parallelOptions = [
