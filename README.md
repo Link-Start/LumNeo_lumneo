@@ -460,7 +460,7 @@ pip install -r requirements.txt
 ## 安装前端
 
 ```bash
-cd frontend
+cd apps/desktop
 
 npm install
 ```
@@ -470,7 +470,7 @@ npm install
 
 ```bash
 # 终端 1：启动前端开发服务
-cd frontend && npm run dev
+cd apps/desktop && npm run dev
 
 # 终端 2：启动后端服务
 conda activate lumneo
