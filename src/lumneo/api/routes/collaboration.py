@@ -1,4 +1,4 @@
-# api/routes/collaboration.py
+# src/lumneo/api/routes/collaboration.py
 # 模型协作调度预览路由（薄层）。纯策略计算，不落库。
 from fastapi import APIRouter, Request
 from typing import Any, Dict

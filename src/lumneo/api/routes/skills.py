@@ -1,5 +1,5 @@
-# api/routes/skills.py
-# 技能管理路由（薄层）：列表 / 更新 / 删除 / 上传 / 批量选择。
+# src/lumneo/api/routes/skills.py
+# 技能管理路由：列表 / 更新 / 删除 / 上传 / 批量选择
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form

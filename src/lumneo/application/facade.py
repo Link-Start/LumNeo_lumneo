@@ -1,5 +1,5 @@
-# application/facade.py
-# 应用层管理门面（资源/管理域的统一对外边界，§46-47）。
+# src/lumneo/application/facade.py
+# 应用层管理门面（资源/管理域的统一对外边界）。
 #
 # 与 ConversationFacade（对话域）并列。API 路由只通过本门面访问管理域；内部编排
 # 各 Repository 端口（聊天/消息/画像/模型/技能/工具调用/计划）、文件存储适配器

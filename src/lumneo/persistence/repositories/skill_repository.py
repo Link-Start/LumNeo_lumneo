@@ -1,7 +1,7 @@
-# persistence/repositories/skill_repository.py
+# src/lumneo/persistence/repositories/skill_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 import json
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from lumneo.conversation.ports.skill_repository import SkillRepository
 from lumneo.persistence.database import Database

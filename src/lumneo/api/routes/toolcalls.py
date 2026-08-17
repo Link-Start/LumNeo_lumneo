@@ -1,5 +1,5 @@
-# api/routes/toolcalls.py
-# 工具调用记录管理路由（薄层）：查询 / 批量 / 删除 / 确认。
+# src/lumneo/api/routes/toolcalls.py
+# 工具调用记录管理路由：查询 / 批量 / 删除 / 确认
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import BatchRequest, ConfirmRequest

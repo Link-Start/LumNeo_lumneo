@@ -1,4 +1,4 @@
-# persistence/repositories/profile_repository.py
+# src/lumneo/persistence/repositories/profile_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 import json
 from typing import List, Optional

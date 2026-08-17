@@ -1,4 +1,4 @@
-# persistence/models/message.py
+# src/lumneo/persistence/models/message.py
 # Persistence Model —— 纯持久化数据结构（§21）。无数据库行为。
 import json
 from dataclasses import dataclass, field

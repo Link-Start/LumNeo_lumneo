@@ -1,4 +1,4 @@
-# persistence/models/tool_call.py
+# src/lumneo/persistence/models/tool_call.py
 # Persistence Model —— 工具调用记录（tool_calls 表）持久化模型（§21）。无数据库行为。
 import json
 from dataclasses import dataclass, field

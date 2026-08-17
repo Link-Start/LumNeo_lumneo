@@ -1,4 +1,4 @@
-# runtime/context/collaboration.py
+# src/lumneo/runtime/context/collaboration.py
 # 模型协作调度策略（原 backend/utils/collaboration_strategy.py）。
 #
 # 根据消息特征 / 配置条件选择主/副模型。纯逻辑，不依赖数据库或 I/O。

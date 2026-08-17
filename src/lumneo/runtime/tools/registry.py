@@ -1,4 +1,4 @@
-# runtime/tools/registry.py
+# src/lumneo/runtime/tools/registry.py
 # 工具注册表
 # 负责从 tools_config.yaml 加载工具定义并动态装载实现函数。工具实现位于
 # runtime/tools/system/* 与 MCP（runtime/mcp）。本模块只做“定义 + 装载”，

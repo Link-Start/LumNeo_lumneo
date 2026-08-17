@@ -1,4 +1,4 @@
-# runtime/llm/stream_parser.py
+# src/lumneo/runtime/llm/stream_parser.py
 # 流式响应解析器（原 backend/services/llm/stream_parser.py）。
 #
 # 负责解析 OpenAI 兼容的流式 chunk，提取思考过程、正文与工具调用，并通过注入的

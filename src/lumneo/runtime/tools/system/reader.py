@@ -1,4 +1,4 @@
-# runtime/tools/system/reader.py
+# src/lumneo/runtime/tools/system/reader.py
 # 文件读取工具（原 backend/system_tools/reader.py）。
 #
 # 路径校验统一走 Infrastructure 的 path_guard（§39 / §60），不直接散落 os/open 越权逻辑。

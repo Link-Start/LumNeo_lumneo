@@ -1,4 +1,4 @@
-# runtime/tools/system/creator.py
+# src/lumneo/runtime/tools/system/creator.py
 # 项目目录树创建工具（原 backend/system_tools/creator.py）。
 #
 # 路径校验统一走 Infrastructure 的 path_guard（§39 / §60）。

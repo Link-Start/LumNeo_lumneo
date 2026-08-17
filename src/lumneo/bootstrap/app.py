@@ -1,4 +1,4 @@
-# bootstrap/app.py
+# src/lumneo/bootstrap/app.py
 # FastAPI 应用工厂（应用装配的唯一入口）。
 #
 # 职责：

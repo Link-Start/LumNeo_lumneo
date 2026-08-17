@@ -1,4 +1,4 @@
-# kernel/events/__init__.py
+# src/lumneo/kernel/events/__init__.py
 # Kernel —— 系统级 Event Contract 与极简事件总线（系统原语）。
 #
 # 根据《LumNeo V2 架构规范》：

@@ -1,4 +1,4 @@
-# conversation/ports/decision_repository.py
+# src/lumneo/conversation/ports/decision_repository.py
 # Repository Port（领域拥有，§25）。
 from abc import ABC, abstractmethod
 from typing import List, Optional

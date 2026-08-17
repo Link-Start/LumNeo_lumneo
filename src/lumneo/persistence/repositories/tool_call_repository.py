@@ -1,4 +1,4 @@
-# persistence/repositories/tool_call_repository.py
+# src/lumneo/persistence/repositories/tool_call_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 import json
 import os
@@ -9,7 +9,6 @@ from lumneo.persistence.database import Database
 from lumneo.persistence.models.tool_call import ToolCallModel
 from lumneo.persistence.repositories._base import BaseRepository
 from lumneo.kernel.config.app_config import config
-from lumneo.kernel.common.logger import logger
 
 
 class SQLToolCallRepository(ToolCallRepository, BaseRepository):

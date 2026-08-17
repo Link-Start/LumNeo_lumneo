@@ -1,4 +1,4 @@
-# runtime/tools/system/executor.py
+# src/lumneo/runtime/tools/system/executor.py
 # 脚本执行器 —— 安全执行技能库内的脚本（原 backend/system_tools/executor.py）。
 #
 # 安全策略：

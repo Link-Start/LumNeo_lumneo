@@ -1,5 +1,5 @@
-# conversation/ports/profile_repository.py
-# Repository Port（领域拥有，§25）。
+# src/lumneo/conversation/ports/profile_repository.py
+# Repository Port（领域拥有）。
 from abc import ABC, abstractmethod
 from typing import List, Optional
 

@@ -1,4 +1,4 @@
-# runtime/tools/execution/suggestion.py
+# src/lumneo/runtime/tools/execution/suggestion.py
 # 工具失败建议生成器（原 backend/services/tool_execution/suggestion.py）。
 class SuggestionGenerator:
     @staticmethod

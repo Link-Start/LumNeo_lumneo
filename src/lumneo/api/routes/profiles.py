@@ -1,5 +1,5 @@
-# api/routes/profiles.py
-# 角色（画像）管理路由（薄层）。
+# src/lumneo/api/routes/profiles.py
+# 角色（画像）管理路由
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import ProfileCreate

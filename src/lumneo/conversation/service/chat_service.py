@@ -1,5 +1,4 @@
-# conversation/service/chat_service.py
-# 对话服务（原 backend/routes/chat.py 的核心编排逻辑）。
+# src/lumneo/conversation/service/chat_service.py
 #
 # 负责：模型协作策略选择、System Prompt 与技能注入、工具按 Profile 筛选、消息清理、
 # 按模型配置构建 LLMProvider + LLMOrchestrator、流式响应与故障回退。

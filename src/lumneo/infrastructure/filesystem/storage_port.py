@@ -1,10 +1,9 @@
-# infrastructure/filesystem/storage_port.py
-# Storage Port（基础设施抽象，§37 / §39）。
+# src/lumneo/infrastructure/filesystem/storage_port.py
+# Storage Port（基础设施抽象）
 #
 # 领域 / 工具通过此抽象访问本地文件系统，不直接依赖 pathlib / os 的具体实现，
 # 未来可替换为 S3 / 对象存储而不影响上层。
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import List, Optional
 
 

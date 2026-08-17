@@ -1,4 +1,4 @@
-# persistence/database.py
+# src/lumneo/persistence/database.py
 # Persistence —— 数据库基础设施（Database Infrastructure）
 #
 # 根据《LumNeo V2 架构规范》§30 / §32：
@@ -9,11 +9,9 @@
 # - 本模块只依赖 Kernel（config / logger），禁止反向依赖任何业务模块。
 import os
 import aiosqlite
-from pathlib import Path
 from typing import Optional
 
 from lumneo.kernel.config.app_config import config
-from lumneo.kernel.common.logger import logger
 
 
 class Database:

@@ -1,8 +1,7 @@
-# kernel/common/ids.py
+# src/lumneo/kernel/common/ids.py
 # Kernel / Common —— ID 与时钟原语（系统级共享能力）。
 import uuid
 import datetime
-from typing import Optional
 
 
 def new_id() -> str:

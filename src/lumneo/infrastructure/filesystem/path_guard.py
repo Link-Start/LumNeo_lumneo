@@ -1,5 +1,5 @@
-# infrastructure/filesystem/path_guard.py
-# 路径安全边界（§39 / §60）。
+# src/lumneo/infrastructure/filesystem/path_guard.py
+# 路径安全边界
 #
 # 领域（runtime/tools）不得直接做 I/O，但路径“校验”属于纯函数式安全原语，
 # 放在基础设施层统一提供。任何需要落盘的工具都必须先经过 validate_path，

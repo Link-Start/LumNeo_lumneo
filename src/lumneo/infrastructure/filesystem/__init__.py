@@ -1,4 +1,4 @@
-# infrastructure/filesystem/__init__.py
+# src/lumneo/infrastructure/filesystem/__init__.py
 from lumneo.infrastructure.filesystem.path_guard import (
     validate_path,
     default_allowed_dirs,

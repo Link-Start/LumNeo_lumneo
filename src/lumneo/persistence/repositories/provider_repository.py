@@ -1,6 +1,5 @@
-# persistence/repositories/provider_repository.py
+# src/lumneo/persistence/repositories/provider_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。对应原 models 表。
-import json
 import uuid
 from typing import List, Optional
 

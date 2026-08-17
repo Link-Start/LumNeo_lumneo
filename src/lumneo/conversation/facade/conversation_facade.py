@@ -1,4 +1,4 @@
-# conversation/facade/conversation_facade.py
+# src/lumneo/conversation/facade/conversation_facade.py
 # 对话领域对外的门面边界（§46-47）。
 #
 # API 层只通过本门面访问对话领域；领域内部的 Repository / Service 不直接暴露给外层。

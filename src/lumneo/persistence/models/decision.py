@@ -1,4 +1,4 @@
-# persistence/models/decision.py
+# src/lumneo/persistence/models/decision.py
 # Persistence Model —— 用户决策记录（user_decisions 表）持久化模型（§21）。无数据库行为。
 from dataclasses import dataclass
 from typing import Any, Optional

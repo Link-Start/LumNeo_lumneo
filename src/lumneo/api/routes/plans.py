@@ -1,5 +1,5 @@
-# api/routes/plans.py
-# 计划（Plan）更新路由（薄层）。
+# src/lumneo/api/routes/plans.py
+# 计划（Plan）更新路由
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import UpdatePlanRequest

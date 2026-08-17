@@ -1,5 +1,5 @@
-# infrastructure/network/http_client.py
-# Network Adapter（§37 / §38）。
+# src/lumneo/infrastructure/network/http_client.py
+# Network Adapter
 #
 # 对外部 HTTP 调用的统一封装。外部 SDK / 外部 API（如天气）通过它发起请求，
 # 避免把具体网络库散落到各业务模块。依赖 httpx（OpenAI SDK 已间接提供）。

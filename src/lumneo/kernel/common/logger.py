@@ -1,4 +1,4 @@
-# kernel/common/logger.py
+# src/lumneo/kernel/common/logger.py
 # Kernel / Common —— 全局日志原语（系统级共享能力）。
 #
 # 对应原 backend.bootstrap.py 的 _ensure_stdio() / setup_logging()。

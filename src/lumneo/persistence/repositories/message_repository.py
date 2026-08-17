@@ -1,16 +1,14 @@
-# persistence/repositories/message_repository.py
+# src/lumneo/persistence/repositories/message_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
-import asyncio
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from lumneo.conversation.ports.message_repository import MessageRepository
 from lumneo.persistence.database import Database
 from lumneo.persistence.models.message import MessageModel
 from lumneo.persistence.repositories._base import BaseRepository
 from lumneo.kernel.config.app_config import config
-from lumneo.kernel.common.logger import logger
 
 
 def _collect_tool_disk_files(meta_rows: List[Any]) -> List[str]:
