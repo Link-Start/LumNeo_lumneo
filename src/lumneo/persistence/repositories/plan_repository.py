@@ -1,4 +1,4 @@
-# persistence/repositories/plan_repository.py
+# src/lumneo/persistence/repositories/plan_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 import aiosqlite
 import json

@@ -1,4 +1,4 @@
-# runtime/tools/system/skill_lookup.py
+# src/lumneo/runtime/tools/system/skill_lookup.py
 # 技能路径查询的注入点（§60：工具不得直接访问数据库）。
 #
 # use_skill 工具在运行时根据 skill_id 查找技能根目录，但该查询属于持久化访问，

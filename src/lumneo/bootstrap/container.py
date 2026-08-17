@@ -1,4 +1,4 @@
-# bootstrap/container.py
+# src/lumneo/bootstrap/container.py
 # 组合根（Composition Root，§91-92）。
 #
 # 整个应用唯一允许“new”出具体实现并把依赖装配起来的地方。所有跨层依赖通过

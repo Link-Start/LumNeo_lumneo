@@ -1,4 +1,4 @@
-# runtime/tools/system/writer.py
+# src/lumneo/runtime/tools/system/writer.py
 # 文件写入工具（原 backend/system_tools/writer.py）。
 #
 # 路径校验统一走 Infrastructure 的 path_guard（§39 / §60）。

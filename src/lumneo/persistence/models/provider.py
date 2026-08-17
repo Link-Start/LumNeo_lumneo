@@ -1,4 +1,4 @@
-# persistence/models/provider.py
+# src/lumneo/persistence/models/provider.py
 # Persistence Model —— LLM Provider 配置（models 表）持久化模型（§21）。无数据库行为。
 #
 # 注意：表名为 "models"，为避免与 persistence/models/ 包名冲突，这里命名为 ProviderModel，

@@ -1,4 +1,4 @@
-# runtime/mcp/mcp_client.py
+# src/lumneo/runtime/mcp/mcp_client.py
 # MCP 客户端管理器（原 backend/mcp_client.py）。
 #
 # 管理多个 MCP 服务器连接（stdio / SSE / Streamable HTTP），并对外暴露

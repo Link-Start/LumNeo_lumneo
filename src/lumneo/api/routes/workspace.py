@@ -1,5 +1,5 @@
-# api/routes/workspace.py
-# 工作区设置 / 查询路由（薄层）。工作区路径是运行时全局状态（lumneo.workspace_path）。
+# src/lumneo/api/routes/workspace.py
+# 工作区设置 / 查询路由,工作区路径是运行时全局状态（lumneo.workspace_path）
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import WorkspaceRequest

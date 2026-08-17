@@ -1,4 +1,4 @@
-# persistence/repositories/__init__.py
+# src/lumneo/persistence/repositories/__init__.py
 # 汇总所有 SQLite Repository 实现（§24 / §79）。
 # 领域层只依赖 conversation/ports 中的 ABC；此处提供可直接注入的具体实现。
 from lumneo.persistence.repositories.conversation_repository import SQLConversationRepository

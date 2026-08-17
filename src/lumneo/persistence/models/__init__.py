@@ -1,4 +1,4 @@
-# persistence/models/__init__.py
+# src/lumneo/persistence/models/__init__.py
 # 统一导出所有 Persistence Model（§21 纯数据映射，无数据库行为）。
 from lumneo.persistence.models.chat import ChatModel
 from lumneo.persistence.models.message import MessageModel

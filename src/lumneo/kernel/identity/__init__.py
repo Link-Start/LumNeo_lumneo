@@ -1,4 +1,4 @@
-# kernel/identity/__init__.py
+# src/lumneo/kernel/identity/__init__.py
 # Kernel —— 身份原语（系统级共享类型）。
 #
 # 提供 User / System / Device / Scope(Tenant) 等身份抽象，供需要身份语义的模块使用。

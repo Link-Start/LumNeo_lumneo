@@ -1,5 +1,5 @@
-# infrastructure/providers/openai_provider.py
-# OpenAI Provider Adapter（§37 / §58）。
+# src/lumneo/infrastructure/providers/openai_provider.py
+# OpenAI Provider Adapter
 #
 # LLMProvider 的 OpenAI 实现。封装 AsyncOpenAI 客户端与请求参数构造，
 # 把“具体 SDK 散落在 Agent 代码里”收敛到基础设施层。

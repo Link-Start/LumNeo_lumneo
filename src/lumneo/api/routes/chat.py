@@ -1,10 +1,9 @@
-# api/routes/chat.py
+# src/lumneo/api/routes/chat.py
 # 聊天 API 路由（薄层）。
 #
-# 仅负责 DTO 映射与协议转换，所有业务编排通过 conversation.facade 完成（§46-47）。
+# 仅负责 DTO 映射与协议转换，所有业务编排通过 conversation.facade 完成。
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from typing import List, Dict, Optional
 
 from lumneo.api.schemas.chat import ChatRequest, DecisionUpdate
 from lumneo.conversation.facade.conversation_facade import ConversationFacade

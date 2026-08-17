@@ -1,4 +1,4 @@
-# lumneo/application
+# lumneo/application/__init__.py
 # 应用层：聚合“管理/资源”域的统一对外门面（ApplicationFacade）。
 #
 # 与 conversation/facade（对话域）并列。API 路由通过 request.app.state.resource_facade

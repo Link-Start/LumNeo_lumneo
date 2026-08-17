@@ -1,5 +1,5 @@
-# api/routes/chats.py
-# 聊天与消息管理路由（薄层，业务逻辑经 application.facade 完成，§46-47）。
+# src/lumneo/api/routes/chats.py
+# 聊天与消息管理路由（业务逻辑经 application.facade 完成）
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import UpdateChatTitle, AddMessageRequest, UpdateMessageRequest

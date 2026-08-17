@@ -1,4 +1,4 @@
-# kernel/lifecycle/__init__.py
+# src/lumneo/kernel/lifecycle/__init__.py
 # Kernel —— 生命周期原语（系统级共享类型）。
 #
 # 提供应用 / 组件生命周期状态定义与极简状态机，供 Bootstrap 与 Runtime 使用。

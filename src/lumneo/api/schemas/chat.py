@@ -1,5 +1,5 @@
-# api/schemas/chat.py
-# 聊天相关接口的 Pydantic 数据契约（原 backend/routes/chat.py 中的模型定义）。
+# src/lumneo/api/schemas/chat.py
+# 聊天相关接口的 Pydantic 数据契约
 from typing import List, Dict, Optional, Literal, Any
 from pydantic import BaseModel, Field
 

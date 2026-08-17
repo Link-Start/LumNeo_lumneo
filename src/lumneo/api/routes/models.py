@@ -1,5 +1,5 @@
-# api/routes/models.py
-# 模型配置（ProviderModel）管理与远程模型探测路由（薄层）。
+# src/lumneo/api/routes/models.py
+# 模型配置（ProviderModel）管理与远程模型探测路由
 from fastapi import APIRouter, HTTPException, Request
 
 from lumneo.api.schemas.resources import ModelConfigBase, UpdateModelRequest, ModelQuery

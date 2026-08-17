@@ -1,4 +1,4 @@
-# runtime/tools/system/lister.py
+# src/lumneo/runtime/tools/system/lister.py
 # 文件列表工具（原 backend/system_tools/lister.py）。
 #
 # 路径校验统一走 Infrastructure 的 path_guard（§39 / §60）。

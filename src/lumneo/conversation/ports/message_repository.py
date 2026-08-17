@@ -1,7 +1,7 @@
-# conversation/ports/message_repository.py
-# Repository Port（领域拥有，§25）。
+# src/lumneo/conversation/ports/message_repository.py
+# Repository Port（领域拥有）。
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from lumneo.persistence.models.message import MessageModel
 

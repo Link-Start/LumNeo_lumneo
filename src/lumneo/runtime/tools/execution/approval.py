@@ -1,4 +1,4 @@
-# runtime/tools/execution/approval.py
+# src/lumneo/runtime/tools/execution/approval.py
 # 工具审批与用户决策轮询（原 backend/services/tool_execution/approval.py）。
 #
 # 注意：审批逻辑只通过注入的 Repository Port 轮询状态，不直接接触数据库（§60）。

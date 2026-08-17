@@ -1,10 +1,10 @@
-# kernel/common/result.py
+# src/lumneo/kernel/common/result.py
 # Kernel / Common —— 通用 Result 原语（系统级共享类型）。
 #
 # 提供统一的成功/失败结果容器，供 Application / Domain / Infrastructure 边界之间
 # 传递操作结果，避免使用零散的 dict 约定。
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar, Optional, Any
+from typing import Generic, TypeVar, Optional
 
 T = TypeVar("T")
 

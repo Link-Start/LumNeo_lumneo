@@ -1,4 +1,4 @@
-# kernel/common/util.py
+# src/lumneo/kernel/common/util.py
 # 通用工具函数（原 backend/utils/base.py 中的轻量纯函数）。
 #
 # 仅保留与具体业务无强耦合的辅助函数；路径校验已迁至 infrastructure.filesystem.path_guard，

@@ -1,4 +1,4 @@
-# runtime/context/prompt.py
+# src/lumneo/runtime/context/prompt.py
 # 上下文组装（原 backend/routes/chat.py 中的 System Prompt 拼装与消息清理逻辑）。
 #
 # 将“对话上下文如何组装”这一横切关注点从 API 路由中抽离，置于运行时上下文层。

@@ -1,5 +1,5 @@
-# api/routes/files.py
-# 文件上传 / 删除路由（薄层）。物理落盘经 ApplicationFacade → StoragePort。
+# src/lumneo/api/routes/files.py
+# 文件上传 / 删除路由。物理落盘经 ApplicationFacade → StoragePort
 from fastapi import APIRouter, Request, UploadFile, File
 
 from lumneo.application.facade import ApplicationFacade

@@ -1,5 +1,5 @@
-# api/schemas/resources.py
-# 管理/资源域接口的 Pydantic 数据契约（对应原 backend/routes 中各请求体模型）。
+# src/lumneo/api/schemas/resources.py
+# 管理/资源域接口的 Pydantic 数据契约
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field

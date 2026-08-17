@@ -1,11 +1,10 @@
-# infrastructure/filesystem/local_storage.py
-# Local File Storage Adapter（§37 / §38 / §39）。
+# src/lumneo/infrastructure/filesystem/local_storage.py
+# Local File Storage Adapter
 #
 # StoragePort 的本地磁盘实现。集中了所有“物理文件落盘 / 删除”操作，
 # 领域与工具只通过 StoragePort 抽象访问，不直接 open()/os.remove()。
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import List, Optional
 

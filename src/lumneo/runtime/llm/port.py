@@ -1,4 +1,4 @@
-# runtime/llm/port.py
+# src/lumneo/runtime/llm/port.py
 # LLM Provider Port（运行时契约，§58）。
 #
 # Runtime 的 Agent / Client 只依赖此抽象，不感知具体 LLM SDK。

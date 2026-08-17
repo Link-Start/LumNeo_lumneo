@@ -1,4 +1,4 @@
-# persistence/models/chat.py
+# src/lumneo/persistence/models/chat.py
 # Persistence Model —— 纯持久化数据结构 / ORM 映射（§21）。
 #
 # 根据规范：Persistence Model 只负责字段定义、类型声明、纯数据转换（to_dict/from_row），

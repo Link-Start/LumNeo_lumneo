@@ -1,4 +1,4 @@
-# persistence/unit_of_work.py
+# src/lumneo/persistence/unit_of_work.py
 # 工作单元（Unit of Work，§35）。
 #
 # 用于把“多个仓储操作”纳入同一个数据库连接与事务边界，
@@ -14,8 +14,7 @@
 #
 # 内部机制：UnitOfWork 打开一个连接并 bind() 到每个被请求的仓储，
 # 仓储的 _session() 会复用该连接且不提交/关闭（§33 / §34）。
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Optional, Type
+from typing import Dict, Optional, Type
 
 from lumneo.persistence.database import Database
 from lumneo.persistence.repositories._base import BaseRepository

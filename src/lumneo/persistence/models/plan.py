@@ -1,4 +1,4 @@
-# persistence/models/plan.py
+# src/lumneo/persistence/models/plan.py
 # Persistence Model —— 计划记录（plans 表）持久化模型（§21）。无数据库行为。
 import json
 from dataclasses import dataclass

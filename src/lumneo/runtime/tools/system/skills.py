@@ -1,4 +1,4 @@
-# runtime/tools/system/skills.py
+# src/lumneo/runtime/tools/system/skills.py
 # 技能读取工具（原 backend/system_tools/skills.py）。
 #
 # 根据 §60，工具不得直接依赖 Repository / DB。此处通过 skill_lookup 的注入点

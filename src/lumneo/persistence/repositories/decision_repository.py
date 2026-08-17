@@ -1,4 +1,4 @@
-# persistence/repositories/decision_repository.py
+# src/lumneo/persistence/repositories/decision_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 from typing import List, Optional
 

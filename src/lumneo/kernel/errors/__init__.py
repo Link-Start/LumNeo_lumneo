@@ -1,12 +1,11 @@
-# kernel/errors/__init__.py
+# src/lumneo/kernel/errors/__init__.py
 # Kernel —— 基础错误契约（系统级原语）
 #
-# 根据《LumNeo V2 Architecture & Dependency Governance Specification》：
-# - Kernel 只定义基础错误（§88），不承载业务逻辑。
+# - Kernel 只定义基础错误，不承载业务逻辑。
 # - 领域级错误（MemoryError / HardwareError / ConversationError）由各 OS 自行扩展，
 #   且不得落入 kernel/（除非确属全局系统级错误）。
 # - 基础设施错误（ConnectionError / SDKError / SerialError / DatabaseError）不得直接
-#   泄漏到 API（§89），应由基础设施 → 应用/领域错误 → API 错误映射 进行转换。
+#   泄漏到 API，应由基础设施 → 应用/领域错误 → API 错误映射 进行转换。
 from typing import Optional, Any
 
 

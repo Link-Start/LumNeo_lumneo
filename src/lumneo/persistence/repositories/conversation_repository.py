@@ -1,4 +1,4 @@
-# persistence/repositories/conversation_repository.py
+# src/lumneo/persistence/repositories/conversation_repository.py
 # Persistence —— Repository Implementation（§24 / §79）。
 #
 # 实现 conversation/ports 的 ConversationRepository。只负责数据库访问（CRUD / 查询），
@@ -15,7 +15,6 @@ from lumneo.persistence.database import Database
 from lumneo.persistence.models.chat import ChatModel
 from lumneo.persistence.repositories._base import BaseRepository
 from lumneo.kernel.config.app_config import config
-from lumneo.kernel.common.logger import logger
 
 
 def _extract_uploaded_paths(file_ref_json: Optional[str]) -> List[str]:

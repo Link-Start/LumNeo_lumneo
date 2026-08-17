@@ -1,4 +1,4 @@
-# runtime/agent/orchestrator.py
+# src/lumneo/runtime/agent/orchestrator.py
 # Agent 编排器
 #
 # 负责 LLM 流式调用 + 工具循环 + 蓝图计划 + 失败处理的“智能体主循环”。
@@ -11,7 +11,7 @@ import uuid
 from typing import List, Dict, AsyncGenerator, Optional, Any
 
 from lumneo.runtime.tools.registry import get_all_tools
-from lumneo.runtime.tools.execution.context import ToolExecutionContext, ToolResult
+from lumneo.runtime.tools.execution.context import ToolExecutionContext
 from lumneo.runtime.llm.port import LLMProvider
 from lumneo.runtime.llm.stream_parser import StreamParser, StreamState
 from lumneo.runtime.tools.execution.executor import ToolExecutor

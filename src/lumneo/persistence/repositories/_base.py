@@ -1,4 +1,4 @@
-# persistence/repositories/_base.py
+# src/lumneo/persistence/repositories/_base.py
 # Repository 基础设施：Session / Transaction 边界助手（§32 / §34）。
 #
 # 设计要点：

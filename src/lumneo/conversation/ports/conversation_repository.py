@@ -1,4 +1,4 @@
-# conversation/ports/conversation_repository.py
+# src/lumneo/conversation/ports/conversation_repository.py
 # Repository Port（由领域拥有，§25）。
 #
 # 根据规范：Domain/Application → Repository Port → Persistence Repository。

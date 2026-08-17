@@ -1,5 +1,5 @@
-# conversation/ports/provider_repository.py
-# Repository Port（领域拥有，§25）。对应原 models 表（LLM Provider 配置）。
+# src/lumneo/conversation/ports/provider_repository.py
+# Repository Port（领域拥有）。对应原 models 表（LLM Provider 配置）。
 from abc import ABC, abstractmethod
 from typing import List, Optional
 

@@ -1,4 +1,4 @@
-# runtime/tools/system/delete.py
+# src/lumneo/runtime/tools/system/delete.py
 # 文件删除工具（原 backend/system_tools/delete.py）。
 #
 # 路径校验统一走 Infrastructure 的 path_guard（§39 / §60）。
