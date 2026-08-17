@@ -3,8 +3,6 @@
 #
 # 整个应用唯一允许“new”出具体实现并把依赖装配起来的地方。所有跨层依赖通过
 # 构造函数注入（Constructor Injection）完成；模块内部不再自行实例化具体类。
-import os
-from pathlib import Path
 from typing import Optional
 
 from lumneo.kernel.config.app_config import config

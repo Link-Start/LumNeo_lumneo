@@ -1,5 +1,5 @@
 # runtime/agent/orchestrator.py
-# Agent 编排器（原 backend/services/orchestrator.py）。
+# Agent 编排器
 #
 # 负责 LLM 流式调用 + 工具循环 + 蓝图计划 + 失败处理的“智能体主循环”。
 # 它只依赖注入的 Port / 运行时组件，不直接 import 数据库或文件 I/O 模块（§60）。
@@ -215,7 +215,31 @@ class LLMOrchestrator:
                     if exec_task.done():
                         break
                     await asyncio.sleep(0.05)
-            results = exec_task.result()
+            try:
+                results = exec_task.result()
+            except Exception as e:
+                # 工具执行整体失败，将每个未执行的工具调用标记为失败
+                error_msg = f"工具执行异常: {str(e)[:200]}"
+                yield f"<!--tool_error:{error_msg}-->"
+                # 为每个待执行工具构造失败结果
+                results = []
+                for idx, tc in valid_calls.items():
+                    call_id = tc.get("id") or f"call_{uuid.uuid4().hex[:8]}"
+                    # 使用 ToolResult 构造失败信息（需导入 ToolResult）
+                    from lumneo.runtime.tools.execution.context import ToolResult
+                    failed_res = ToolResult(
+                        call_id=call_id,
+                        status="failed",
+                        error_message=error_msg,
+                        execution_time=0,
+                        tool_message_content=f"工具执行失败：{error_msg}"
+                    )
+                    results.append((idx, tc, failed_res))
+                # 记录日志 segment
+                self._merge_segment(segments, {
+                    "type": "tool_error",
+                    "content": error_msg
+                })
 
             # 处理每个工具结果
             for idx, tc, res in results:
@@ -241,7 +265,36 @@ class LLMOrchestrator:
                                 if approval_task.done():
                                     break
                                 await asyncio.sleep(0.05)
-                        res = approval_task.result()
+                        try:
+                            res = approval_task.result()
+                        except Exception as e:
+                            error_msg = f"审批后工具执行异常: {str(e)[:200]}"
+                            yield f"<!--tool_error:{error_msg}-->"
+                            # 构造失败结果
+                            from lumneo.runtime.tools.execution.context import ToolResult
+                            res = ToolResult(
+                                call_id=decision_id,
+                                status="failed",
+                                error_message=error_msg,
+                                execution_time=0,
+                                tool_message_content=f"工具执行失败：{error_msg}"
+                            )
+                            # 更新持久化状态（如果需要）
+                            await self.persister.repo.update_full(
+                                call_id=decision_id,
+                                arguments=res.approval_info.get("args") if hasattr(res, "approval_info") else {},
+                                result=error_msg,
+                                status="failed",
+                                execution_time=0,
+                                error_message=error_msg,
+                                meta_data={}
+                            )
+                            # 添加 tool 消息
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": decision_id,
+                                "content": res.tool_message_content
+                            })
                         context.skip_approval = False
                     else:
                         # 拒绝

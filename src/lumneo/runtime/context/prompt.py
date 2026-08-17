@@ -5,10 +5,10 @@
 # 只做字符串拼装与消息清洗，不触碰数据库 / 文件 I/O（§60）。
 import os
 import re
+import lumneo
 from typing import List, Dict, Optional
 
 from lumneo.kernel.config.app_config import config
-from lumneo import workspace_path
 from lumneo.kernel.common.util import get_current_time
 from lumneo.persistence.models.profile import ProfileModel
 from lumneo.persistence.models.skill import SkillModel
@@ -73,7 +73,7 @@ def build_system_prompt(
 ) -> str:
     """组装 System Prompt：注入上传目录、工作区、时间、角色人设与可用技能索引。"""
     system_prompt = BASE_SYSTEM_PROMPT.replace("{{uploads_dir}}", str(config.uploads_dir))
-    system_prompt = system_prompt.replace("{{workspace_path}}", str(workspace_path))
+    system_prompt = system_prompt.replace("{{workspace_path}}", str(lumneo.workspace_path))
     system_prompt = system_prompt.replace("{{time_now}}", time_now or get_current_time())
 
     if collab_reason:

@@ -11,7 +11,7 @@ from lumneo.conversation.ports.decision_repository import DecisionRepository
 from lumneo.conversation.service.chat_service import ChatService
 from lumneo.kernel.common.util import get_local_ip
 from lumneo.kernel.config.app_config import config
-from lumneo import workspace_path
+import lumneo
 
 
 class ConversationFacade:
@@ -70,7 +70,7 @@ class ConversationFacade:
     async def get_system_info(self) -> Dict:
         """返回系统基础信息（工作区、上传目录、本地 IP）。"""
         return {
-            "workspace_dir": str(workspace_path),
+            "workspace_dir": str(lumneo.workspace_path),
             "upload_dir": str(config.uploads_dir),
             "local_ip": get_local_ip(),
         }

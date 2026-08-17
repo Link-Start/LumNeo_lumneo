@@ -12,7 +12,7 @@ from functools import lru_cache
 
 from lumneo.kernel.config.app_config import config
 from lumneo.infrastructure.filesystem.path_guard import validate_path, default_allowed_dirs
-from lumneo import workspace_path
+import lumneo
 
 
 # ============ 自定义异常 ============
@@ -459,7 +459,7 @@ async def file_read(
 ) -> Dict[str, Any]:
     """读取指定路径的文件内容。"""
     if allowed_dirs is None:
-        allowed_dirs = [str(config.uploads_dir), str(config.skills_dir), workspace_path]
+        allowed_dirs = [str(config.uploads_dir), str(config.skills_dir), lumneo.workspace_path]
     allowed_paths = [Path(p).resolve() for p in allowed_dirs]
 
     max_bytes = max_size_mb * 1024 * 1024

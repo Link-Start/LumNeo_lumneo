@@ -13,21 +13,31 @@ from lumneo.kernel.config.app_config import config
 from lumneo.kernel.common.logger import logger
 
 
-def _collect_tool_disk_files(meta_rows: List[dict]) -> List[str]:
+def _collect_tool_disk_files(meta_rows: List[Any]) -> List[str]:
     """根据 tool_calls 的 meta_data 收集需要删除的磁盘文件路径（不执行 I/O）。"""
     files = []
     for meta in meta_rows:
         if not meta:
             continue
         try:
-            meta_data = json.loads(meta) if isinstance(meta, str) else meta
+            meta_data = meta
+            # 兼容双重 JSON 编码：最多尝试解析两层
+            for _ in range(2):
+                if isinstance(meta_data, str):
+                    meta_data = json.loads(meta_data)
+                else:
+                    break
+
+            if not isinstance(meta_data, dict):
+                continue
+
+            if meta_data.get("storage_type") == "file":
+                file_path = meta_data.get("file_path")
+                if file_path:
+                    abs_path = os.path.abspath(os.path.join(str(config.cache_dir), file_path))
+                    files.append(abs_path)
         except Exception:
             continue
-        if meta_data.get("storage_type") == "file":
-            file_path = meta_data.get("file_path")
-            if file_path:
-                abs_path = os.path.abspath(os.path.join(str(config.cache_dir), file_path))
-                files.append(abs_path)
     return files
 
 

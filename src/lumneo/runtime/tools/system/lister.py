@@ -10,8 +10,8 @@ from typing import Optional, List, Tuple, Set
 from pathlib import Path
 
 from lumneo.kernel.config.app_config import config
-from lumneo.infrastructure.filesystem.path_guard import validate_path, default_allowed_dirs
-from lumneo import workspace_path
+from lumneo.infrastructure.filesystem.path_guard import validate_path
+import lumneo
 
 
 class FileReadError(Exception):
@@ -27,7 +27,7 @@ async def read_file_list(
     max_depth: int = 10,
     detailed: bool = False,
 ) -> str:
-    allowed_dirs = [Path(p) for p in [config.uploads_dir, workspace_path]]
+    allowed_dirs = [Path(p) for p in [config.uploads_dir, lumneo.workspace_path]]
     try:
         safe_path = validate_path(path, allowed_dirs)
     except ValueError as e:

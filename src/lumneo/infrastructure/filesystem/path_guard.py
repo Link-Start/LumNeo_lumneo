@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from lumneo.kernel.config.app_config import config
-from lumneo import workspace_path
+import lumneo
 
 
 def validate_path(path: str, allowed_dirs: Optional[List[Path]] = None) -> Path:
@@ -51,7 +51,7 @@ def default_allowed_dirs() -> List[Path]:
 
     供文件类系统工具在不显式指定时复用，保证越权校验一致。
     """
-    raw = [config.uploads_dir, config.skills_dir, Path(workspace_path)]
+    raw = [config.uploads_dir, config.skills_dir, Path(lumneo.workspace_path)]
     return [Path(p).resolve(strict=False) for p in raw if p]
 
 

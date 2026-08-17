@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, AsyncGenerator, Any
 
 from lumneo.infrastructure.providers.openai_provider import OpenAIProvider
 from lumneo.runtime.agent.orchestrator import LLMOrchestrator
-from lumneo.runtime.tools.registry import get_local_tools, get_mcp_tools, get_all_tools
+from lumneo.runtime.tools.registry import get_local_tools, get_mcp_tools
 from lumneo.runtime.context.prompt import (
     build_system_prompt, clean_messages, disabled_tools, default_tools,
     resolve_reasoning_effort,
@@ -293,23 +293,26 @@ class ChatService:
             async for chunk in _stream_with_model(current_cfg):
                 yield chunk
         except Exception as e:
-            if (primary_cfg and current_cfg and current_cfg.get("model_id") != primary_cfg.get("model_id")):
-                fallback_reason = (f"[故障回退] 原模型调用失败，已切换至主模型 「 "
-                                   f"{primary_cfg.get('name')} · {get_typeName(primary_cfg.get('type'))} 」")
-                fallback_info = {
-                    "model_id": primary_cfg.get("model_id"),
-                    "model_name": primary_cfg.get("model_name"),
-                    "type": primary_cfg.get("type"),
-                    "reason": fallback_reason,
-                }
-                yield f"<!--model_info:{json.dumps(fallback_info, ensure_ascii=False)}-->"
-                async for chunk in _stream_with_model(primary_cfg):
-                    yield chunk
-            else:
-                error_msg = (f"模型 {current_cfg.get('name') if current_cfg else '未知'} 调用失败，"
-                             f"且无法回退到主模型。错误：{str(e)[:300]}")
-                yield f"<!--error:{json.dumps({'message': error_msg}, ensure_ascii=False)}-->"
-                return
+            error_str = str(e)
+            # 只有明确是模型服务错误才触发回退
+            if "模型服务错误" in error_str and primary_cfg and current_cfg.get("model_id") != primary_cfg.get("model_id"):
+                if (primary_cfg and current_cfg and current_cfg.get("model_id") != primary_cfg.get("model_id")):
+                    fallback_reason = (f"[故障回退] 原模型调用失败，已切换至主模型 「 "
+                                    f"{primary_cfg.get('name')} · {get_typeName(primary_cfg.get('type'))} 」")
+                    fallback_info = {
+                        "model_id": primary_cfg.get("model_id"),
+                        "model_name": primary_cfg.get("model_name"),
+                        "type": primary_cfg.get("type"),
+                        "reason": fallback_reason,
+                    }
+                    yield f"<!--model_info:{json.dumps(fallback_info, ensure_ascii=False)}-->"
+                    async for chunk in _stream_with_model(primary_cfg):
+                        yield chunk
+                else:
+                    error_msg = (f"模型 {current_cfg.get('name') if current_cfg else '未知'} 调用失败，"
+                                f"且无法回退到主模型。错误：{str(e)[:300]}")
+                    yield f"<!--error:{json.dumps({'message': error_msg}, ensure_ascii=False)}-->"
+                    return
 
 
 class _CollabConfigAdapter:

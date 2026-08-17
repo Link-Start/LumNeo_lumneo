@@ -379,32 +379,51 @@ Memory OS 将成为 LumNeo 的认知基础层。
 
 ```text
 LumNeo/
-├── app_config.yaml         # 应用配置文件
-├── build.bat               # Windows 构建脚本
-├── main.py                 # 应用入口（启动 FastAPI + PyWebView）
-├── mcp_config.json         # MCP 服务器配置文件 (运行时自动创建)
-├── requirements.txt        # Python 依赖清单
-├── system_prompt.md        # 系统内置角色 Prompt 模板
-├── tools_config.yaml       # 本地工具配置文件
-├── backend/
-│   ├── database.py         # SQLite 初始化与会话管理
-│   ├── mcp_client.py       # MCP 客户端管理器（多角色工具隔离）
-│   ├── routes/
-│   │   ├── chat.py         # 聊天接口（流式输出、工具调用）
-│   │   └── chats.py        # 对话 CRUD 接口
-│   ├── services/
-│   |   ├── llm_service.py  # 大模型调用服务（含工具循环与角色上下文）
-│   |   └── tools.py        # 本地工具动态导入定义与执行引擎
-│   └── system_tools/
-|       ├── __init__.py     # 系统内置工具定义
-|       └── ...             # 其他通用基础工具
-├── frontend/               # Vue 3 前端
-│   ├── src/
-│   │   ├── components/     # ChatWindow / SettingsDrawer / Introduction
-│   │   ├── stores/         # chat.ts / config.ts / profiles.ts
-│   │   ├── assets/         # global.css / 主题变量
-│   │   └── main.ts
-│   └── package.json
+├── app_config.yaml               # 应用核心配置
+├── apps\desktop/                 # 桌面端代码目录
+├── build.bat                     # 快速构建脚本
+├── main.py                       # FastAPI 主入口
+├── requirements.txt              # Python 依赖包列表
+├── src\lumneo/                   # 核心代码目录
+│   ├── __init__.py               # 模块初始化
+│   ├── api/                      # API 路由层
+│   │   ├── routes/               # HTTP 路由定义
+│   │   └── schemas/              # Pydantic 数据模型
+│   ├── application/              # 应用用例编排层
+│   ├── bootstrap/                # 应用启动与依赖注入容器
+│   ├── conversation/             # 对话领域模型
+│   │   ├── domain/               # 领域实体（Chat, Message, Plan等）
+│   │   ├── facade/               # 对话编排服务层
+│   │   ├── ports/                # 抽象端口定义（Repository, Provider）
+│   │   └── service/              # 具体实现逻辑（ChatService）
+│   ├── hardware/                 # Hardware OS 硬件系统层
+│   ├── infrastructure/           # 基础设施层
+│   │   ├── filesystem/           # 文件系统抽象与本地存储实现
+│   │   ├── network/              # HTTP 客户端封装
+│   │   └── providers/            # LLM 模型提供者（OpenAI）
+│   ├── kernel/                   # 内核核心逻辑层
+│   │   ├── config/               # 配置管理
+│   │   ├── identity/             # 身份认证与权限
+│   │   ├── lifecycle/            # 应用生命周期管理
+│   │   └── errors/               # 统一异常处理
+│   ├── memory/                   # Memory OS 记忆系统层
+│   ├── persistence/              # 数据持久化层
+│   │   ├── database.py           # ORM 会话工厂
+│   │   ├── models/               # SQLAlchemy 模型定义（Chat, Skill等）
+│   │   ├── repositories/         # 数据访问抽象与实现
+│   │   └── unit_of_work.py       # 单元工作对象模式
+│   ├── runtime/                  # 运行时环境
+│   │   ├── agent/                # Agent编排器（Orchestrator）
+│   │   ├── context/              # 上下文管理（Prompt, Collaboration）
+│   │   ├── llm/                  # LLM推理引擎与流式解析
+│   │   ├── mcp/                  # MCP客户端协议实现
+│   │   ├── tools/                # Agent可用工具注册中心
+│   │   │   ├── execution/        # 工具执行上下文与审批流程
+│   │   │   └── system/           # System工具（文件读写、天气等）
+│   │   └── simulation/           # 模拟环境支持
+├── tools_config.yaml             # MCP工具配置清单
+└── system_prompt.md              # Agent系统提示词
+
 ```
 
 ---
