@@ -412,15 +412,14 @@ LumNeo/
 │   │   ├── models/               # SQLAlchemy 模型定义（Chat, Skill等）
 │   │   ├── repositories/         # 数据访问抽象与实现
 │   │   └── unit_of_work.py       # 单元工作对象模式
-│   ├── runtime/                  # 运行时环境
-│   │   ├── agent/                # Agent编排器（Orchestrator）
-│   │   ├── context/              # 上下文管理（Prompt, Collaboration）
-│   │   ├── llm/                  # LLM推理引擎与流式解析
-│   │   ├── mcp/                  # MCP客户端协议实现
-│   │   ├── tools/                # Agent可用工具注册中心
-│   │   │   ├── execution/        # 工具执行上下文与审批流程
-│   │   │   └── system/           # System工具（文件读写、天气等）
-│   │   └── simulation/           # 模拟环境支持
+│   └── runtime/                  # 运行时环境
+│       ├── agent/                # Agent编排器（Orchestrator）
+│       ├── context/              # 上下文管理（Prompt, Collaboration）
+│       ├── llm/                  # LLM推理引擎与流式解析
+│       ├── mcp/                  # MCP客户端协议实现
+│       └── tools/                # Agent可用工具注册中心
+│           ├── execution/        # 工具执行上下文与审批流程
+│           └── system/           # System工具（文件读写、天气等）
 ├── tools_config.yaml             # MCP工具配置清单
 └── system_prompt.md              # Agent系统提示词
 
