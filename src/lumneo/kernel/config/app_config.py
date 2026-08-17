@@ -1,7 +1,7 @@
 # src/lumneo/kernel/config/app_config.py
 # Kernel / Config —— 配置基础能力（不拥有具体业务配置逻辑）。
 #
-# 对应原 config_loader.py。仅负责加载 app_config.yaml、解析并校验路径、
+# 仅负责加载 app_config.yaml、解析并校验路径、
 # 确保可写目录存在。任何业务策略（Memory Ranking / Hardware Execution 等）
 # 不得放入此处。
 import os
@@ -141,7 +141,7 @@ class AppConfig:
         else:
             base_path = self.project_root
 
-        index_path = base_path / "frontend/dist/index.html"
+        index_path = base_path / "apps/desktop/dist/index.html"
         if not index_path.exists():
             fallback_path = self.static_dir / "index.html"
             if fallback_path.exists():

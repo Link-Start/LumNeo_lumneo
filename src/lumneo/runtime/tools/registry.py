@@ -1,6 +1,5 @@
 # runtime/tools/registry.py
-# 工具注册表（原 backend/services/tools.py）。
-#
+# 工具注册表
 # 负责从 tools_config.yaml 加载工具定义并动态装载实现函数。工具实现位于
 # runtime/tools/system/* 与 MCP（runtime/mcp）。本模块只做“定义 + 装载”，
 # 不承载执行细节（执行见 runtime/tools/execution）。
@@ -10,6 +9,7 @@ import yaml
 from typing import Dict
 
 from lumneo.kernel.config.app_config import config
+from lumneo.kernel.common.logger import logger
 
 
 def load_tools_from_config(config_path: str):
@@ -50,6 +50,7 @@ def is_dangerous_tool(func_name: str) -> bool:
 try:
     TOOLS_DEFINITION, AVAILABLE_TOOLS = load_tools_from_config("tools_config.yaml")
 except Exception:
+    logger.error("Error: 无法加载工具配置文件，工具功能将不可用")
     TOOLS_DEFINITION, AVAILABLE_TOOLS = [], {}
 
 

@@ -1,14 +1,4 @@
-# main.py
-# LumNeo V2 应用入口。
-#
-# 与原 main.py 保持一致的运行模式判断与 CLI 语义：
-#   - 打包环境（PyInstaller, sys.frozen）：SERVER_PORT=52025，FRONTEND_URL 指向
-#     本地 /app 静态前端，DEBUG_MODE=False；
-#   - 开发环境：SERVER_PORT=8686，FRONTEND_URL 指向本地前端开发服务器，
-#     DEBUG_MODE=True。
-#   - CLI：--debug（强制 GUI + 调试）；开发环境另有 --gui；打包环境另有 --no-gui。
-#
-# 应用装配（路由 / 静态 / lifespan / 组合根）统一交由 bootstrap.app.create_app 完成。
+# src/lumneo/main.py
 import os
 import sys
 import socket
@@ -43,14 +33,12 @@ else:
     FRONTEND_URL = "http://localhost:8520"
     DEBUG_MODE = True
 
-
 # ============ 端口辅助 ============
 def is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
     """检测指定端口是否已经被监听。"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(timeout)
         return s.connect_ex((host, port)) == 0
-
 
 def wait_for_server_ready(host: str, port: int, timeout: int = 15) -> bool:
     """轮询等待服务启动。"""
@@ -176,13 +164,10 @@ def start_gui(app):
     )
     webview.start(debug=DEBUG_MODE, http_server=True, private_mode=False, icon="favicon.ico")
 
-
 # ============ 入口 ============
 def main():
     global DEBUG_MODE
-
     parser = argparse.ArgumentParser(description="启动 LumNeo")
-
     parser.add_argument("--debug", action="store_true", help="启用 DEBUG 模式")
 
     if DEBUG_MODE:

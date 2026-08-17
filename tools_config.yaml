@@ -12,7 +12,7 @@ tools:
           type: integer
           description: 查询天数范围。0表示当前时刻天气，1表示今日全天天气，2表示包含今日的两天天气，以此类推。
       required: ["location", "days"]
-    module: backend.system_tools.weather
+    module: lumneo.runtime.tools.system.weather
     function_name: get_weather
 
   - name: system_use_skill
@@ -25,7 +25,7 @@ tools:
           type: string
           description: 要使用的技能ID，必须从“可用技能索引”中选取。
       required: ["skill_id"]
-    module: backend.system_tools.skills
+    module: lumneo.runtime.tools.system.skills
     function_name: use_skill
 
   - name: system_execute_script
@@ -41,7 +41,7 @@ tools:
           type: string
           description: 传递给脚本的命令行参数，如 '--date 2026-05-20'
       required: ["script_path"]
-    module: backend.system_tools.executor
+    module: lumneo.runtime.tools.system.executor
     function_name: execute_script
 
   - name: system_read_file
@@ -72,7 +72,7 @@ tools:
           type: boolean
           description: 仅对图片有效。若为 true，返回图片的 base64 编码数据；若为 false（默认），返回图片的绝对路径信息。
       required: ["path"]
-    module: backend.system_tools.reader
+    module: lumneo.runtime.tools.system.reader
     function_name: file_read
 
   - name: system_write_file
@@ -94,7 +94,7 @@ tools:
           type: string
           description: 文件编码格式，默认为 "UTF-8"。
       required: ["path", "content"]
-    module: backend.system_tools.writer
+    module: lumneo.runtime.tools.system.writer
     function_name: file_write
 
   - name: system_patch_file
@@ -122,7 +122,7 @@ tools:
           type: string
           description: 文件编码，默认为 UTF-8。
       required: ["path", "search", "replace"]
-    module: backend.system_tools.writer
+    module: lumneo.runtime.tools.system.writer
     function_name: file_patch
 
   - name: system_delete_file
@@ -143,7 +143,7 @@ tools:
       required: ["path"]
     meta:
       dangerous: true
-    module: backend.system_tools.delete
+    module: lumneo.runtime.tools.system.delete
     function_name: file_delete
 
   - name: system_create_project_tree
@@ -159,7 +159,7 @@ tools:
           type: string
           description: 项目创建的根路径（相对或绝对路径）。
       required: ["tree", "path"]
-    module: backend.system_tools.creator
+    module: lumneo.runtime.tools.system.creator
     function_name: create_project_tree
 
   - name: system_read_file_list
@@ -192,5 +192,5 @@ tools:
           type: boolean
           description: 是否返回文件大小和修改时间。默认为 false（仅返回相对路径以节省 Token）；若为 true，返回格式为 "相对路径 | 大小 | 修改时间"。
       required: ["path"]
-    module: backend.system_tools.lister
+    module: lumneo.runtime.tools.system.lister
     function_name: read_file_list

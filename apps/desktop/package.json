@@ -12,9 +12,9 @@
     "@tanstack/vue-virtual": "^3.13.35",
     "@vicons/ionicons5": "^0.13.0",
     "katex": "^0.18.1",
-    "markstream-vue": "^1.0.9",
+    "markstream-vue": "^1.1.4",
     "mermaid": "^11.16.1",
-    "naive-ui": "^2.44.1",
+    "naive-ui": "2.44.1",
     "pinia": "^4.0.2",
     "pinia-plugin-persistedstate": "^4.7.1",
     "stream-diffs": "^0.0.2",
@@ -26,10 +26,10 @@
     "@antv/infographic": "^0.2.19",
     "@vitejs/plugin-vue": "^6.0.8",
     "fast-glob": "^3.3.3",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "vite": "^8.2.1",
     "vite-plugin-compression": "^0.5.1",
     "vite-plugin-svg-icons": "^2.0.1",
-    "vue-tsc": "^3.3.9"
+    "vue-tsc": "^3.3.10"
   }
 }

@@ -3,9 +3,10 @@
 #
 # API 层只通过本门面访问对话领域；领域内部的 Repository / Service 不直接暴露给外层。
 # 门面聚合 ChatService（流式对话）与少量直接查询（工具清单、用户决策、系统信息）。
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Any
 
 from lumneo.runtime.tools.registry import get_local_tools, get_mcp_tools, get_all_tools
+from lumneo.runtime.context import disabled_tools
 from lumneo.conversation.ports.decision_repository import DecisionRepository
 from lumneo.conversation.service.chat_service import ChatService
 from lumneo.kernel.common.util import get_local_ip
@@ -31,8 +32,9 @@ class ConversationFacade:
         在每轮对话中动态裁决（见 chat_service.generate_chat）。
         """
         local_tools = get_local_tools()
+        enable_tools = [t for t in local_tools if t["function"]["name"] in disabled_tools]
         mcp_tools = await get_mcp_tools(mcp_manager)
-        enable_tools = local_tools + mcp_tools
+        enable_tools.extend(mcp_tools)
         return {"tools": enable_tools}
 
     async def get_tools_info(self, mcp_manager=None) -> Dict:

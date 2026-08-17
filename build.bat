@@ -14,7 +14,7 @@ cd /d "%~dp0"
 set "APP_NAME=LumNeo"
 set "ENTRY=main.py"
 set "SRC_DIR=src"
-set "FRONTEND_DIR=frontend"
+set "FRONTEND_DIR=apps/desktop"
 set "DEFAULT_VERSION=2.0.0"
 
 
@@ -87,7 +87,7 @@ set "PYI_ARGS=--onedir --noconsole --copy-metadata fastmcp --paths=%SRC_DIR%"
 
 
 :: 动态装载的工具模块（importlib，必须逐个显式声明）
-set "PYI_ARGS=%PYI_ARGS% --hidden-import=lumneo.infrastructure.external.weather"
+set "PYI_ARGS=%PYI_ARGS% --hidden-import=lumneo.runtime.tools.system.weather"
 set "PYI_ARGS=%PYI_ARGS% --hidden-import=lumneo.runtime.tools.system.skills"
 set "PYI_ARGS=%PYI_ARGS% --hidden-import=lumneo.runtime.tools.system.executor"
 set "PYI_ARGS=%PYI_ARGS% --hidden-import=lumneo.runtime.tools.system.reader"

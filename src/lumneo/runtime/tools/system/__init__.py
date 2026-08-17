@@ -4,6 +4,7 @@ from . import skill_lookup
 from . import lister
 from . import creator
 from . import reader
+from . import weather
 from . import writer
 from . import delete
 from . import skills
